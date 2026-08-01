@@ -1,115 +1,192 @@
-# PiDecoder
+<p align="center">
+  <img src="docs/images/pidecoder-logo.png" width="220" alt="PiDecoder Logo">
+</p>
 
-PiDecoder is a lightweight RTSP and ONVIF video wall for Raspberry Pi.
+<h1 align="center">PiDecoder</h1>
 
-It is designed for always-on camera monitoring with hardware-assisted decoding, automatic reconnection, a configurable mosaic, fullscreen focus mode, zoom and a built-in Web administration interface.
+<p align="center">
+<strong>Professional RTSP & ONVIF Video Wall built for Raspberry Pi</strong>
+<br>
+Lightweight • Hardware Accelerated • Modern Web Administration
+</p>
 
-> Current public state: **v0.9.9.4 RC1**  
-> The project is in release-candidate testing before v1.0.0.
+<p align="center">
 
-## Highlights
+![License](https://img.shields.io/badge/License-GPLv3-green.svg)
+![Release](https://img.shields.io/badge/Release-v0.9.9.4_RC1-blue)
+![Platform](https://img.shields.io/badge/Raspberry%20Pi-5-C51A4A)
+![C++](https://img.shields.io/badge/C%2B%2B-17-blue)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB)
+![ONVIF](https://img.shields.io/badge/ONVIF-Compatible-success)
+![RTSP](https://img.shields.io/badge/RTSP-Supported-orange)
 
-- RTSP camera wall
-- ONVIF discovery and manual IPv4 addition
-- Separate mosaic and fullscreen profiles
-- Hardware-assisted video decoding
-- Automatic reconnection after network or camera outages
-- Fullscreen focus mode
-- Mouse-wheel zoom and click-drag image movement
-- Flexible mosaic editor
-- 1×1, 2×1, 1×2 and 2×2 camera tiles
-- Smart automatic rearrangement
-- Web administration with authentication
-- Diagnostics, logs and system health
-- Configuration backup and restore
-- Raspberry Pi 5 oriented
+</p>
 
-## Screenshots
+---
 
-Screenshots will be added before the v1.0.0 release.
+<p align="center">
+<img src="docs/images/cameras.png" width="95%">
+</p>
 
-Recommended screenshots:
+---
 
-1. Camera configuration
-2. ONVIF discovery
-3. Mosaic editor
-4. System diagnostics
+# Why PiDecoder?
 
-## Supported environment
+PiDecoder was created with a simple objective:
 
-The current release candidate is developed and validated on:
+> **Provide a fast, lightweight and reliable RTSP & ONVIF Video Wall specifically designed for Raspberry Pi.**
+
+Unlike many traditional Video Management Systems, PiDecoder focuses on simplicity, performance and ease of deployment while taking full advantage of Raspberry Pi hardware acceleration.
+
+Whether monitoring a home lab, workshop, business or industrial site, PiDecoder delivers a responsive and modern surveillance experience without unnecessary complexity.
+
+---
+
+# Features
+
+| 🎥 Video | 🔍 ONVIF | 🖥 Layout | ⚙ Administration |
+|----------|----------|----------|------------------|
+| RTSP Streaming | Automatic Discovery | Drag & Drop | Modern Web Interface |
+| H264 | Manual IPv4 Add | Camera Resize | Diagnostics |
+| JPEG | Profile Detection | Fullscreen View | Logs |
+| Hardware Decoding | Camera Update | Zoom & Pan | Services |
+| Auto Reconnect | RTSP URI Extraction | Flexible Layouts | Backup |
+| Low CPU Usage | PTZ Ready | Main Camera Mode | Security |
+
+---
+
+# Screenshots
+
+## Camera Management
+
+<p align="center">
+<img src="docs/images/cameras.png" width="90%">
+</p>
+
+---
+
+## ONVIF Discovery
+
+<p align="center">
+<img src="docs/images/onvif.png" width="90%">
+</p>
+
+---
+
+## Mosaic Layout Editor
+
+<p align="center">
+<img src="docs/images/layout.png" width="90%">
+</p>
+
+---
+
+## System Diagnostics
+
+<p align="center">
+<img src="docs/images/system.png" width="90%">
+</p>
+
+---
+
+# Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/PiDecoder/PiDecoder.git
+
+cd PiDecoder
+```
+
+Configure and build
+
+```bash
+mkdir build
+
+cd build
+
+cmake ..
+
+make -j$(nproc)
+```
+
+Install
+
+```bash
+sudo make install
+```
+
+---
+
+# Supported Platform
+
+PiDecoder is currently validated on:
 
 - Raspberry Pi 5
-- Debian 13 / Raspberry Pi OS compatible userspace
-- Wayland / labwc
-- systemd
-- FFmpeg / libmpv
+- Debian 13
+- Wayland
 - SDL2
-- CMake
-- Python 3
+- FFmpeg
+- libmpv
 
-Other Linux systems may work but are not yet part of the validated v1.0 target.
+Support for additional Linux platforms will be expanded after the v1.0 release.
 
-## Repository layout
+---
 
-```text
-.
-├── config/                 Example configuration
-├── include/pidecoder/      C++ headers
-├── scripts/                Installer, Web admin and validation scripts
-├── src/                    C++ sources
-├── systemd/                Service units
-├── .github/                CI and contribution templates
-├── CMakeLists.txt
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── README.md
-└── SECURITY.md
-```
+# Roadmap
 
-## Build
+| Version | Status |
+|----------|--------|
+| ✅ v1.0 | Stable Release |
+| 🚧 v1.1 | PTZ Controls |
+| 🚧 v1.2 | Audio Support |
+| 🚧 v1.3 | HTTPS |
+| 🚧 v1.4 | REST API |
+| 🚀 v2.0 | Multi-Raspberry Cluster |
 
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j"$(nproc)"
-```
+---
 
-## Install the release candidate
+# Project Philosophy
 
-The repository currently contains the release-candidate installer used during validation.
+PiDecoder follows a few simple principles:
 
-```bash
-sudo ./scripts/apply-v0994.sh /opt/pidecoder
-```
+- Keep it lightweight.
+- Keep it fast.
+- Keep it reliable.
+- Keep it simple.
 
-Review the script before running it on a production system.
+Every new feature should respect these principles.
 
-## Configuration
+---
 
-Copy the examples before use:
+# Contributing
 
-```bash
-cp config/cameras.example.json config/cameras.json
-cp config/layout.example.json config/layout.json
-```
+Contributions are welcome.
 
-Never commit real RTSP credentials, camera passwords or private network details.
+Before submitting a Pull Request:
 
-## Development status
+- Read `CONTRIBUTING.md`
+- Open an Issue for major changes
+- Keep commits focused
+- Never commit credentials or private configuration files
 
-PiDecoder is currently frozen for release-candidate testing.
+---
 
-Allowed changes before v1.0.0:
+# License
 
-- bug fixes
-- regressions
-- stability improvements
-- documentation corrections
-- packaging fixes
+PiDecoder is distributed under the GNU General Public License v3.0.
 
-New features should wait until after v1.0.0.
+See the `LICENSE` file for more information.
 
-## License
+---
 
-PiDecoder is licensed under the GNU General Public License v3.0 or later.
+<p align="center">
+<img src="docs/images/pico.png" width="150">
+</p>
+
+<p align="center">
+<strong>Pico is watching your cameras.</strong>
+<br>
+Thank you for supporting PiDecoder ❤️
+</p>
