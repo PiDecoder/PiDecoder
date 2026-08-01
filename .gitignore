@@ -1,0 +1,40 @@
+# Build
+/build/
+/cmake-build-*/
+/CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Runtime configuration
+/config/cameras.json
+/config/layout.json
+/config/auth.json
+*.backup
+*.bak
+
+# Logs and diagnostics
+*.log
+diagnostics*.txt
+pidecoder-onvif.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+
+# Temporary
+*.tmp
+*~

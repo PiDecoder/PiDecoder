@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible PiDecoder problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove all credentials, RTSP URLs and private network information before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: PiDecoder version
+      placeholder: 0.9.9.4 RC1
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Raspberry Pi model, OS, display stack and camera count.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics or logs
+      description: Remove passwords, usernames, URLs, serial numbers and private IP addresses.

@@ -1,0 +1,26 @@
+[Unit]
+Description=PiDecoder Video Wall
+Wants=network-online.target
+After=network-online.target graphical.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+SupplementaryGroups=video render
+WorkingDirectory=/opt/pidecoder
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
+Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
+ExecStartPre=/usr/bin/test -S /run/user/1000/wayland-0
+ExecStart=/opt/pidecoder/build/pidecoder /opt/pidecoder/config/cameras.json
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

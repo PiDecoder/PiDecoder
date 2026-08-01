@@ -1,0 +1,16 @@
+{
+  "cameras": [
+    {
+      "name": "Front entrance",
+      "enabled": true,
+      "grid_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-low",
+      "focus_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-high",
+      "onvif": {
+        "device_xaddr": "http://192.168.1.90/onvif/device_service",
+        "manufacturer": "Example",
+        "model": "Example Camera",
+        "serial_number": "REDACTED"
+      }
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+#pragma once
+#define PIDECODER_VERSION_STRING "@PROJECT_VERSION@"

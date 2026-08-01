@@ -1,0 +1,17 @@
+{
+  "columns": 3,
+  "rows": 3,
+  "fullscreen_on_start": false,
+  "camera_order": [
+    0
+  ],
+  "placements": [
+    {
+      "camera": 0,
+      "x": 0,
+      "y": 0,
+      "width": 2,
+      "height": 2
+    }
+  ]
+}
