@@ -11,6 +11,12 @@ Lightweight • Hardware Accelerated • Modern Web Administration
 </p>
 
 <p align="center">
+  <img src="docs/images/hero-banner.png"
+       width="100%"
+       alt="PiDecoder — Lightweight RTSP and ONVIF Video Wall for Raspberry Pi">
+</p>
+
+<p align="center">
 
 ![License](https://img.shields.io/badge/License-GPLv3-green.svg)
 ![Release](https://img.shields.io/badge/Release-v0.9.9.4_RC1-blue)
@@ -20,12 +26,6 @@ Lightweight • Hardware Accelerated • Modern Web Administration
 ![ONVIF](https://img.shields.io/badge/ONVIF-Compatible-success)
 ![RTSP](https://img.shields.io/badge/RTSP-Supported-orange)
 
-</p>
-
----
-
-<p align="center">
-<img src="docs/images/cameras.png" width="95%">
 </p>
 
 ---
