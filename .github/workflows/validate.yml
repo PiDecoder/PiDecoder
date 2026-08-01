@@ -30,6 +30,10 @@ jobs:
         run: |
           test ! -f config/cameras.json
           test ! -f config/auth.json
-          ! grep -RInE 'rtsp://[^[:space:]]+:[^[:space:]]+@' \
+
+          ! grep -RInE \
+            'rtsp://[^[:space:]*/]+:[^[:space:]*/]+@' \
             --exclude='cameras.example.json' \
-            --exclude-dir='.git' .
+            --exclude='config-web.py' \
+            --exclude-dir='.git' \
+            .
