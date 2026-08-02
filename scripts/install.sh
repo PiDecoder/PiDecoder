@@ -68,7 +68,7 @@ cleanup() {
 restore_units() {
     local unit
 
-    for unit in pidecoder.service pidecoder-config.service; do
+    for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path; do
         if [[ -f "$BACKUP_DIR/systemd/$unit" ]]; then
             install -m 0644 "$BACKUP_DIR/systemd/$unit" "$UNIT_DIR/$unit"
         else
@@ -84,7 +84,7 @@ rollback() {
     if [[ "$INSTALL_SUCCEEDED" -eq 0 && "$CHANGED_SYSTEM" -eq 1 ]]; then
         printf '\nInstallation interrompue — restauration de la version précédente.\n' >&2
 
-        systemctl stop pidecoder.service pidecoder-config.service 2>/dev/null || true
+        systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path 2>/dev/null || true
         rm -rf "$TARGET"
 
         if [[ "$HAD_TARGET" -eq 1 && -d "$BACKUP_DIR/target" ]]; then
@@ -95,7 +95,8 @@ rollback() {
         systemctl daemon-reload 2>/dev/null || true
 
         if [[ "$HAD_TARGET" -eq 1 ]]; then
-            systemctl reset-failed pidecoder-config.service pidecoder.service 2>/dev/null || true
+            systemctl reset-failed pidecoder-config.service pidecoder.service pidecoder-wayland.path 2>/dev/null || true
+    systemctl restart pidecoder-wayland.path
             systemctl restart pidecoder-config.service 2>/dev/null || true
             systemctl restart pidecoder.service 2>/dev/null || true
         fi
@@ -178,6 +179,7 @@ esac
 [[ -f "$SOURCE_ROOT/scripts/config-web.py" ]] || fail "Source Web introuvable"
 [[ -f "$SOURCE_ROOT/systemd/pidecoder.service.in" ]] || fail "Template du service vidéo introuvable"
 [[ -f "$SOURCE_ROOT/systemd/pidecoder-config.service.in" ]] || fail "Template du service Web introuvable"
+[[ -f "$SOURCE_ROOT/systemd/pidecoder-wayland.path.in" ]] || fail "Template du déclencheur Wayland introuvable"
 
 if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -354,7 +356,7 @@ if [[ -d "$TARGET" ]]; then
     cp -a "$TARGET" "$BACKUP_DIR/target"
 fi
 
-for unit in pidecoder.service pidecoder-config.service; do
+for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path; do
     if [[ -f "$UNIT_DIR/$unit" ]]; then
         cp -a "$UNIT_DIR/$unit" "$BACKUP_DIR/systemd/$unit"
     fi
@@ -423,7 +425,7 @@ JSON
 fi
 
 CHANGED_SYSTEM=1
-systemctl stop pidecoder.service pidecoder-config.service 2>/dev/null || true
+systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path 2>/dev/null || true
 rm -rf "$TARGET"
 install -d -m 0755 "$(dirname "$TARGET")"
 cp -a "$STAGED_ROOT" "$TARGET"
@@ -471,6 +473,8 @@ python3 - \
     "$UNIT_DIR/pidecoder.service" \
     "$TARGET/systemd/pidecoder-config.service.in" \
     "$UNIT_DIR/pidecoder-config.service" \
+    "$TARGET/systemd/pidecoder-wayland.path.in" \
+    "$UNIT_DIR/pidecoder-wayland.path" \
     "$SERVICE_USER" \
     "$SERVICE_GROUP" \
     "$SERVICE_UID" \
@@ -487,6 +491,8 @@ import sys
     video_target,
     web_source,
     web_target,
+    path_source,
+    path_target,
     service_user,
     service_group,
     service_uid,
@@ -511,6 +517,7 @@ replacements = {
 for source, destination in (
     (video_source, video_target),
     (web_source, web_target),
+    (path_source, path_target),
 ):
     content = Path(source).read_text(encoding="utf-8")
     for old, new in replacements.items():
@@ -520,13 +527,18 @@ for source, destination in (
     Path(destination).write_text(content, encoding="utf-8")
 PY_RENDER_UNITS
 
-chmod 0644 "$UNIT_DIR/pidecoder.service" "$UNIT_DIR/pidecoder-config.service"
+chmod 0644 \
+    "$UNIT_DIR/pidecoder.service" \
+    "$UNIT_DIR/pidecoder-config.service" \
+    "$UNIT_DIR/pidecoder-wayland.path"
 systemctl daemon-reload
-systemctl enable pidecoder-config.service pidecoder.service
+systemctl disable pidecoder.service 2>/dev/null || true
+systemctl enable pidecoder-config.service pidecoder-wayland.path
 
 if [[ "$START_SERVICES" -eq 1 ]]; then
     log "Démarrage de l’administration Web"
-    systemctl reset-failed pidecoder-config.service pidecoder.service 2>/dev/null || true
+    systemctl reset-failed pidecoder-config.service pidecoder.service pidecoder-wayland.path 2>/dev/null || true
+    systemctl restart pidecoder-wayland.path
     systemctl restart pidecoder-config.service
     sleep 2
     systemctl is-active --quiet pidecoder-config.service || fail "L’administration Web ne démarre pas"

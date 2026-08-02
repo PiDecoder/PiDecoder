@@ -61,6 +61,7 @@ required=(
     "scripts/check-camera-config.py"
     "systemd/pidecoder.service.in"
     "systemd/pidecoder-config.service.in"
+    "systemd/pidecoder-wayland.path.in"
     "src/main.cpp"
     "src/Application.cpp"
     "src/Player.cpp"
