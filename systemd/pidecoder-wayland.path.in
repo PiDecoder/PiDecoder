@@ -3,7 +3,7 @@ Description=Start PiDecoder when the Wayland socket is available
 
 [Path]
 PathExists=/run/user/@SERVICE_UID@/@WAYLAND_DISPLAY@
-Unit=pidecoder.service
+Unit=pidecoder-wayland.target
 
 [Install]
 WantedBy=multi-user.target

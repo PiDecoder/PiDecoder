@@ -62,6 +62,7 @@ required=(
     "systemd/pidecoder.service.in"
     "systemd/pidecoder-config.service.in"
     "systemd/pidecoder-wayland.path.in"
+    "systemd/pidecoder-wayland.target.in"
     "src/main.cpp"
     "src/Application.cpp"
     "src/Player.cpp"
