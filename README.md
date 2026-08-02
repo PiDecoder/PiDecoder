@@ -28,9 +28,13 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v0.9.9.4 RC1** is currently validated on a Raspberry Pi 5 running Debian 13 and Wayland.
-> The current upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
+> **PiDecoder v0.9.9.4 RC1** is the current release candidate.
+> It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
+> The upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
 > have been successfully tested on real hardware.
+>
+> The Web administration interface is currently available in French.
+> English localization is planned before the stable v1.0 release.
 
 ## Why PiDecoder?
 
@@ -211,14 +215,15 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 
 ## Roadmap
 
-| Version | Planned focus |
-|---|---|
-| v1.0 | Stable public release |
-| v1.1 | PTZ controls |
-| v1.2 | Audio support |
-| v1.3 | HTTPS |
-| v1.4 | REST API |
-| v2.0 | Multi-Raspberry cluster |
+| Version | Status | Planned focus |
+|---|---|---|
+| v0.9.9.4 RC1 | Current | Release candidate and field testing |
+| v1.0 | Next milestone | First stable public release and English localization |
+| v1.1 | Planned | PTZ controls |
+| v1.2 | Planned | Audio support |
+| v1.3 | Planned | HTTPS |
+| v1.4 | Planned | REST API |
+| v2.0 | Long-term | Multi-Raspberry cluster |
 
 Roadmap items are planned goals and may change as the project evolves.
 
