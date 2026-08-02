@@ -96,6 +96,20 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
   </tr>
 </table>
 
+## Documentation
+
+| Guide | Description |
+|---|---|
+| [Installation and updates](docs/installation.md) | Requirements, installer options, updates and systemd startup |
+| [Camera configuration](docs/configuration.md) | RTSP streams, credentials, camera order and applying changes |
+| [ONVIF camera setup](docs/onvif.md) | Discovery, manual identification, profiles and camera updates |
+| [Mosaic layout](docs/layout.md) | Grid size, templates, moving and resizing camera tiles |
+| [Backup and restore](docs/backup.md) | Web exports, runtime backups and installer recovery |
+| [FAQ and troubleshooting](docs/faq.md) | Common startup, RTSP, ONVIF and Wayland issues |
+
+The public documentation is currently written in English.
+The Web administration interface remains in French in v0.9.9.4 RC1; English localization is planned before the stable v1.0 release.
+
 ## Quick start
 
 ### 1. Clone PiDecoder
