@@ -23,4 +23,3 @@ TimeoutStopSec=10
 KillSignal=SIGTERM
 StandardOutput=journal
 StandardError=journal
-
