@@ -140,7 +140,7 @@ ping CAMERA_IP
 Test the RTSP URL with a suitable client such as FFmpeg:
 
 ```bash
-ffprobe 'rtsp://USER:PASSWORD@CAMERA_IP:554/STREAM'
+ffprobe 'rtsp://CAMERA_IP:554/STREAM'
 ```
 
 Quote the URL so shell characters are not interpreted.

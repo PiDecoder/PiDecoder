@@ -83,8 +83,8 @@ Example configuration:
     {
       "name": "Front entrance",
       "enabled": true,
-      "grid_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-low",
-      "focus_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-high"
+      "grid_url": "rtsp://192.0.2.10:554/stream-low",
+      "focus_url": "rtsp://192.0.2.10:554/stream-high"
     }
   ]
 }
