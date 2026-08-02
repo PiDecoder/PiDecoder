@@ -10,15 +10,16 @@ cleanup_python_cache() {
 
 trap cleanup_python_cache EXIT
 
-echo "[1/6] Vérification Python"
+echo "[1/8] Vérification Python"
 python3 -m py_compile \
     "$ROOT/scripts/config-web.py" \
-    "$ROOT/scripts/onvif_client.py"
+    "$ROOT/scripts/onvif_client.py" \
+    "$ROOT/scripts/check-camera-config.py"
 
 # py_compile creates caches by design; remove them before package checks.
 cleanup_python_cache
 
-echo "[2/7] Vérification JavaScript"
+echo "[2/8] Vérification JavaScript"
 if command -v node >/dev/null 2>&1; then
     python3 - "$ROOT" <<'PY'
 from pathlib import Path
@@ -41,16 +42,25 @@ else
     echo "  Node.js absent : contrôle JavaScript ignoré"
 fi
 
-echo "[3/7] Vérification de la version CMake"
+echo "[3/8] Vérification des scripts Shell"
+bash -n \
+    "$ROOT/scripts/install.sh" \
+    "$ROOT/scripts/validate-release.sh"
+
+echo "[4/8] Vérification de la version CMake"
 grep -Eq \
     '^[[:space:]]*VERSION[[:space:]]+0\.9\.9\.4([[:space:]]|$)' \
     "$ROOT/CMakeLists.txt"
 
-echo "[4/7] Vérification des fichiers essentiels"
+echo "[5/8] Vérification des fichiers essentiels"
 required=(
     "CMakeLists.txt"
     "scripts/config-web.py"
     "scripts/onvif_client.py"
+    "scripts/install.sh"
+    "scripts/check-camera-config.py"
+    "systemd/pidecoder.service.in"
+    "systemd/pidecoder-config.service.in"
     "src/main.cpp"
     "src/Application.cpp"
     "src/Player.cpp"
@@ -71,7 +81,7 @@ for relative in "${required[@]}"; do
     }
 done
 
-echo "[5/7] Vérification JSON"
+echo "[6/8] Vérification JSON"
 python3 - "$ROOT" <<'PY'
 from pathlib import Path
 import json
@@ -87,7 +97,7 @@ PY
 
 cleanup_python_cache
 
-echo "[6/7] Recherche de résidus indésirables"
+echo "[7/8] Recherche de résidus indésirables"
 if find "$ROOT" -type d -name __pycache__ -print -quit | grep -q .; then
     echo "Un dossier __pycache__ est présent" >&2
     exit 1
@@ -98,5 +108,5 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
     exit 1
 fi
 
-echo "[7/7] Validation terminée"
+echo "[8/8] Validation terminée"
 echo "PiDecoder v0.9.9.4 RC1 : paquet cohérent."

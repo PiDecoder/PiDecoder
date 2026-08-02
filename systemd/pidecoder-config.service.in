@@ -1,0 +1,19 @@
+[Unit]
+Description=PiDecoder Web Administration
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=@TARGET@
+Environment=PIDECODER_USER=@SERVICE_USER@
+ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

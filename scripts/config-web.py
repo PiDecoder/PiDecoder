@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, grp, re, secrets, shutil, subprocess, tempfile, threading, time, getpass
+import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, re, secrets, shutil, subprocess, tempfile, threading, time, getpass
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,8 +12,19 @@ from onvif_client import Credentials, continuous_move, discover, goto_preset, ge
 VERSION='0.9.9.4-rc1'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
 def owner():
-    try: return pwd.getpwnam('admin').pw_uid, grp.getgrnam('admin').gr_gid
-    except KeyError: return os.getuid(), os.getgid()
+    requested=os.environ.get('PIDECODER_USER','').strip()
+
+    for username in (requested,'admin'):
+        if not username:
+            continue
+
+        try:
+            account=pwd.getpwnam(username)
+            return account.pw_uid,account.pw_gid
+        except KeyError:
+            continue
+
+    return os.getuid(),os.getgid()
 
 def write_json(path,data,admin_owner=True):
     path.parent.mkdir(parents=True,exist_ok=True)

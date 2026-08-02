@@ -1,0 +1,28 @@
+[Unit]
+Description=PiDecoder Video Wall
+Wants=network-online.target
+After=network-online.target graphical.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+@SUPPLEMENTARY_GROUPS@
+WorkingDirectory=@TARGET@
+Environment=PIDECODER_USER=@SERVICE_USER@
+Environment=XDG_RUNTIME_DIR=/run/user/@SERVICE_UID@
+Environment=WAYLAND_DISPLAY=@WAYLAND_DISPLAY@
+Environment=PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
+Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
+ExecCondition=/usr/bin/python3 @TARGET@/scripts/check-camera-config.py @TARGET@/config/cameras.json
+ExecStartPre=/usr/bin/test -S /run/user/@SERVICE_UID@/@WAYLAND_DISPLAY@
+ExecStart=@TARGET@/bin/pidecoder @TARGET@/config/cameras.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target
