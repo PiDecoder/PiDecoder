@@ -1,192 +1,261 @@
 <p align="center">
-  <img src="docs/images/pidecoder-logo.png" width="220" alt="PiDecoder Logo">
-</p>
-
-<h1 align="center">PiDecoder</h1>
-
-<p align="center">
-<strong>Professional RTSP & ONVIF Video Wall built for Raspberry Pi</strong>
-<br>
-Lightweight • Hardware Accelerated • Modern Web Administration
+  <img
+    src="docs/images/hero-banner.png"
+    width="100%"
+    alt="PiDecoder — RTSP and ONVIF Video Wall for Raspberry Pi"
+  >
 </p>
 
 <p align="center">
-  <img src="docs/images/hero-banner.png"
-       width="100%"
-       alt="PiDecoder — Lightweight RTSP and ONVIF Video Wall for Raspberry Pi">
+  <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
+    <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
+  </a>
+  <img src="https://img.shields.io/badge/release-v0.9.9.4%20RC1-7A1F5C" alt="Release v0.9.9.4 RC1">
+  <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
+  <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
+  <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
 </p>
 
 <p align="center">
+  <strong>A fast, lightweight and reliable RTSP & ONVIF video wall for Raspberry Pi.</strong>
+</p>
 
-![License](https://img.shields.io/badge/License-GPLv3-green.svg)
-![Release](https://img.shields.io/badge/Release-v0.9.9.4_RC1-blue)
-![Platform](https://img.shields.io/badge/Raspberry%20Pi-5-C51A4A)
-![C++](https://img.shields.io/badge/C%2B%2B-17-blue)
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB)
-![ONVIF](https://img.shields.io/badge/ONVIF-Compatible-success)
-![RTSP](https://img.shields.io/badge/RTSP-Supported-orange)
-
+<p align="center">
+  PiDecoder turns a Raspberry Pi 5 into a dedicated multi-camera display with a native video engine,
+  ONVIF discovery, flexible layouts and a modern Web administration interface.
 </p>
 
 ---
 
-# Why PiDecoder?
+> [!NOTE]
+> **PiDecoder v0.9.9.4 RC1** is currently validated on a Raspberry Pi 5 running Debian 13 and Wayland.
+> The current upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
+> have been successfully tested on real hardware.
 
-PiDecoder was created with a simple objective:
+## Why PiDecoder?
 
-> **Provide a fast, lightweight and reliable RTSP & ONVIF Video Wall specifically designed for Raspberry Pi.**
+PiDecoder focuses on one job: displaying IP cameras reliably without the weight and complexity of a full Video Management System.
 
-Unlike many traditional Video Management Systems, PiDecoder focuses on simplicity, performance and ease of deployment while taking full advantage of Raspberry Pi hardware acceleration.
+<table>
+  <tr>
+    <td width="25%" valign="top">
+      <strong>Fast</strong><br>
+      Native C++ video wall built around SDL2 and libmpv.
+    </td>
+    <td width="25%" valign="top">
+      <strong>Lightweight</strong><br>
+      Designed specifically for Raspberry Pi 5 and continuous display.
+    </td>
+    <td width="25%" valign="top">
+      <strong>Practical</strong><br>
+      Configure cameras, layouts and services from a Web interface.
+    </td>
+    <td width="25%" valign="top">
+      <strong>Open</strong><br>
+      GPLv3 project built around RTSP, ONVIF and standard Linux tools.
+    </td>
+  </tr>
+</table>
 
-Whether monitoring a home lab, workshop, business or industrial site, PiDecoder delivers a responsive and modern surveillance experience without unnecessary complexity.
+## Features
 
----
+| Video wall | ONVIF | Layout | Administration |
+|---|---|---|---|
+| Multiple RTSP streams | Automatic discovery | Drag and drop | Web interface |
+| H.264 playback | Manual IPv4 addition | Resize camera tiles | System diagnostics |
+| Automatic reconnection | Profile detection | Main-camera layout | Service controls |
+| Fullscreen display | RTSP URI extraction | Persistent configuration | Logs and backups |
+| Native Raspberry Pi display | Camera configuration | Flexible mosaics | Authentication |
 
-# Features
+## Preview
 
-| 🎥 Video | 🔍 ONVIF | 🖥 Layout | ⚙ Administration |
-|----------|----------|----------|------------------|
-| RTSP Streaming | Automatic Discovery | Drag & Drop | Modern Web Interface |
-| H264 | Manual IPv4 Add | Camera Resize | Diagnostics |
-| JPEG | Profile Detection | Fullscreen View | Logs |
-| Hardware Decoding | Camera Update | Zoom & Pan | Services |
-| Auto Reconnect | RTSP URI Extraction | Flexible Layouts | Backup |
-| Low CPU Usage | PTZ Ready | Main Camera Mode | Security |
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/cameras.png" alt="PiDecoder camera management"><br>
+      <strong>Camera management</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/onvif.png" alt="PiDecoder ONVIF discovery"><br>
+      <strong>ONVIF discovery</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/images/layout.png" alt="PiDecoder layout editor"><br>
+      <strong>Mosaic layout editor</strong>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/images/system.png" alt="PiDecoder system diagnostics"><br>
+      <strong>System diagnostics</strong>
+    </td>
+  </tr>
+</table>
 
----
+## Quick start
 
-# Screenshots
-
-## Camera Management
-
-<p align="center">
-<img src="docs/images/cameras.png" width="90%">
-</p>
-
----
-
-## ONVIF Discovery
-
-<p align="center">
-<img src="docs/images/onvif.png" width="90%">
-</p>
-
----
-
-## Mosaic Layout Editor
-
-<p align="center">
-<img src="docs/images/layout.png" width="90%">
-</p>
-
----
-
-## System Diagnostics
-
-<p align="center">
-<img src="docs/images/system.png" width="90%">
-</p>
-
----
-
-# Installation
-
-Clone the repository
+### 1. Clone PiDecoder
 
 ```bash
 git clone https://github.com/PiDecoder/PiDecoder.git
-
 cd PiDecoder
 ```
 
-Configure and build
+### 2. Run the preflight check
 
 ```bash
-mkdir build
-
-cd build
-
-cmake ..
-
-make -j$(nproc)
+sudo ./scripts/install.sh --check
 ```
 
-Install
+The preflight validates the operating system, architecture, desktop user, Wayland session, dependencies and project sources without modifying the host.
+
+When automatic user detection is not possible:
 
 ```bash
-sudo make install
+sudo ./scripts/install.sh --check --user YOUR_DESKTOP_USER
 ```
 
----
+### 3. Install
 
-# Supported Platform
+```bash
+sudo ./scripts/install.sh
+```
 
-PiDecoder is currently validated on:
+The installer:
 
-- Raspberry Pi 5
-- Debian 13
-- Wayland
-- SDL2
-- FFmpeg
-- libmpv
+- installs the required Debian packages;
+- builds PiDecoder in release mode;
+- installs it under `/opt/pidecoder`;
+- preserves an existing camera, layout and Web configuration;
+- creates a backup under `/var/backups/pidecoder`;
+- installs and enables the systemd services;
+- starts the video wall when the Wayland session becomes available.
 
-Support for additional Linux platforms will be expanded after the v1.0 release.
+Open the administration interface at:
 
----
+```text
+http://RASPBERRY_PI_IP:8080
+```
 
-# Roadmap
+## Safe updates
 
-| Version | Status |
-|----------|--------|
-| ✅ v1.0 | Stable Release |
-| 🚧 v1.1 | PTZ Controls |
-| 🚧 v1.2 | Audio Support |
-| 🚧 v1.3 | HTTPS |
-| 🚧 v1.4 | REST API |
-| 🚀 v2.0 | Multi-Raspberry Cluster |
+Update the repository and run the same installer again:
 
----
+```bash
+git pull
+sudo ./scripts/install.sh
+```
 
-# Project Philosophy
+Existing runtime configuration is preserved automatically before the new version is installed.
 
-PiDecoder follows a few simple principles:
+## Startup architecture
+
+```text
+pidecoder-config.service
+└── Web administration on port 8080
+
+pidecoder-wayland.path
+└── waits for /run/user/<uid>/wayland-0
+    └── starts pidecoder.service
+        └── native RTSP video wall
+```
+
+The Wayland path trigger prevents the video engine from starting before the graphical session is ready.
+
+## Service status
+
+```bash
+systemctl status pidecoder-config.service --no-pager
+systemctl status pidecoder-wayland.path --no-pager
+systemctl status pidecoder.service --no-pager
+```
+
+Logs:
+
+```bash
+journalctl -u pidecoder-config.service -n 50 --no-pager
+journalctl -u pidecoder.service -n 50 --no-pager
+```
+
+> [!WARNING]
+> Camera configurations and some runtime logs can contain private RTSP addresses or credentials.
+> Never publish them or commit them to the repository.
+
+## Supported platform
+
+| Component | Validated configuration |
+|---|---|
+| Hardware | Raspberry Pi 5 |
+| Operating system | Debian 13 |
+| Architecture | AArch64 |
+| Display server | Wayland |
+| Video engine | libmpv / FFmpeg |
+| Rendering | SDL2 |
+| Administration | Python 3 Web service |
+
+Other Linux platforms may work, but they are not yet part of the validated v1.0 target.
+
+## Current validation status
+
+| Test | Status |
+|---|---|
+| Source and configuration validation | Passed |
+| Existing installation upgrade | Passed |
+| Camera and layout preservation | Passed |
+| Web authentication preservation | Passed |
+| Automatic startup after reboot | Passed |
+| Wayland-triggered video startup | Passed |
+| Continuous 8+ hour run | Passed |
+| Fresh installation on a blank system | Pending |
+| Forced-failure rollback test | Pending |
+
+## Roadmap
+
+| Version | Planned focus |
+|---|---|
+| v1.0 | Stable public release |
+| v1.1 | PTZ controls |
+| v1.2 | Audio support |
+| v1.3 | HTTPS |
+| v1.4 | REST API |
+| v2.0 | Multi-Raspberry cluster |
+
+Roadmap items are planned goals and may change as the project evolves.
+
+## Project principles
 
 - Keep it lightweight.
 - Keep it fast.
 - Keep it reliable.
-- Keep it simple.
+- Keep it understandable.
+- Do not add complexity without a real benefit.
 
-Every new feature should respect these principles.
+## Contributing
 
----
+Contributions, testing feedback and bug reports are welcome.
 
-# Contributing
+Before submitting a pull request:
 
-Contributions are welcome.
+1. Read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+2. Open an issue before proposing a major architectural change.
+3. Keep commits focused and easy to review.
+4. Never commit credentials, camera configurations or private logs.
 
-Before submitting a Pull Request:
+Security issues should follow the process described in [`SECURITY.md`](SECURITY.md).
 
-- Read `CONTRIBUTING.md`
-- Open an Issue for major changes
-- Keep commits focused
-- Never commit credentials or private configuration files
-
----
-
-# License
+## License
 
 PiDecoder is distributed under the GNU General Public License v3.0.
 
-See the `LICENSE` file for more information.
+See [`LICENSE`](LICENSE) for the full license text.
 
 ---
 
 <p align="center">
-<img src="docs/images/pico.png" width="150">
+  <img src="docs/images/pico.png" width="150" alt="Pico, the PiDecoder mascot">
 </p>
 
 <p align="center">
-<strong>Pico is watching your cameras.</strong>
-<br>
-Thank you for supporting PiDecoder ❤️
+  <strong>Pico is watching your cameras.</strong><br>
+  Built for Raspberry Pi, RTSP and ONVIF.
 </p>
