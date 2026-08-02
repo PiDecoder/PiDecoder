@@ -29,7 +29,7 @@ web-auth.json
 config/backups/
 ```
 
-The installer is designed to restore the previous installation when a failure occurs after system changes begin. A deliberate forced-failure rollback test is still pending before stable v1.0.
+The installer restores the previous installation when a failure occurs after system changes begin. A deliberate forced-failure rollback test has been successfully completed, including restoration of the binary, camera configuration, layout, Web authentication and systemd units.
 
 ## 2. Runtime camera and layout backups
 
@@ -144,7 +144,8 @@ Stop the services:
 sudo systemctl stop \
   pidecoder.service \
   pidecoder-config.service \
-  pidecoder-wayland.path
+  pidecoder-wayland.path \
+  pidecoder-wayland.target
 ```
 
 Choose the required backup:
@@ -180,13 +181,14 @@ sudo systemctl restart pidecoder-wayland.path
 sudo systemctl restart pidecoder-config.service
 ```
 
-When the Wayland socket exists and the camera configuration is valid, `pidecoder.service` should start through the path trigger.
+When the Wayland socket exists, `pidecoder-wayland.path` reaches `pidecoder-wayland.target`. The target requests `pidecoder.service`, which starts only when the camera configuration is valid.
 
 ## Verify a restore
 
 ```bash
 systemctl is-active pidecoder-config.service
 systemctl is-active pidecoder-wayland.path
+systemctl is-active pidecoder-wayland.target
 systemctl is-active pidecoder.service
 ```
 

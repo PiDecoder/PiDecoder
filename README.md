@@ -32,6 +32,11 @@
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
 > The upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
 > have been successfully tested on real hardware.
+> A fresh installation on a blank Debian 13 system, Web configuration restore and a forced-failure
+> installer rollback have also been successfully validated.
+>
+> The blank-system installation test was performed on an x86_64 virtual machine.
+> Raspberry Pi 5 AArch64 remains the official validated hardware target.
 >
 > The Web administration interface is currently available in French.
 > English localization is planned before the stable v1.0 release.
@@ -174,17 +179,21 @@ pidecoder-config.service
 
 pidecoder-wayland.path
 └── waits for /run/user/<uid>/wayland-0
-    └── starts pidecoder.service
-        └── native RTSP video wall
+    └── reaches pidecoder-wayland.target
+        └── requests pidecoder.service
+            └── native RTSP video wall
 ```
 
 The Wayland path trigger prevents the video engine from starting before the graphical session is ready.
+The intermediate target keeps the path unit healthy when no camera is configured; the video service
+remains inactive until a valid camera configuration exists.
 
 ## Service status
 
 ```bash
 systemctl status pidecoder-config.service --no-pager
 systemctl status pidecoder-wayland.path --no-pager
+systemctl status pidecoder-wayland.target --no-pager
 systemctl status pidecoder.service --no-pager
 ```
 
@@ -224,8 +233,12 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 | Automatic startup after reboot | Passed |
 | Wayland-triggered video startup | Passed |
 | Continuous 8+ hour run | Passed |
-| Fresh installation on a blank system | Pending |
-| Forced-failure rollback test | Pending |
+| Fresh installation on blank Debian 13 x86_64 | Passed |
+| Web configuration export and restore | Passed |
+| Forced-failure installer rollback | Passed |
+
+The Web configuration export contains cameras and layout data.
+Administrator credentials are configured separately and are not included in the exported file.
 
 ## Roadmap
 
