@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from onvif_client import Credentials, continuous_move, stop
+from onvif_client import Credentials, continuous_move, goto_preset, stop
 
 MOVES: dict[str, tuple[float, float, float]] = {
     "up": (0.0, 0.5, 0.0),
@@ -117,7 +117,7 @@ def execute(root: Path, request: dict) -> None:
         request.get("profile_token", "")
     ).strip()
 
-    if action not in MOVES and action != "stop":
+    if action not in MOVES and action not in {"stop", "preset"}:
         raise ValueError("Commande PTZ inconnue")
 
     if not ptz_xaddr:
@@ -130,6 +130,22 @@ def execute(root: Path, request: dict) -> None:
         profile_token,
     )
     credentials = credentials_from_camera(camera)
+
+    if action == "preset":
+        preset_token = str(
+            request.get("preset_token", "")
+        ).strip()
+
+        if not preset_token:
+            raise ValueError("Token de preset absent")
+
+        goto_preset(
+            ptz_xaddr,
+            token,
+            preset_token,
+            credentials,
+        )
+        return
 
     if action == "stop":
         stop(
@@ -190,7 +206,11 @@ def serve(root: Path, socket_path: Path) -> int:
 
                 execute(root, request)
 
-                if str(request.get("action", "")).lower() == "stop":
+                action = str(
+                    request.get("action", "")
+                ).lower()
+
+                if action in {"stop", "preset"}:
                     active_request = None
                 else:
                     active_request = dict(request)

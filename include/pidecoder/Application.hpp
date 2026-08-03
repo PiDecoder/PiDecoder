@@ -83,6 +83,10 @@ private:
         bool force = false
     ) noexcept;
 
+    void call_ptz_preset(
+        std::size_t preset_index
+    ) noexcept;
+
     void show_ptz_overlay() noexcept;
     void update_ptz_overlay_visibility() noexcept;
 
@@ -118,6 +122,7 @@ private:
     PtzCommand active_ptz_command_{PtzCommand::None};
     bool ptz_pointer_active_{false};
     bool ptz_overlay_visible_{false};
+    bool ptz_preset_menu_open_{false};
 
     std::chrono::steady_clock::time_point
         ptz_overlay_until_{};

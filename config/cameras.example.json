@@ -11,7 +11,17 @@
         "grid_profile_token": "profile-grid",
         "focus_profile_token": "profile-focus",
         "ptz_xaddr": "http://192.0.2.10/onvif/ptz_service",
-        "ptz_profile_token": "profile-focus"
+        "ptz_profile_token": "profile-focus",
+        "ptz_presets": [
+          {
+            "token": "preset-home",
+            "name": "Accueil"
+          },
+          {
+            "token": "preset-gate",
+            "name": "Portail"
+          }
+        ]
       }
     },
     {

@@ -29,6 +29,8 @@ PY
 
 The PTZ camera must print `True True`.
 
+The same camera metadata must also contain a non-empty `ptz_presets` array after it has been re-identified and updated from the Web ONVIF page.
+
 ## Native overlay
 
 - [ ] Double-clicking the PTZ camera opens the focus view
@@ -46,6 +48,10 @@ The PTZ camera must print `True True`.
 - [ ] Escape stops movement and closes the focus view
 - [ ] Losing window focus sends Stop
 - [ ] Digital inspection zoom and pan still work outside the PTZ controls
+- [ ] The compact `PRESET` selector is visible when presets are available
+- [ ] Opening the selector keeps the PTZ overlay visible
+- [ ] Selecting a preset immediately moves the camera and closes the menu
+- [ ] Preset names are readable and long names are safely truncated
 
 ## Logs
 

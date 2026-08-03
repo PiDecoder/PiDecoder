@@ -126,13 +126,77 @@ const char* PtzController::command_name(
     return "none";
 }
 
+bool PtzController::send_payload(
+    const std::string& payload
+) noexcept
+{
+    if (socket_fd_ < 0) {
+        return false;
+    }
+
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+
+    if (
+        socket_path_.size() >=
+        sizeof(address.sun_path)
+    ) {
+        if (!socket_error_reported_) {
+            std::cerr
+                << "PTZ indisponible : chemin de socket trop long"
+                << std::endl;
+            socket_error_reported_ = true;
+        }
+
+        return false;
+    }
+
+    std::memcpy(
+        address.sun_path,
+        socket_path_.c_str(),
+        socket_path_.size() + 1
+    );
+
+    const ssize_t sent =
+        ::sendto(
+            socket_fd_,
+            payload.data(),
+            payload.size(),
+            MSG_DONTWAIT,
+            reinterpret_cast<const sockaddr*>(
+                &address
+            ),
+            sizeof(address)
+        );
+
+    if (
+        sent !=
+        static_cast<ssize_t>(
+            payload.size()
+        )
+    ) {
+        if (!socket_error_reported_) {
+            std::cerr
+                << "PTZ indisponible : pont local non joignable ("
+                << std::strerror(errno)
+                << ")"
+                << std::endl;
+            socket_error_reported_ = true;
+        }
+
+        return false;
+    }
+
+    socket_error_reported_ = false;
+    return true;
+}
+
 bool PtzController::send(
     const CameraConfig& camera,
     const PtzCommand command
 ) noexcept
 {
     if (
-        socket_fd_ < 0 ||
         !camera.ptz_enabled ||
         camera.ptz_xaddr.empty() ||
         camera.ptz_profile_token.empty() ||
@@ -157,66 +221,57 @@ bool PtzController::send(
             ) +
             "\"}";
 
-        sockaddr_un address{};
-        address.sun_family = AF_UNIX;
-
-        if (
-            socket_path_.size() >=
-            sizeof(address.sun_path)
-        ) {
-            if (!socket_error_reported_) {
-                std::cerr
-                    << "PTZ indisponible : chemin de socket trop long"
-                    << std::endl;
-                socket_error_reported_ = true;
-            }
-
-            return false;
-        }
-
-        std::memcpy(
-            address.sun_path,
-            socket_path_.c_str(),
-            socket_path_.size() + 1
-        );
-
-        const ssize_t sent =
-            ::sendto(
-                socket_fd_,
-                payload.data(),
-                payload.size(),
-                MSG_DONTWAIT,
-                reinterpret_cast<const sockaddr*>(
-                    &address
-                ),
-                sizeof(address)
-            );
-
-        if (
-            sent !=
-            static_cast<ssize_t>(
-                payload.size()
-            )
-        ) {
-            if (!socket_error_reported_) {
-                std::cerr
-                    << "PTZ indisponible : pont local non joignable ("
-                    << std::strerror(errno)
-                    << ")"
-                    << std::endl;
-                socket_error_reported_ = true;
-            }
-
-            return false;
-        }
-
-        socket_error_reported_ = false;
-        return true;
+        return send_payload(payload);
 
     } catch (const std::exception& exception) {
         if (!socket_error_reported_) {
             std::cerr
                 << "PTZ indisponible : "
+                << exception.what()
+                << std::endl;
+            socket_error_reported_ = true;
+        }
+
+        return false;
+    }
+}
+
+bool PtzController::send_preset(
+    const CameraConfig& camera,
+    const std::string& preset_token
+) noexcept
+{
+    if (
+        !camera.ptz_enabled ||
+        camera.ptz_xaddr.empty() ||
+        camera.ptz_profile_token.empty() ||
+        preset_token.empty()
+    ) {
+        return false;
+    }
+
+    try {
+        const std::string payload =
+            std::string{"{\"action\":\"preset\",\"ptz_xaddr\":\""} +
+            json_escape(
+                camera.ptz_xaddr
+            ) +
+            "\",\"profile_token\":\"" +
+            json_escape(
+                camera.ptz_profile_token
+            ) +
+            "\",\"preset_token\":\"" +
+            json_escape(
+                preset_token
+            ) +
+            "\"}";
+
+        return send_payload(payload);
+
+    } catch (const std::exception& exception) {
+        if (!socket_error_reported_) {
+            std::cerr
+                << "Preset PTZ indisponible : "
                 << exception.what()
                 << std::endl;
             socket_error_reported_ = true;

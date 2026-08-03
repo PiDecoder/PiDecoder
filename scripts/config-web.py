@@ -2461,6 +2461,9 @@ async function saveManagedCamera(index,box){
         focus_profile_token:focusProfileToken,
         ptz_xaddr:identification.ptz_xaddr||'',
         ptz_profile_token:ptzProfile?.token||'',
+        ptz_presets:ptzProfile
+          ? (identification.presets?.[ptzProfile.token]||[])
+          : [],
         name:box.querySelector('.manager-name').value,
         username:onvifUser.value,
         password:onvifPassword.value,
@@ -3418,6 +3421,37 @@ class H(BaseHTTPRequestHandler):
                 ptz_profile_token=str(
                     d.get('ptz_profile_token','')
                 ).strip()
+                raw_ptz_presets=d.get('ptz_presets',[])
+                ptz_presets=[]
+
+                if isinstance(raw_ptz_presets,list):
+                    seen_preset_tokens=set()
+
+                    for preset in raw_ptz_presets[:64]:
+                        if not isinstance(preset,dict):
+                            continue
+
+                        preset_token=str(
+                            preset.get('token','')
+                        ).strip()[:512]
+
+                        if (
+                            not preset_token
+                            or preset_token in seen_preset_tokens
+                        ):
+                            continue
+
+                        preset_name=str(
+                            preset.get('name','')
+                            or preset_token
+                        ).strip()[:128]
+
+                        seen_preset_tokens.add(preset_token)
+                        ptz_presets.append({
+                            'token':preset_token,
+                            'name':preset_name or preset_token,
+                        })
+
                 ip=str(d.get('ip','')).strip()
                 information=d.get('information',{}) if isinstance(d.get('information'),dict) else {}
 
@@ -3476,6 +3510,7 @@ class H(BaseHTTPRequestHandler):
                         'focus_profile_token':focus_token,
                         'ptz_xaddr':ptz_xaddr,
                         'ptz_profile_token':ptz_profile_token,
+                        'ptz_presets':ptz_presets,
                         'manufacturer':manufacturer,
                         'model':model,
                         'serial_number':serial_number,

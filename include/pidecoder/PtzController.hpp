@@ -36,11 +36,20 @@ public:
         PtzCommand command
     ) noexcept;
 
+    [[nodiscard]] bool send_preset(
+        const CameraConfig& camera,
+        const std::string& preset_token
+    ) noexcept;
+
     [[nodiscard]] static const char* command_name(
         PtzCommand command
     ) noexcept;
 
 private:
+    [[nodiscard]] bool send_payload(
+        const std::string& payload
+    ) noexcept;
+
     std::string socket_path_;
     int socket_fd_{-1};
     bool socket_error_reported_{false};

@@ -105,6 +105,44 @@ std::vector<CameraConfig> Config::load(
             camera.ptz_enabled =
                 !camera.ptz_xaddr.empty() &&
                 !camera.ptz_profile_token.empty();
+
+            if (
+                metadata.contains("ptz_presets") &&
+                metadata["ptz_presets"].is_array()
+            ) {
+                for (
+                    const auto& preset_item :
+                    metadata["ptz_presets"]
+                ) {
+                    if (!preset_item.is_object()) {
+                        continue;
+                    }
+
+                    PtzPreset preset;
+                    preset.token =
+                        preset_item.value(
+                            "token",
+                            ""
+                        );
+                    preset.name =
+                        preset_item.value(
+                            "name",
+                            preset.token
+                        );
+
+                    if (preset.token.empty()) {
+                        continue;
+                    }
+
+                    if (preset.name.empty()) {
+                        preset.name = preset.token;
+                    }
+
+                    camera.ptz_presets.push_back(
+                        std::move(preset)
+                    );
+                }
+            }
         }
 
         cameras.push_back(
