@@ -1035,7 +1035,7 @@ def identify_device(x, username, password):
     - GetCapabilities
     - GetProfiles
 
-    It deliberately does not request RTSP URIs, presets or move PTZ.
+    It reads RTSP URIs and PTZ presets but never moves the camera.
     """
     credentials = Credentials(
         username,
@@ -1091,6 +1091,29 @@ def identify_device(x, username, password):
             profile["stream_uri"] = ""
             profile["stream_error"] = str(exc)
 
+    presets = {}
+
+    if ptz_xaddr:
+        for profile in profiles:
+            if not profile.get("ptz"):
+                continue
+
+            token = str(profile.get("token", "")).strip()
+
+            if not token:
+                continue
+
+            try:
+                presets[token] = get_presets(
+                    ptz_xaddr,
+                    token,
+                    credentials,
+                )
+                profile["preset_error"] = ""
+            except OnvifError as exc:
+                presets[token] = []
+                profile["preset_error"] = str(exc)
+
     _debug_write(
         "IDENTIFICATION TERMINÉE",
         (
@@ -1112,6 +1135,14 @@ def identify_device(x, username, password):
         "ptz_advertised": bool(
             ptz_xaddr
         ),
+        "ptz_supported": bool(
+            ptz_xaddr
+            and any(
+                profile.get("ptz")
+                for profile in profiles
+            )
+        ),
+        "presets": presets,
     }
 
 
@@ -1129,7 +1160,7 @@ def inspect_device(x,username,password):
     return {'device_xaddr':x,'information':info,'capabilities':caps,'profiles':profiles,'presets':presets,'ptz_supported':bool(ptz and any(p['ptz'] for p in profiles))}
 
 def continuous_move(x,token,c,pan=0,tilt=0,zoom=0):
-    _soap(x,f'{TPTZ}/ContinuousMove',f'<tptz:ContinuousMove><tptz:ProfileToken>{token}</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="{pan:.3f}" y="{tilt:.3f}"/><tt:Zoom x="{zoom:.3f}"/></tptz:Velocity><tptz:Timeout>PT1S</tptz:Timeout></tptz:ContinuousMove>',c)
+    _soap(x,f'{TPTZ}/ContinuousMove',f'<tptz:ContinuousMove><tptz:ProfileToken>{token}</tptz:ProfileToken><tptz:Velocity><tt:PanTilt x="{pan:.3f}" y="{tilt:.3f}"/><tt:Zoom x="{zoom:.3f}"/></tptz:Velocity><tptz:Timeout>PT10S</tptz:Timeout></tptz:ContinuousMove>',c)
 def stop(x,token,c):
     _soap(x,f'{TPTZ}/Stop',f'<tptz:Stop><tptz:ProfileToken>{token}</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>',c)
 def goto_preset(x,token,preset,c):

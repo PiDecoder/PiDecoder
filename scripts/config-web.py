@@ -396,7 +396,7 @@ HTML=r'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="
     width:min(275px,calc(100vw - 24px))
   }
 }
-.engine{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:#252c36;font-size:13px}.dot{width:9px;height:9px;border-radius:50%;background:#8b95a4}.engine.running .dot{background:#56d68b}.engine.stopped .dot{background:#ff6572}.engine.restarting .dot{background:#ffc268}.backupbox{border:1px dashed var(--l);border-radius:12px;padding:16px;margin-top:12px}.onvif-card{background:#12161c;border:1px solid var(--l);border-radius:13px;padding:14px;margin:11px 0}.onvif-title{font-weight:850;font-size:17px}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#29313c;color:#c8d2df;font-size:12px;margin:3px}.badge.ptz{background:#244b39;color:#8ae6b3}.ptzpad{display:grid;grid-template-columns:repeat(3,52px);gap:7px;justify-content:center;margin:12px 0}.ptzpad button{height:46px;background:#29313c;color:#fff}.profile-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-top:10px}
+.engine{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:#252c36;font-size:13px}.dot{width:9px;height:9px;border-radius:50%;background:#8b95a4}.engine.running .dot{background:#56d68b}.engine.stopped .dot{background:#ff6572}.engine.restarting .dot{background:#ffc268}.backupbox{border:1px dashed var(--l);border-radius:12px;padding:16px;margin-top:12px}.onvif-card{background:#12161c;border:1px solid var(--l);border-radius:13px;padding:14px;margin:11px 0}.onvif-title{font-weight:850;font-size:17px}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#29313c;color:#c8d2df;font-size:12px;margin:3px}.badge.ptz{background:#244b39;color:#8ae6b3}.ptzpad{display:grid;grid-template-columns:repeat(3,52px);gap:7px;justify-content:center;margin:12px 0}.ptzpad button{height:46px;background:#29313c;color:#fff}.ptz-panel{border-style:solid}.ptz-panel-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.ptzpad{touch-action:none;user-select:none}.ptzpad .ptz-empty{height:46px}.ptzpad button.ptz-active,.ptz-zoom button.ptz-active{background:#4c8dff;box-shadow:0 0 0 3px rgba(76,141,255,.25);transform:none}.ptz-zoom{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0}.ptz-zoom button{min-width:118px;background:#29313c;color:#fff;touch-action:none}.ptz-presets{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;margin-top:12px}.ptz-help{text-align:center;margin-top:8px}.profile-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-top:10px}
 .ip-valid{border-color:#3ecf8e!important;box-shadow:0 0 0 1px rgba(62,207,142,.35)}
 .ip-invalid{border-color:#ff6676!important;box-shadow:0 0 0 1px rgba(255,102,118,.35)}
 .btn-fixed{min-width:170px}
@@ -2043,6 +2043,189 @@ function profileOption(profile){
   return `<option value="${esc(profile.token||'')}">${esc(profile.name||profile.token||'Profil')} · ${esc(codec)} · ${esc(resolution)} · ${esc(fps)}</option>`;
 }
 
+let activePtzStop=null;
+
+function stopActivePtz(){
+  const stop=activePtzStop;
+  activePtzStop=null;
+
+  if(stop){
+    stop();
+  }
+}
+
+document.addEventListener('pointerup',stopActivePtz);
+document.addEventListener('pointercancel',stopActivePtz);
+window.addEventListener('blur',stopActivePtz);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    stopActivePtz();
+  }
+});
+
+function ptzPayload(index,profileToken,action){
+  const device=onvifDevices[index];
+  const identification=device?.identification||{};
+
+  return {
+    ptz_xaddr:identification.ptz_xaddr||'',
+    profile_token:profileToken,
+    username:onvifUser.value,
+    password:onvifPassword.value,
+    action
+  };
+}
+
+function bindPtzControls(index,box,profile,presets){
+  const profileToken=String(profile?.token||'');
+  const moveButtons=[
+    ...box.querySelectorAll('[data-ptz-action]')
+  ].filter(button=>button.dataset.ptzAction!=='stop');
+
+  const stopButton=box.querySelector('[data-ptz-action="stop"]');
+  const allButtons=[
+    ...moveButtons,
+    stopButton
+  ].filter(Boolean);
+
+  const clearActive=()=>{
+    allButtons.forEach(button=>
+      button.classList.remove('ptz-active')
+    );
+  };
+
+  const send=action=>api('/api/onvif/ptz',{
+    method:'POST',
+    body:JSON.stringify(
+      ptzPayload(index,profileToken,action)
+    )
+  });
+
+  moveButtons.forEach(button=>{
+    const action=button.dataset.ptzAction;
+
+    button.addEventListener('contextmenu',event=>
+      event.preventDefault()
+    );
+
+    button.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='mouse' && event.button!==0){
+        return;
+      }
+
+      event.preventDefault();
+      stopActivePtz();
+      clearActive();
+      button.classList.add('ptz-active');
+
+      let stopped=false;
+      const movePromise=send(action);
+
+      const stop=async()=>{
+        if(stopped){
+          return;
+        }
+
+        stopped=true;
+        clearActive();
+
+        try{
+          await movePromise;
+        }catch(error){
+          toast(error.message,true);
+          return;
+        }
+
+        try{
+          await send('stop');
+        }catch(error){
+          toast(error.message,true);
+        }
+      };
+
+      activePtzStop=stop;
+
+      movePromise.catch(error=>{
+        if(activePtzStop===stop){
+          activePtzStop=null;
+        }
+
+        clearActive();
+        toast(error.message,true);
+      });
+    });
+
+    button.addEventListener('pointerleave',()=>{
+      if(activePtzStop){
+        stopActivePtz();
+      }
+    });
+
+    button.addEventListener('lostpointercapture',()=>{
+      if(activePtzStop){
+        stopActivePtz();
+      }
+    });
+  });
+
+  if(stopButton){
+    stopButton.onclick=async()=>{
+      stopActivePtz();
+      clearActive();
+
+      try{
+        await send('stop');
+      }catch(error){
+        toast(error.message,true);
+      }
+    };
+  }
+
+  const presetSelect=box.querySelector('.ptz-preset');
+  const presetButton=box.querySelector('.ptz-goto');
+
+  if(presetSelect && presetButton){
+    presetButton.onclick=async()=>{
+      const presetToken=presetSelect.value;
+
+      if(!presetToken){
+        toast('Aucun preset sélectionné',true);
+        return;
+      }
+
+      stopActivePtz();
+      presetButton.disabled=true;
+      presetButton.innerHTML=
+        '<span class="spinner"></span>Déplacement…';
+
+      try{
+        const device=onvifDevices[index];
+        const identification=device?.identification||{};
+
+        await api('/api/onvif/preset',{
+          method:'POST',
+          body:JSON.stringify({
+            ptz_xaddr:identification.ptz_xaddr||'',
+            profile_token:profileToken,
+            preset_token:presetToken,
+            username:onvifUser.value,
+            password:onvifPassword.value
+          })
+        });
+
+        toast('✔ Preset PTZ appelé');
+
+      }catch(error){
+        toast(error.message,true);
+
+      }finally{
+        presetButton.disabled=!(presets||[]).length;
+        presetButton.textContent='Aller au preset';
+      }
+    };
+  }
+}
+
 function renderOnvifDiscovery(){
   onvifResults.innerHTML='';
 
@@ -2059,6 +2242,24 @@ function renderOnvifDiscovery(){
     const info=identification?.information||{};
     const profiles=usableProfiles(identification?.profiles||[]);
     const existing=existingCameraFor(device);
+    const ptzProfiles=(identification?.profiles||[])
+      .filter(profile=>profile.ptz && profile.token);
+    const preferredPtzToken=
+      existing?.onvif?.focus_profile_token ||
+      existing?.onvif?.grid_profile_token ||
+      '';
+    const ptzProfile=
+      ptzProfiles.find(profile=>profile.token===preferredPtzToken) ||
+      ptzProfiles[0] ||
+      null;
+    const ptzPresets=ptzProfile
+      ? (identification?.presets?.[ptzProfile.token]||[])
+      : [];
+    const ptzAvailable=Boolean(
+      identification?.ptz_supported &&
+      identification?.ptz_xaddr &&
+      ptzProfile
+    );
 
     const defaultName=existing?.name ||
       [info.Manufacturer,info.Model].filter(Boolean).join(' ') ||
@@ -2073,6 +2274,57 @@ function renderOnvifDiscovery(){
       .map(value=>`<li>${esc(value)}</li>`)
       .join('');
 
+    const ptzPresetOptions=ptzPresets
+      .map(preset=>
+        `<option value="${esc(preset.token||'')}">`+
+        `${esc(preset.name||preset.token||'Preset')}</option>`
+      )
+      .join('');
+
+    const ptzPanel=ptzAvailable?`
+      <div class="backupbox ptz-panel">
+        <div class="ptz-panel-title">
+          <strong>Commande PTZ</strong>
+          <span class="badge ptz">${esc(ptzProfile.name||ptzProfile.token)}</span>
+        </div>
+
+        <div class="ptzpad" aria-label="Commandes directionnelles PTZ">
+          <div class="ptz-empty"></div>
+          <button type="button" class="secondary" data-ptz-action="up" title="Monter">▲</button>
+          <div class="ptz-empty"></div>
+
+          <button type="button" class="secondary" data-ptz-action="left" title="Gauche">◀</button>
+          <button type="button" class="secondary" data-ptz-action="stop" title="Arrêter">■</button>
+          <button type="button" class="secondary" data-ptz-action="right" title="Droite">▶</button>
+
+          <div class="ptz-empty"></div>
+          <button type="button" class="secondary" data-ptz-action="down" title="Descendre">▼</button>
+          <div class="ptz-empty"></div>
+        </div>
+
+        <div class="ptz-zoom">
+          <button type="button" class="secondary" data-ptz-action="zoomin">Zoom +</button>
+          <button type="button" class="secondary" data-ptz-action="zoomout">Zoom −</button>
+        </div>
+
+        ${ptzPresets.length?`
+          <div class="ptz-presets">
+            <div>
+              <label>Preset</label>
+              <select class="ptz-preset">${ptzPresetOptions}</select>
+            </div>
+            <button type="button" class="secondary ptz-goto">Aller au preset</button>
+          </div>
+        `:`
+          <div class="muted ptz-help">Aucun preset ONVIF détecté pour ce profil.</div>
+        `}
+
+        <div class="muted ptz-help">
+          Maintiens une commande pour déplacer la caméra. Le relâchement envoie immédiatement Stop.
+        </div>
+      </div>
+    `:'';
+
     box.innerHTML=`
       <div class="row" style="justify-content:space-between">
         <div>
@@ -2081,6 +2333,7 @@ function renderOnvifDiscovery(){
             <span class="badge">ONVIF</span>
             <span class="badge">${esc(device.ip||'IP inconnue')}</span>
             ${identification?'<span class="badge ptz">Identifiée</span>':''}
+            ${ptzAvailable?'<span class="badge ptz">PTZ</span>':''}
             ${existing?'<span class="badge badge-configured">Déjà configurée</span>':'<span class="badge">Nouvelle</span>'}
           </div>
         </div>
@@ -2121,6 +2374,8 @@ function renderOnvifDiscovery(){
             </div>
           </div>
 
+          ${ptzPanel}
+
           <details style="margin-top:12px">
             <summary>Tous les profils détectés</summary>
             ${(identification.profiles||[]).map(profile=>`
@@ -2156,6 +2411,15 @@ function renderOnvifDiscovery(){
         : profiles[0].token;
 
       box.querySelector('.manager-save').onclick=()=>saveManagedCamera(index,box);
+    }
+
+    if(ptzAvailable){
+      bindPtzControls(
+        index,
+        box,
+        ptzProfile,
+        ptzPresets
+      );
     }
 
     onvifResults.appendChild(box);
