@@ -262,8 +262,15 @@ HTML=r'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="
   padding:13px;
   border:1px solid #333e4b;
   border-radius:11px;
-  background:#11171f
+  background:#11171f;
+  transition:border-color .2s ease,background .2s ease
 }
+.diag-card.good{border-color:#245f44;background:#102219}
+.diag-card.warn{border-color:#7a5a22;background:#251d0f}
+.diag-card.bad{border-color:#7b313a;background:#251419}
+.diag-card.good .diag-value{color:#70dda2}
+.diag-card.warn .diag-value{color:#ffc268}
+.diag-card.bad .diag-value{color:#ff7f89}
 .diag-label{
   color:var(--m);
   font-size:12px;
@@ -319,17 +326,19 @@ HTML=r'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="
 }
 
 .shortcut-button{
-  width:38px;
-  height:38px;
+  width:44px;
+  min-width:44px;
+  height:auto;
   padding:0;
   border-radius:9px;
   display:flex;
   align-items:center;
   justify-content:center;
+  align-self:stretch;
   font-size:18px;
   background:#26313e;
   color:#fff;
-  margin-left:auto
+  margin-left:0
 }
 .shortcut-help{
   position:fixed;
@@ -661,6 +670,7 @@ select{width:100%;padding:9px 10px;background:#0c1015;border:1px solid #353d49;b
 </div><div id="notificationHistory" class="notification-history"><div class="notification-history-header"><strong>Notifications récentes</strong><button class="secondary" type="button" onclick="clearNotificationHistory()">Effacer</button></div><div id="notificationList"></div></div>
 <script>
 let cfg={cameras:[],layout:{}},drag=null,timer=null;
+const NOTIFICATION_LIMIT=5;
 let notificationItems=[];
 let notificationUnread=0;
 
@@ -688,7 +698,9 @@ function renderNotificationHistory(){
     });
   }
 
-  notificationCount.textContent=String(notificationUnread);
+  notificationCount.textContent=String(
+    Math.min(NOTIFICATION_LIMIT,notificationUnread)
+  );
   notificationCount.style.display=notificationUnread?'flex':'none';
 }
 
@@ -699,12 +711,18 @@ function pushNotification(message,error=false){
     time:notificationTime()
   });
 
-  notificationItems=notificationItems.slice(0,5);
+  notificationItems=notificationItems.slice(
+    0,
+    NOTIFICATION_LIMIT
+  );
 
   const history=document.getElementById('notificationHistory');
 
   if(!history.classList.contains('show')){
-    notificationUnread=Math.min(99,notificationUnread+1);
+    notificationUnread=Math.min(
+      NOTIFICATION_LIMIT,
+      notificationUnread+1
+    );
   }
 
   renderNotificationHistory();
@@ -812,7 +830,7 @@ async function showApp(){login.classList.add('hidden');app.classList.remove('hid
 async function boot(){let s=await api('/api/session');s.authenticated?showApp():showLogin()}
 async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
-function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics()}if(id==='layout'){sync();renderMosaic()}}
+function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
@@ -1546,7 +1564,177 @@ function mosaicSettingsChanged(){
 function collect(){sync();const activeCount=cfg.cameras.filter(c=>c.enabled!==false).length;ensurePlacements();cfg.layout={columns:+cols.value||3,rows:+rows.value||3,fullscreen_on_start:fs.checked,camera_order:Array.from({length:activeCount},(_,i)=>i),placements:cfg.layout.placements};return cfg}
 async function save(show=true){await api('/api/config',{method:'POST',body:JSON.stringify(collect())});if(show)toast('✓ Sauvegarde effectuée')}
 async function apply(){try{await save(false);let r=await api('/api/apply',{method:'POST',body:'{}'});toast(r.message,!r.applied)}catch(e){toast(e.message,true)}}
-async function sysInfo(){if(app.classList.contains('hidden'))return;try{let s=await api('/api/system'),tc=s.temperature_c==null?'':s.temperature_c>=80?'bad':s.temperature_c>=75?'warn':'good',th=s.throttled==='0x0'?'good':'bad';metrics.innerHTML=`<div class="metric ${tc}"><div class="muted">Température CPU</div><div class="value">${s.temperature_c??'—'} °C</div></div><div class="metric"><div class="muted">CPU</div><div class="value">${s.cpu_percent??'—'} %</div></div><div class="metric"><div class="muted">RAM</div><div class="value">${s.memory_percent} %</div><div class="muted">${s.memory_used_mb}/${s.memory_total_mb} Mo</div></div><div class="metric ${th}"><div class="muted">Throttling</div><div class="value">${s.throttled??'—'}</div></div><div class="metric"><div class="muted">Uptime</div><div class="value">${Math.floor(s.uptime_seconds/86400)}j ${Math.floor(s.uptime_seconds%86400/3600)}h</div></div><div class="metric"><div class="muted">Load</div><div class="value">${s.load_average.map(x=>x.toFixed(2)).join(' / ')}</div></div>`}catch{}}
+function healthState(value,warnAt,badAt){
+  const number=Number(value);
+
+  if(!Number.isFinite(number)){
+    return '';
+  }
+
+  if(number>=badAt){
+    return 'bad';
+  }
+
+  if(number>=warnAt){
+    return 'warn';
+  }
+
+  return 'good';
+}
+
+function formatSystemUptime(seconds){
+  const total=Math.max(0,Number(seconds)||0);
+  const days=Math.floor(total/86400);
+  const hours=Math.floor((total%86400)/3600);
+  const minutes=Math.floor((total%3600)/60);
+
+  if(days){
+    return `${days} j ${hours} h ${minutes} min`;
+  }
+
+  if(hours){
+    return `${hours} h ${minutes} min`;
+  }
+
+  return `${minutes} min`;
+}
+
+function throttlingHealth(raw,label=''){
+  const value=String(raw??'').trim().toLowerCase();
+
+  if(!value || value==='—' || value==='indisponible'){
+    return {
+      value:'Indisponible',
+      sub:label||'vcgencmd indisponible',
+      state:''
+    };
+  }
+
+  const bits=Number.parseInt(value,16);
+
+  if(!Number.isFinite(bits)){
+    return {
+      value,
+      sub:label||'Valeur non reconnue',
+      state:'warn'
+    };
+  }
+
+  if((bits&0x000f)!==0){
+    return {
+      value:'Actif',
+      sub:value,
+      state:'bad'
+    };
+  }
+
+  if((bits&0xf0000)!==0){
+    return {
+      value:'Historique',
+      sub:value,
+      state:'warn'
+    };
+  }
+
+  return {
+    value:'Aucun',
+    sub:value,
+    state:'good'
+  };
+}
+
+function renderSystemHealth(system={}){
+  const temperature=system.temperature_c;
+  const cpu=system.cpu_percent;
+  const memory=system.memory_percent;
+  const throttling=throttlingHealth(
+    system.throttled_hex??system.throttled,
+    system.throttled_label||''
+  );
+
+  const load=Array.isArray(system.load_average)
+    ? system.load_average
+        .map(value=>Number(value).toFixed(2))
+        .join(' / ')
+    : (system.load_average||'—');
+
+  const uptime=system.uptime_human
+    || formatSystemUptime(system.uptime_seconds);
+
+  const memorySub=system.memory_used_human
+    || (
+      system.memory_used_mb!=null
+      && system.memory_total_mb!=null
+        ? `${system.memory_used_mb} / ${system.memory_total_mb} Mo`
+        : ''
+    );
+
+  const cards=[
+    [
+      'Température CPU',
+      temperature!=null?`${temperature} °C`:'Indisponible',
+      '',
+      healthState(temperature,75,80)
+    ],
+    [
+      'CPU',
+      cpu!=null?`${cpu} %`:'—',
+      '',
+      healthState(cpu,75,90)
+    ],
+    [
+      'RAM',
+      memory!=null?`${memory} %`:'—',
+      memorySub,
+      healthState(memory,80,90)
+    ],
+    [
+      'Load',
+      load,
+      system.cpu_count?`${system.cpu_count} cœur(s)`:'',
+      ''
+    ],
+    [
+      'Uptime',
+      uptime,
+      system.boot_time||'',
+      ''
+    ],
+    [
+      'Throttling',
+      throttling.value,
+      throttling.sub,
+      throttling.state
+    ],
+  ];
+
+  systemHealthGrid.innerHTML='';
+
+  cards.forEach(([label,value,sub,state])=>{
+    const card=document.createElement('div');
+    card.className='diag-card'+(state?` ${state}`:'');
+    card.innerHTML=
+      `<div class="diag-label">${diagEsc(label)}</div>`+
+      `<div class="diag-value">${diagEsc(value)}</div>`+
+      `<div class="diag-sub">${diagEsc(sub)}</div>`;
+    systemHealthGrid.appendChild(card);
+  });
+}
+
+async function sysInfo(){
+  if(
+    app.classList.contains('hidden')
+    || document.getElementById('sys').classList.contains('hidden')
+  ){
+    return;
+  }
+
+  try{
+    const system=await api('/api/system');
+    renderSystemHealth(system);
+  }catch(_){}
+}
+
 function validatePasswordChange(){
   const current=oldp.value;
   const first=newp.value;
@@ -2164,26 +2352,7 @@ function renderDiagnostics(data){
   const process=data.process||{};
   const services=data.services||{};
 
-  systemHealthGrid.innerHTML='';
-
-  const healthCards=[
-    ['Température CPU',system.temperature_c!=null?`${system.temperature_c} °C`:'Indisponible',''],
-    ['CPU',system.cpu_percent!=null?`${system.cpu_percent} %`:'—',''],
-    ['RAM',system.memory_percent!=null?`${system.memory_percent} %`:'—',system.memory_used_human||''],
-    ['Load',system.load_average||'—',`${system.cpu_count||'—'} cœur(s)`],
-    ['Uptime',system.uptime_human||'—',system.boot_time||''],
-    ['Throttling',system.throttled_hex||'—',system.throttled_label||''],
-  ];
-
-  healthCards.forEach(([label,value,sub])=>{
-    const card=document.createElement('div');
-    card.className='diag-card';
-    card.innerHTML=
-      `<div class="diag-label">${diagEsc(label)}</div>`+
-      `<div class="diag-value">${diagEsc(value)}</div>`+
-      `<div class="diag-sub">${diagEsc(sub)}</div>`;
-    systemHealthGrid.appendChild(card);
-  });
+  renderSystemHealth(system);
 
   pidecoderInfo.innerHTML=
     diagRow('Version',data.version||'—')+
