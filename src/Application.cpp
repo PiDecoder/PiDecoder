@@ -116,6 +116,7 @@ int Application::run()
             }
 
             update_inspection_animation();
+            update_ptz_overlay_visibility();
 
             if (redraw_requested_) {
                 render();
@@ -239,6 +240,14 @@ void Application::process_sdl_event(
         return;
     }
 
+    if (
+        event.type == SDL_MOUSEMOTION &&
+        focus_player_ != nullptr &&
+        focused_camera_has_ptz()
+    ) {
+        show_ptz_overlay();
+    }
+
     if (event.type == SDL_KEYDOWN) {
         if (
             event.key.keysym.sym ==
@@ -331,7 +340,8 @@ void Application::process_sdl_event(
         focus_player_ != nullptr &&
         event.button.button ==
             SDL_BUTTON_LEFT &&
-        focused_camera_has_ptz()
+        focused_camera_has_ptz() &&
+        ptz_overlay_visible_
     ) {
         const auto ptz_command =
             renderer_->ptz_command_at(
@@ -575,6 +585,12 @@ void Application::open_focus(
     focused_camera_index_ =
         source_camera_index;
 
+    if (camera.ptz_enabled) {
+        show_ptz_overlay();
+    } else {
+        ptz_overlay_visible_ = false;
+    }
+
     redraw_requested_ = true;
 
     std::cout
@@ -603,6 +619,8 @@ void Application::close_focus()
 
     focus_player_.reset();
     focused_camera_index_.reset();
+    ptz_overlay_visible_ = false;
+    ptz_overlay_until_ = {};
     reset_inspection();
     redraw_requested_ = true;
 }
@@ -1096,6 +1114,7 @@ void Application::begin_ptz_command(
             command;
         ptz_pointer_active_ =
             true;
+        show_ptz_overlay();
         SDL_CaptureMouse(
             SDL_TRUE
         );
@@ -1131,6 +1150,14 @@ void Application::stop_ptz_command(
         PtzCommand::None;
     ptz_pointer_active_ =
         false;
+
+    if (
+        camera != nullptr &&
+        camera->ptz_enabled &&
+        focus_player_ != nullptr
+    ) {
+        show_ptz_overlay();
+    }
     if (
         (
             SDL_WasInit(
@@ -1145,6 +1172,33 @@ void Application::stop_ptz_command(
     }
     redraw_requested_ =
         true;
+}
+
+void Application::show_ptz_overlay() noexcept
+{
+    ptz_overlay_visible_ = true;
+    ptz_overlay_until_ =
+        std::chrono::steady_clock::now() +
+        ptz_overlay_timeout_;
+    redraw_requested_ = true;
+}
+
+void Application::update_ptz_overlay_visibility() noexcept
+{
+    if (
+        !ptz_overlay_visible_ ||
+        ptz_pointer_active_
+    ) {
+        return;
+    }
+
+    if (
+        std::chrono::steady_clock::now() >=
+        ptz_overlay_until_
+    ) {
+        ptz_overlay_visible_ = false;
+        redraw_requested_ = true;
+    }
 }
 
 bool Application::zoom_indicator_visible() const noexcept
@@ -1181,6 +1235,7 @@ void Application::render()
             inspection_center_y_,
             zoom_indicator_visible(),
             focused_camera_has_ptz(),
+            ptz_overlay_visible_,
             active_ptz_command_
         );
         return;

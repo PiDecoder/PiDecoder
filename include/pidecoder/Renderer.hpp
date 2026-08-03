@@ -31,6 +31,7 @@ public:
         double center_y,
         bool show_zoom_indicator,
         bool ptz_available,
+        bool show_ptz_overlay,
         PtzCommand active_ptz_command
     );
 

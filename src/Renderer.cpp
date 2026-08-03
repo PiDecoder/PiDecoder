@@ -136,6 +136,7 @@ void Renderer::render_focus(
     const double center_y,
     const bool show_zoom_indicator,
     const bool ptz_available,
+    const bool show_ptz_overlay,
     const PtzCommand active_ptz_command
 )
 {
@@ -197,7 +198,10 @@ void Renderer::render_focus(
         );
     }
 
-    if (ptz_available) {
+    if (
+        ptz_available &&
+        show_ptz_overlay
+    ) {
         draw_ptz_overlay(
             width,
             height,
@@ -222,23 +226,23 @@ Renderer::ptz_buttons(
 
     const int button_size =
         std::clamp(
-            shortest / 12,
-            44,
-            68
+            shortest / 16,
+            34,
+            46
         );
 
     const int gap =
         std::clamp(
-            button_size / 7,
-            6,
-            10
+            button_size / 8,
+            4,
+            7
         );
 
     const int margin =
         std::clamp(
             button_size / 3,
-            14,
-            24
+            12,
+            18
         );
 
     const int left =
@@ -461,8 +465,8 @@ void Renderer::draw_ptz_icon(
 {
     const int thickness =
         std::max(
-            4,
-            rectangle.width / 10
+            2,
+            rectangle.width / 14
         );
 
     const int center_x =
@@ -474,7 +478,10 @@ void Renderer::draw_ptz_icon(
         rectangle.height / 2;
 
     const int arm =
-        rectangle.width / 4;
+        std::max(
+            thickness * 3,
+            rectangle.width / 5
+        );
 
     const auto draw =
         [&](
@@ -498,7 +505,10 @@ void Renderer::draw_ptz_icon(
 
     if (command == PtzCommand::Stop) {
         const int size =
-            rectangle.width / 3;
+            std::max(
+                thickness * 3,
+                rectangle.width / 5
+            );
         draw(
             center_x - size / 2,
             center_y - size / 2,
@@ -531,64 +541,53 @@ void Renderer::draw_ptz_icon(
         return;
     }
 
-    if (
-        command == PtzCommand::Up ||
-        command == PtzCommand::Down
-    ) {
-        draw(
-            center_x - thickness / 2,
-            center_y - arm,
-            thickness,
-            arm * 2
-        );
+    constexpr int steps = 4;
 
-        for (int step = 0; step < 3; ++step) {
-            const int width =
-                thickness +
-                step * thickness;
-
-            const int y =
-                command == PtzCommand::Up
-                    ? center_y - arm - step * thickness
-                    : center_y + arm - thickness + step * thickness;
-
-            draw(
-                center_x - width / 2,
-                y,
-                width,
-                thickness
-            );
-        }
-
-        return;
-    }
-
-    if (
-        command == PtzCommand::Left ||
-        command == PtzCommand::Right
-    ) {
-        draw(
-            center_x - arm,
-            center_y - thickness / 2,
-            arm * 2,
-            thickness
-        );
-
-        for (int step = 0; step < 3; ++step) {
-            const int height =
-                thickness +
-                step * thickness;
-
+    for (int step = 0; step < steps; ++step) {
+        if (
+            command == PtzCommand::Left ||
+            command == PtzCommand::Right
+        ) {
             const int x =
                 command == PtzCommand::Left
-                    ? center_x - arm - step * thickness
-                    : center_x + arm - thickness + step * thickness;
+                    ? center_x - arm + step * thickness
+                    : center_x + arm - (step + 1) * thickness;
 
             draw(
                 x,
-                center_y - height / 2,
+                center_y - (step + 1) * thickness,
                 thickness,
-                height
+                thickness
+            );
+            draw(
+                x,
+                center_y + step * thickness,
+                thickness,
+                thickness
+            );
+            continue;
+        }
+
+        if (
+            command == PtzCommand::Up ||
+            command == PtzCommand::Down
+        ) {
+            const int y =
+                command == PtzCommand::Up
+                    ? center_y - arm + step * thickness
+                    : center_y + arm - (step + 1) * thickness;
+
+            draw(
+                center_x - (step + 1) * thickness,
+                y,
+                thickness,
+                thickness
+            );
+            draw(
+                center_x + step * thickness,
+                y,
+                thickness,
+                thickness
             );
         }
     }

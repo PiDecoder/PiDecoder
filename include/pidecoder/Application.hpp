@@ -83,6 +83,9 @@ private:
         bool force = false
     ) noexcept;
 
+    void show_ptz_overlay() noexcept;
+    void update_ptz_overlay_visibility() noexcept;
+
     void clamp_inspection_center() noexcept;
 
     [[nodiscard]] bool zoom_indicator_visible() const noexcept;
@@ -114,6 +117,10 @@ private:
 
     PtzCommand active_ptz_command_{PtzCommand::None};
     bool ptz_pointer_active_{false};
+    bool ptz_overlay_visible_{false};
+
+    std::chrono::steady_clock::time_point
+        ptz_overlay_until_{};
 
     Grid grid_;
 
@@ -152,6 +159,9 @@ private:
 
     static constexpr std::chrono::seconds
         zoom_indicator_duration_{2};
+
+    static constexpr std::chrono::seconds
+        ptz_overlay_timeout_{5};
 };
 
 } // namespace pidecoder
