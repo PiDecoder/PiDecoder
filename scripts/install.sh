@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly INSTALLER_VERSION="0.9.9.4-rc1"
+readonly INSTALLER_VERSION="0.9.9.5-rc2"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly UNIT_DIR="/etc/systemd/system"
@@ -68,7 +68,7 @@ cleanup() {
 restore_units() {
     local unit
 
-    for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target; do
+    for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service; do
         if [[ -f "$BACKUP_DIR/systemd/$unit" ]]; then
             install -m 0644 "$BACKUP_DIR/systemd/$unit" "$UNIT_DIR/$unit"
         else
@@ -84,7 +84,7 @@ rollback() {
     if [[ "$INSTALL_SUCCEEDED" -eq 0 && "$CHANGED_SYSTEM" -eq 1 ]]; then
         printf '\nInstallation interrompue — restauration de la version précédente.\n' >&2
 
-        systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target 2>/dev/null || true
+        systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service 2>/dev/null || true
         rm -rf "$TARGET"
 
         if [[ "$HAD_TARGET" -eq 1 && -d "$BACKUP_DIR/target" ]]; then
@@ -95,8 +95,9 @@ rollback() {
         systemctl daemon-reload 2>/dev/null || true
 
         if [[ "$HAD_TARGET" -eq 1 ]]; then
-            systemctl reset-failed pidecoder-config.service pidecoder.service pidecoder-wayland.path pidecoder-wayland.target 2>/dev/null || true
-    systemctl restart pidecoder-wayland.path
+            systemctl reset-failed pidecoder-config.service pidecoder.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service 2>/dev/null || true
+            systemctl restart pidecoder-ptz.service 2>/dev/null || true
+            systemctl restart pidecoder-wayland.path 2>/dev/null || true
             systemctl restart pidecoder-config.service 2>/dev/null || true
             systemctl restart pidecoder.service 2>/dev/null || true
         fi
@@ -181,6 +182,7 @@ esac
 [[ -f "$SOURCE_ROOT/systemd/pidecoder-config.service.in" ]] || fail "Template du service Web introuvable"
 [[ -f "$SOURCE_ROOT/systemd/pidecoder-wayland.path.in" ]] || fail "Template du déclencheur Wayland introuvable"
 [[ -f "$SOURCE_ROOT/systemd/pidecoder-wayland.target.in" ]] || fail "Template de la cible Wayland introuvable"
+[[ -f "$SOURCE_ROOT/systemd/pidecoder-ptz.service.in" ]] || fail "Template du pont PTZ introuvable"
 
 if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -269,7 +271,8 @@ check_source() {
     python3 -m py_compile \
         "$SOURCE_ROOT/scripts/config-web.py" \
         "$SOURCE_ROOT/scripts/onvif_client.py" \
-        "$SOURCE_ROOT/scripts/check-camera-config.py"
+        "$SOURCE_ROOT/scripts/check-camera-config.py" \
+        "$SOURCE_ROOT/scripts/ptz-bridge.py"
 
     if [[ -x "$SOURCE_ROOT/scripts/validate-release.sh" ]]; then
         "$SOURCE_ROOT/scripts/validate-release.sh"
@@ -357,7 +360,7 @@ if [[ -d "$TARGET" ]]; then
     cp -a "$TARGET" "$BACKUP_DIR/target"
 fi
 
-for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target; do
+for unit in pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service; do
     if [[ -f "$UNIT_DIR/$unit" ]]; then
         cp -a "$UNIT_DIR/$unit" "$BACKUP_DIR/systemd/$unit"
     fi
@@ -426,7 +429,7 @@ JSON
 fi
 
 CHANGED_SYSTEM=1
-systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target 2>/dev/null || true
+systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service 2>/dev/null || true
 rm -rf "$TARGET"
 install -d -m 0755 "$(dirname "$TARGET")"
 cp -a "$STAGED_ROOT" "$TARGET"
@@ -452,6 +455,7 @@ chmod 0755 \
     "$TARGET/scripts/install.sh" \
     "$TARGET/scripts/config-web.py" \
     "$TARGET/scripts/onvif_client.py" \
+    "$TARGET/scripts/ptz-bridge.py" \
     "$TARGET/scripts/check-camera-config.py" \
     "$TARGET/scripts/validate-release.sh"
 
@@ -478,6 +482,8 @@ python3 - \
     "$UNIT_DIR/pidecoder-wayland.path" \
     "$TARGET/systemd/pidecoder-wayland.target.in" \
     "$UNIT_DIR/pidecoder-wayland.target" \
+    "$TARGET/systemd/pidecoder-ptz.service.in" \
+    "$UNIT_DIR/pidecoder-ptz.service" \
     "$SERVICE_USER" \
     "$SERVICE_GROUP" \
     "$SERVICE_UID" \
@@ -498,6 +504,8 @@ import sys
     path_target,
     wayland_target_source,
     wayland_target_target,
+    ptz_source,
+    ptz_target,
     service_user,
     service_group,
     service_uid,
@@ -524,6 +532,7 @@ for source, destination in (
     (web_source, web_target),
     (path_source, path_target),
     (wayland_target_source, wayland_target_target),
+    (ptz_source, ptz_target),
 ):
     content = Path(source).read_text(encoding="utf-8")
     for old, new in replacements.items():
@@ -537,17 +546,29 @@ chmod 0644 \
     "$UNIT_DIR/pidecoder.service" \
     "$UNIT_DIR/pidecoder-config.service" \
     "$UNIT_DIR/pidecoder-wayland.path" \
-    "$UNIT_DIR/pidecoder-wayland.target"
+    "$UNIT_DIR/pidecoder-wayland.target" \
+    "$UNIT_DIR/pidecoder-ptz.service"
 systemctl daemon-reload
 systemctl disable pidecoder.service 2>/dev/null || true
-systemctl enable pidecoder-config.service pidecoder-wayland.path
+systemctl enable \
+    pidecoder-config.service \
+    pidecoder-wayland.path \
+    pidecoder-ptz.service
 
 if [[ "$START_SERVICES" -eq 1 ]]; then
     log "Démarrage de l’administration Web"
-    systemctl reset-failed pidecoder-config.service pidecoder.service pidecoder-wayland.path pidecoder-wayland.target 2>/dev/null || true
+    systemctl reset-failed \
+        pidecoder-config.service \
+        pidecoder.service \
+        pidecoder-wayland.path \
+        pidecoder-wayland.target \
+        pidecoder-ptz.service \
+        2>/dev/null || true
+    systemctl restart pidecoder-ptz.service
     systemctl restart pidecoder-wayland.path
     systemctl restart pidecoder-config.service
     sleep 2
+    systemctl is-active --quiet pidecoder-ptz.service || fail "Le pont PTZ ne démarre pas"
     systemctl is-active --quiet pidecoder-config.service || fail "L’administration Web ne démarre pas"
 
     if python3 "$TARGET/scripts/check-camera-config.py" "$TARGET/config/cameras.json"; then

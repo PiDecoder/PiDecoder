@@ -14,7 +14,8 @@ echo "[1/8] Vérification Python"
 python3 -m py_compile \
     "$ROOT/scripts/config-web.py" \
     "$ROOT/scripts/onvif_client.py" \
-    "$ROOT/scripts/check-camera-config.py"
+    "$ROOT/scripts/check-camera-config.py" \
+    "$ROOT/scripts/ptz-bridge.py"
 
 # py_compile creates caches by design; remove them before package checks.
 cleanup_python_cache
@@ -49,7 +50,7 @@ bash -n \
 
 echo "[4/8] Vérification de la version CMake"
 grep -Eq \
-    '^[[:space:]]*VERSION[[:space:]]+0\.9\.9\.4([[:space:]]|$)' \
+    '^[[:space:]]*VERSION[[:space:]]+0\.9\.9\.5([[:space:]]|$)' \
     "$ROOT/CMakeLists.txt"
 
 echo "[5/8] Vérification des fichiers essentiels"
@@ -59,17 +60,21 @@ required=(
     "scripts/onvif_client.py"
     "scripts/install.sh"
     "scripts/check-camera-config.py"
+    "scripts/ptz-bridge.py"
     "systemd/pidecoder.service.in"
     "systemd/pidecoder-config.service.in"
     "systemd/pidecoder-wayland.path.in"
     "systemd/pidecoder-wayland.target.in"
+    "systemd/pidecoder-ptz.service.in"
     "src/main.cpp"
     "src/Application.cpp"
+    "src/PtzController.cpp"
     "src/Player.cpp"
     "src/Renderer.cpp"
     "src/Grid.cpp"
     "src/Layout.cpp"
     "include/pidecoder/Application.hpp"
+    "include/pidecoder/PtzController.hpp"
     "include/pidecoder/Player.hpp"
     "include/pidecoder/Renderer.hpp"
     "include/pidecoder/Grid.hpp"
@@ -111,4 +116,4 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
 fi
 
 echo "[8/8] Validation terminée"
-echo "PiDecoder v0.9.9.4 RC1 : paquet cohérent."
+echo "PiDecoder v0.9.9.5 RC2 : paquet cohérent."

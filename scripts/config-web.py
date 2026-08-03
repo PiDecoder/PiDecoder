@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, continuous_move, discover, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 
-VERSION='0.9.9.4-rc1'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='0.9.9.5-rc2'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
 def owner():
     requested=os.environ.get('PIDECODER_USER','').strip()
@@ -599,8 +599,8 @@ HTML=r'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="
 
 select{width:100%;padding:9px 10px;background:#0c1015;border:1px solid #353d49;border-radius:8px;color:#fff}
 </style></head><body>
-<section id="login"><form class="loginbox" onsubmit="doLogin(event)"><h1>PiDecoder</h1><p class="muted">Administration v0.9.9.4 RC1</p><div class="field"><label>Utilisateur</label><input id="lu" value="admin"></div><div class="field"><label>Mot de passe</label><input id="lp" type="password"></div><button class="primary">Connexion</button><p id="le" class="muted"></p></form></section>
-<section id="app" class="hidden"><header><div><b>PiDecoder</b><div class="muted">Administration v0.9.9.4 RC1</div></div><div class="actions"><span id="engine" class="engine"><span id="globalHealthDot" class="dot"></span><span><strong>PiDecoder</strong><br><small id="engineText">État inconnu</small></span></span><button id="shortcutButton" class="shortcut-button" type="button" title="Raccourcis clavier" onclick="toggleShortcutHelp(event)">⌨️</button><button class="secondary" onclick="save()">Sauvegarder</button><button class="success" onclick="apply()">Appliquer</button><button class="secondary" onclick="logout()">Déconnexion</button></div></header><main>
+<section id="login"><form class="loginbox" onsubmit="doLogin(event)"><h1>PiDecoder</h1><p class="muted">Administration v0.9.9.5 RC2</p><div class="field"><label>Utilisateur</label><input id="lu" value="admin"></div><div class="field"><label>Mot de passe</label><input id="lp" type="password"></div><button class="primary">Connexion</button><p id="le" class="muted"></p></form></section>
+<section id="app" class="hidden"><header><div><b>PiDecoder</b><div class="muted">Administration v0.9.9.5 RC2</div></div><div class="actions"><span id="engine" class="engine"><span id="globalHealthDot" class="dot"></span><span><strong>PiDecoder</strong><br><small id="engineText">État inconnu</small></span></span><button id="shortcutButton" class="shortcut-button" type="button" title="Raccourcis clavier" onclick="toggleShortcutHelp(event)">⌨️</button><button class="secondary" onclick="save()">Sauvegarder</button><button class="success" onclick="apply()">Appliquer</button><button class="secondary" onclick="logout()">Déconnexion</button></div></header><main>
 <nav class="tabs"><button class="tab active" onclick="tab('cams',this)">📹 Caméras</button><button class="tab" onclick="tab('onvif',this)">🌐 ONVIF</button><button class="tab" onclick="tab('layout',this)">🖥 Disposition</button><button class="tab" onclick="tab('sys',this)">💻 Système</button><button class="tab" onclick="tab('sec',this)">🔐 Sécurité</button><button class="tab" onclick="tab('backup',this)">💾 Sauvegarde</button></nav>
 <section id="cams"><div class="panel"><div class="row" style="justify-content:space-between"><div><h2>Caméras</h2><div class="muted">Déplacement uniquement avec la poignée ☰. Les champs texte restent sélectionnables normalement.</div></div><button class="primary" onclick="addCam()">+ Ajouter</button></div><div id="list"></div></div></section>
 <section id="layout" class="hidden"><div class="panel"><div class="row" style="justify-content:space-between"><div><h2>Disposition de la mosaïque</h2><div class="muted">Déplace et redimensionne les caméras actives dans la grille. Les collisions sont refusées et la disposition est sauvegardée automatiquement.</div></div><button class="secondary" onclick="resetMosaicOrder()">Réinitialiser l’ordre</button></div><div class="mosaic-toolbar"><div class="small"><label>Colonnes</label><input id="cols" type="number" min="1" max="9"></div><div class="small"><label>Lignes</label><input id="rows" type="number" min="1" max="9"></div><label><input id="fs" type="checkbox" style="width:auto"> Plein écran au démarrage</label><div id="mosaicSaved" class="mosaic-saved"></div></div><div class="mosaic-template-bar"><button class="secondary mosaic-template" onclick="applyMosaicTemplate('uniform')"><strong>Grille uniforme</strong><span>Toutes les caméras en 1×1</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('main')"><strong>Caméra principale</strong><span>Une grande caméra, les autres autour</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('dual')"><strong>Deux principales</strong><span>Deux grandes vues puis les autres</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('free')"><strong>Libre</strong><span>Conserver la disposition actuelle</span></button></div><div id="mosaicWarning"></div><div id="mosaicPreview" class="mosaic-preview"></div></div></section>
@@ -2436,6 +2436,18 @@ async function saveManagedCamera(index,box){
   }
 
   const button=box.querySelector('.manager-save');
+  const gridProfileToken=
+    box.querySelector('.manager-grid-profile').value;
+  const focusProfileToken=
+    box.querySelector('.manager-focus-profile').value;
+  const ptzProfiles=(identification.profiles||[])
+    .filter(profile=>profile.ptz && profile.token);
+  const ptzProfile=
+    ptzProfiles.find(profile=>profile.token===focusProfileToken) ||
+    ptzProfiles.find(profile=>profile.token===gridProfileToken) ||
+    ptzProfiles[0] ||
+    null;
+
   button.disabled=true;
   button.textContent='Enregistrement…';
 
@@ -2445,8 +2457,10 @@ async function saveManagedCamera(index,box){
       body:JSON.stringify({
         device_xaddr:device.xaddr,
         media_xaddr:identification.media_xaddr,
-        grid_profile_token:box.querySelector('.manager-grid-profile').value,
-        focus_profile_token:box.querySelector('.manager-focus-profile').value,
+        grid_profile_token:gridProfileToken,
+        focus_profile_token:focusProfileToken,
+        ptz_xaddr:identification.ptz_xaddr||'',
+        ptz_profile_token:ptzProfile?.token||'',
         name:box.querySelector('.manager-name').value,
         username:onvifUser.value,
         password:onvifPassword.value,
@@ -3189,7 +3203,7 @@ def diagnostics_payload(root, log_lines=50):
 
     payload={
         'ok':True,
-        'version':'0.9.9.4 RC1',
+        'version':'0.9.9.5 RC2',
         'release':'Release Candidate',
         'system':{
             'hostname':platform.node(),
@@ -3400,6 +3414,10 @@ class H(BaseHTTPRequestHandler):
                 username=str(d.get('username',''))
                 password=str(d.get('password',''))
                 device_xaddr=str(d.get('device_xaddr','')).strip()
+                ptz_xaddr=str(d.get('ptz_xaddr','')).strip()
+                ptz_profile_token=str(
+                    d.get('ptz_profile_token','')
+                ).strip()
                 ip=str(d.get('ip','')).strip()
                 information=d.get('information',{}) if isinstance(d.get('information'),dict) else {}
 
@@ -3456,6 +3474,8 @@ class H(BaseHTTPRequestHandler):
                         'ip':ip,
                         'grid_profile_token':grid_token,
                         'focus_profile_token':focus_token,
+                        'ptz_xaddr':ptz_xaddr,
+                        'ptz_profile_token':ptz_profile_token,
                         'manufacturer':manufacturer,
                         'model':model,
                         'serial_number':serial_number,

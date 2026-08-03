@@ -134,7 +134,9 @@ void Renderer::render_focus(
     const double zoom,
     const double center_x,
     const double center_y,
-    const bool show_zoom_indicator
+    const bool show_zoom_indicator,
+    const bool ptz_available,
+    const PtzCommand active_ptz_command
 )
 {
     const int width =
@@ -195,7 +197,401 @@ void Renderer::render_focus(
         );
     }
 
+    if (ptz_available) {
+        draw_ptz_overlay(
+            width,
+            height,
+            active_ptz_command
+        );
+    }
+
     window_.swap_buffers();
+}
+
+std::array<Renderer::PtzButton, 7>
+Renderer::ptz_buttons(
+    const int canvas_width,
+    const int canvas_height
+) const
+{
+    const int shortest =
+        std::min(
+            canvas_width,
+            canvas_height
+        );
+
+    const int button_size =
+        std::clamp(
+            shortest / 12,
+            44,
+            68
+        );
+
+    const int gap =
+        std::clamp(
+            button_size / 7,
+            6,
+            10
+        );
+
+    const int margin =
+        std::clamp(
+            button_size / 3,
+            14,
+            24
+        );
+
+    const int left =
+        std::max(
+            margin,
+            canvas_width -
+                margin -
+                3 * button_size -
+                2 * gap
+        );
+
+    const int top =
+        std::max(
+            margin,
+            canvas_height -
+                margin -
+                4 * button_size -
+                3 * gap
+        );
+
+    const auto rectangle =
+        [&](
+            const int column,
+            const int row
+        ) {
+            return Rect{
+                left +
+                    column *
+                    (button_size + gap),
+                top +
+                    row *
+                    (button_size + gap),
+                button_size,
+                button_size
+            };
+        };
+
+    return std::array<PtzButton, 7>{{
+        {PtzCommand::Up, rectangle(1, 0)},
+        {PtzCommand::Left, rectangle(0, 1)},
+        {PtzCommand::Stop, rectangle(1, 1)},
+        {PtzCommand::Right, rectangle(2, 1)},
+        {PtzCommand::Down, rectangle(1, 2)},
+        {PtzCommand::ZoomOut, rectangle(0, 3)},
+        {PtzCommand::ZoomIn, rectangle(2, 3)},
+    }};
+}
+
+std::optional<PtzCommand>
+Renderer::ptz_command_at(
+    const int logical_x,
+    const int logical_y
+) const noexcept
+{
+    int logical_width = 0;
+    int logical_height = 0;
+
+    SDL_GetWindowSize(
+        window_.native_handle(),
+        &logical_width,
+        &logical_height
+    );
+
+    const int drawable_width =
+        window_.drawable_width();
+
+    const int drawable_height =
+        window_.drawable_height();
+
+    if (
+        logical_width <= 0 ||
+        logical_height <= 0 ||
+        drawable_width <= 0 ||
+        drawable_height <= 0
+    ) {
+        return std::nullopt;
+    }
+
+    const int x =
+        logical_x *
+        drawable_width /
+        logical_width;
+
+    const int y =
+        logical_y *
+        drawable_height /
+        logical_height;
+
+    for (
+        const PtzButton& button :
+        ptz_buttons(
+            drawable_width,
+            drawable_height
+        )
+    ) {
+        const Rect& rectangle =
+            button.rectangle;
+
+        if (
+            x >= rectangle.x &&
+            x < rectangle.x + rectangle.width &&
+            y >= rectangle.y &&
+            y < rectangle.y + rectangle.height
+        ) {
+            return button.command;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void Renderer::draw_ptz_overlay(
+    const int canvas_width,
+    const int canvas_height,
+    const PtzCommand active_command
+)
+{
+    for (
+        const PtzButton& button :
+        ptz_buttons(
+            canvas_width,
+            canvas_height
+        )
+    ) {
+        const bool active =
+            button.command ==
+            active_command;
+
+        const Rect& rectangle =
+            button.rectangle;
+
+        fill_ui_rect(
+            rectangle.x,
+            rectangle.y,
+            rectangle.width,
+            rectangle.height,
+            canvas_height,
+            active ? 0.18F : 0.08F,
+            active ? 0.38F : 0.10F,
+            active ? 0.72F : 0.13F,
+            1.0F
+        );
+
+        const int border =
+            std::max(
+                2,
+                rectangle.width / 24
+            );
+
+        const float border_red =
+            active ? 0.35F : 0.28F;
+
+        const float border_green =
+            active ? 0.62F : 0.33F;
+
+        const float border_blue =
+            active ? 1.0F : 0.40F;
+
+        fill_ui_rect(
+            rectangle.x,
+            rectangle.y,
+            rectangle.width,
+            border,
+            canvas_height,
+            border_red,
+            border_green,
+            border_blue,
+            1.0F
+        );
+
+        fill_ui_rect(
+            rectangle.x,
+            rectangle.y + rectangle.height - border,
+            rectangle.width,
+            border,
+            canvas_height,
+            border_red,
+            border_green,
+            border_blue,
+            1.0F
+        );
+
+        fill_ui_rect(
+            rectangle.x,
+            rectangle.y,
+            border,
+            rectangle.height,
+            canvas_height,
+            border_red,
+            border_green,
+            border_blue,
+            1.0F
+        );
+
+        fill_ui_rect(
+            rectangle.x + rectangle.width - border,
+            rectangle.y,
+            border,
+            rectangle.height,
+            canvas_height,
+            border_red,
+            border_green,
+            border_blue,
+            1.0F
+        );
+
+        draw_ptz_icon(
+            button.command,
+            rectangle,
+            canvas_height
+        );
+    }
+}
+
+void Renderer::draw_ptz_icon(
+    const PtzCommand command,
+    const Rect& rectangle,
+    const int canvas_height
+)
+{
+    const int thickness =
+        std::max(
+            4,
+            rectangle.width / 10
+        );
+
+    const int center_x =
+        rectangle.x +
+        rectangle.width / 2;
+
+    const int center_y =
+        rectangle.y +
+        rectangle.height / 2;
+
+    const int arm =
+        rectangle.width / 4;
+
+    const auto draw =
+        [&](
+            const int x,
+            const int y,
+            const int width,
+            const int height
+        ) {
+            fill_ui_rect(
+                x,
+                y,
+                width,
+                height,
+                canvas_height,
+                1.0F,
+                1.0F,
+                1.0F,
+                1.0F
+            );
+        };
+
+    if (command == PtzCommand::Stop) {
+        const int size =
+            rectangle.width / 3;
+        draw(
+            center_x - size / 2,
+            center_y - size / 2,
+            size,
+            size
+        );
+        return;
+    }
+
+    if (
+        command == PtzCommand::ZoomIn ||
+        command == PtzCommand::ZoomOut
+    ) {
+        draw(
+            center_x - arm,
+            center_y - thickness / 2,
+            arm * 2,
+            thickness
+        );
+
+        if (command == PtzCommand::ZoomIn) {
+            draw(
+                center_x - thickness / 2,
+                center_y - arm,
+                thickness,
+                arm * 2
+            );
+        }
+
+        return;
+    }
+
+    if (
+        command == PtzCommand::Up ||
+        command == PtzCommand::Down
+    ) {
+        draw(
+            center_x - thickness / 2,
+            center_y - arm,
+            thickness,
+            arm * 2
+        );
+
+        for (int step = 0; step < 3; ++step) {
+            const int width =
+                thickness +
+                step * thickness;
+
+            const int y =
+                command == PtzCommand::Up
+                    ? center_y - arm - step * thickness
+                    : center_y + arm - thickness + step * thickness;
+
+            draw(
+                center_x - width / 2,
+                y,
+                width,
+                thickness
+            );
+        }
+
+        return;
+    }
+
+    if (
+        command == PtzCommand::Left ||
+        command == PtzCommand::Right
+    ) {
+        draw(
+            center_x - arm,
+            center_y - thickness / 2,
+            arm * 2,
+            thickness
+        );
+
+        for (int step = 0; step < 3; ++step) {
+            const int height =
+                thickness +
+                step * thickness;
+
+            const int x =
+                command == PtzCommand::Left
+                    ? center_x - arm - step * thickness
+                    : center_x + arm - thickness + step * thickness;
+
+            draw(
+                x,
+                center_y - height / 2,
+                thickness,
+                height
+            );
+        }
+    }
 }
 
 void Renderer::fill_ui_rect(

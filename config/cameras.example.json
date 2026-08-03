@@ -1,16 +1,24 @@
 {
   "cameras": [
     {
-      "name": "Front entrance",
+      "name": "Caméra PTZ",
       "enabled": true,
-      "grid_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-low",
-      "focus_url": "rtsp://viewer:change-me@192.168.1.90:554/stream-high",
+      "grid_url": "rtsp://USER:PASSWORD@192.0.2.10:554/axis-media/media.amp?videocodec=h264&resolution=640x360&fps=12",
+      "focus_url": "rtsp://USER:PASSWORD@192.0.2.10:554/axis-media/media.amp?videocodec=h264&resolution=1920x1080&fps=25",
       "onvif": {
-        "device_xaddr": "http://192.168.1.90/onvif/device_service",
-        "manufacturer": "Example",
-        "model": "Example Camera",
-        "serial_number": "REDACTED"
+        "device_xaddr": "http://192.0.2.10/onvif/device_service",
+        "media_xaddr": "http://192.0.2.10/onvif/media_service",
+        "grid_profile_token": "profile-grid",
+        "focus_profile_token": "profile-focus",
+        "ptz_xaddr": "http://192.0.2.10/onvif/ptz_service",
+        "ptz_profile_token": "profile-focus"
       }
+    },
+    {
+      "name": "Caméra fixe",
+      "enabled": true,
+      "grid_url": "rtsp://USER:PASSWORD@192.0.2.20:554/stream-grid",
+      "focus_url": "rtsp://USER:PASSWORD@192.0.2.20:554/stream-focus"
     }
   ]
 }

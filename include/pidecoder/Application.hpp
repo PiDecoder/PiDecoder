@@ -4,6 +4,7 @@
 #include "pidecoder/Grid.hpp"
 #include "pidecoder/Layout.hpp"
 #include "pidecoder/Player.hpp"
+#include "pidecoder/PtzController.hpp"
 #include "pidecoder/Renderer.hpp"
 #include "pidecoder/Window.hpp"
 
@@ -69,6 +70,19 @@ private:
 
     void end_pan() noexcept;
 
+    [[nodiscard]] bool focused_camera_has_ptz() const noexcept;
+
+    [[nodiscard]] const CameraConfig*
+    focused_camera() const noexcept;
+
+    void begin_ptz_command(
+        PtzCommand command
+    );
+
+    void stop_ptz_command(
+        bool force = false
+    ) noexcept;
+
     void clamp_inspection_center() noexcept;
 
     [[nodiscard]] bool zoom_indicator_visible() const noexcept;
@@ -87,6 +101,7 @@ private:
 
     std::unique_ptr<Window> window_;
     std::unique_ptr<Renderer> renderer_;
+    PtzController ptz_controller_;
 
     std::vector<std::unique_ptr<Player>>
         players_;
@@ -96,6 +111,9 @@ private:
 
     std::optional<std::size_t>
         focused_camera_index_;
+
+    PtzCommand active_ptz_command_{PtzCommand::None};
+    bool ptz_pointer_active_{false};
 
     Grid grid_;
 

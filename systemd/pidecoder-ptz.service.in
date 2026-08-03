@@ -1,0 +1,23 @@
+[Unit]
+Description=PiDecoder Local PTZ Bridge
+Wants=network-online.target
+After=network-online.target
+Before=pidecoder.service
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=@TARGET@
+RuntimeDirectory=pidecoder
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/python3 @TARGET@/scripts/ptz-bridge.py --root @TARGET@ --socket /run/pidecoder/ptz.sock
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
