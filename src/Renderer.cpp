@@ -1387,12 +1387,7 @@ void Renderer::draw_zoom_indicator(
         );
 
     const int box_y =
-        std::max(
-            12,
-            canvas_height -
-                box_height -
-                18
-        );
+        18;
 
     fill_ui_rect(
         box_x,

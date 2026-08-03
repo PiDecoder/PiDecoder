@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, continuous_move, discover, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 
-VERSION='0.9.9.5-rc2'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='0.9.9.5-rc3'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
 def owner():
     requested=os.environ.get('PIDECODER_USER','').strip()
@@ -231,6 +231,78 @@ def sanitize(c):
     result={'name':name,'enabled':bool(c.get('enabled',True)),'grid_url':g,'focus_url':f}
     if isinstance(c.get('onvif'),dict):result['onvif']=c['onvif']
     return result
+
+
+def camera_rtsp_host(camera):
+    if not isinstance(camera,dict):
+        return ''
+
+    for field in ('focus_url','grid_url'):
+        try:
+            host=urlsplit(str(camera.get(field,'')).strip()).hostname
+        except (TypeError,ValueError):
+            host=None
+
+        if host:
+            return str(host).strip().lower()
+
+    return ''
+
+
+def merge_existing_onvif(cameras,existing):
+    if not isinstance(existing,list):
+        return cameras
+
+    for camera in cameras:
+        host=camera_rtsp_host(camera)
+
+        if not host:
+            continue
+
+        candidates=[]
+
+        for previous in existing:
+            if not isinstance(previous,dict):
+                continue
+
+            metadata=previous.get('onvif')
+
+            if not isinstance(metadata,dict):
+                continue
+
+            previous_host=str(metadata.get('ip','')).strip().lower()
+
+            if not previous_host:
+                previous_host=camera_rtsp_host(previous)
+
+            if previous_host==host:
+                candidates.append(previous)
+
+        if len(candidates)>1:
+            name=str(camera.get('name','')).strip().casefold()
+            same_name=[
+                previous
+                for previous in candidates
+                if str(previous.get('name','')).strip().casefold()==name
+            ]
+
+            if len(same_name)==1:
+                candidates=same_name
+
+        if len(candidates)!=1:
+            continue
+
+        previous_metadata=candidates[0].get('onvif',{})
+        incoming_metadata=camera.get('onvif')
+
+        merged=json.loads(json.dumps(previous_metadata))
+
+        if isinstance(incoming_metadata,dict):
+            merged.update(incoming_metadata)
+
+        camera['onvif']=merged
+
+    return cameras
 
 HTML=r'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PiDecoder Admin</title>
 <style>
@@ -837,8 +909,8 @@ function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/med
 function build(b,w,h,f,orig){if(!b.host)return orig;let a=b.user?encodeURIComponent(b.user)+(b.pwd?':'+encodeURIComponent(b.pwd):'')+'@':'',p=b.port?':'+b.port:'',path=b.path.startsWith('/')?b.path:'/'+b.path,q=new URLSearchParams();try{q=new URL(orig).searchParams}catch{}if(w&&h)q.set('resolution',w+'x'+h);else q.delete('resolution');if(f)q.set('fps',f);else q.delete('fps');return `rtsp://${a}${b.host}${p}${path}${q.toString()?'?'+q.toString():''}`}
 function render(){list.innerHTML='';cfg.cameras.forEach((c,i)=>{let g=parse(c.grid_url),f=parse(c.focus_url),b=g.host?g:f,d=document.createElement('div');d.className='camera';d.innerHTML=`<div class="head"><span class="handle" draggable="true">☰</span><span class="title">${esc(c.name)}</span><label><input class="en" type="checkbox" style="width:auto" ${c.enabled!==false?'checked':''}> active</label><button class="danger del">Supprimer</button></div><div class="grid"><div class="s4"><label>Nom</label><input class="name" value="${esc(c.name)}"></div><div class="s4"><label>Adresse IP</label><input class="host" value="${esc(b.host)}"></div><div class="s4"><label>Port RTSP</label><input class="port" type="number" value="${esc(b.port)}"></div><div class="s4"><label>Utilisateur</label><input class="user" value="${esc(b.user)}"></div><div class="s4"><label>Mot de passe</label><div class="pass"><input class="pwd" type="password" value="${esc(b.pwd)}"><button class="secondary eye" type="button">👁</button></div></div><div class="s4"><label>Chemin RTSP</label><input class="path" value="${esc(b.path)}"></div><div class="s6"><label>Résolution mosaïque</label><div class="pair"><input class="gw" type="number" value="${esc(g.w)}" placeholder="640"><span>×</span><input class="gh" type="number" value="${esc(g.h)}" placeholder="360"></div></div><div class="s3"><label>FPS mosaïque</label><input class="gf" type="number" value="${esc(g.fps)}" placeholder="12"></div><div class="s3"><label>&nbsp;</label><button class="secondary def">Valeurs PiDecoder</button></div><div class="s6"><label>Résolution plein écran</label><div class="pair"><input class="fw" type="number" value="${esc(f.w)}" placeholder="1920"><span>×</span><input class="fh" type="number" value="${esc(f.h)}" placeholder="1080"></div></div><div class="s3"><label>FPS plein écran</label><input class="ff" type="number" value="${esc(f.fps)}" placeholder="25"></div><div class="s12"><details><summary>URL avancées / mode manuel</summary><div class="field"><label>URL mosaïque</label><input class="gu" value="${esc(c.grid_url)}"></div><div class="field"><label>URL plein écran</label><input class="fu" value="${esc(c.focus_url)}"></div><div class="muted">Adresse vide = les URL manuelles sont conservées.</div></details></div></div>`;
 let h=d.querySelector('.handle');h.ondragstart=e=>{sync();drag=i;e.dataTransfer.effectAllowed='move';d.style.opacity='.45'};h.ondragend=()=>{drag=null;d.style.opacity='1'};d.ondragover=e=>{if(drag!==null)e.preventDefault()};d.ondrop=e=>{if(drag===null)return;e.preventDefault();let m=cfg.cameras.splice(drag,1)[0];cfg.cameras.splice(i,0,m);drag=null;render()};d.querySelector('.del').onclick=()=>{sync();cfg.cameras.splice(i,1);render();renderMosaic()};d.querySelector('.eye').onclick=()=>{let x=d.querySelector('.pwd');x.type=x.type==='password'?'text':'password'};d.querySelector('.def').onclick=()=>{d.querySelector('.gw').value=640;d.querySelector('.gh').value=360;d.querySelector('.gf').value=12;d.querySelector('.fw').value=1920;d.querySelector('.fh').value=1080;d.querySelector('.ff').value=25};list.appendChild(d)})}
-function read(d){let b={user:d.querySelector('.user').value.trim(),pwd:d.querySelector('.pwd').value,host:d.querySelector('.host').value.trim(),port:d.querySelector('.port').value.trim(),path:d.querySelector('.path').value.trim()};return{name:d.querySelector('.name').value.trim()||'Caméra',enabled:d.querySelector('.en').checked,grid_url:build(b,d.querySelector('.gw').value,d.querySelector('.gh').value,d.querySelector('.gf').value,d.querySelector('.gu').value.trim()),focus_url:build(b,d.querySelector('.fw').value,d.querySelector('.fh').value,d.querySelector('.ff').value,d.querySelector('.fu').value.trim())}}
-function sync(){cfg.cameras=[...document.querySelectorAll('.camera')].map(read)}
+function read(d,i){let b={user:d.querySelector('.user').value.trim(),pwd:d.querySelector('.pwd').value,host:d.querySelector('.host').value.trim(),port:d.querySelector('.port').value.trim(),path:d.querySelector('.path').value.trim()},result={name:d.querySelector('.name').value.trim()||'Caméra',enabled:d.querySelector('.en').checked,grid_url:build(b,d.querySelector('.gw').value,d.querySelector('.gh').value,d.querySelector('.gf').value,d.querySelector('.gu').value.trim()),focus_url:build(b,d.querySelector('.fw').value,d.querySelector('.fh').value,d.querySelector('.ff').value,d.querySelector('.fu').value.trim())},previous=cfg.cameras[i];if(previous&&previous.onvif&&typeof previous.onvif==='object')result.onvif=previous.onvif;return result}
+function sync(){cfg.cameras=[...document.querySelectorAll('.camera')].map((d,i)=>read(d,i))}
 function addCam(){sync();cfg.cameras.push({name:'Caméra '+(cfg.cameras.length+1),enabled:true,grid_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=640x360&fps=12',focus_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=1920x1080&fps=25'});render();renderMosaic()}
 let mosaicDragCamera=null;
 let mosaicSaveTimer=null;
@@ -3583,6 +3655,7 @@ class H(BaseHTTPRequestHandler):
                 if not cams:raise ValueError('Au moins une caméra est nécessaire')
                 b=self.server.root/'config/backups';b.mkdir(parents=True,exist_ok=True)
                 cp=self.server.root/'config/cameras.json';lp=self.server.root/'config/layout.json'
+                cams=merge_existing_onvif(cams,load(cp,{'cameras':[]}).get('cameras',[]))
                 if cp.exists():shutil.copy2(cp,b/'cameras.json.previous')
                 if lp.exists():shutil.copy2(lp,b/'layout.json.previous')
                 write_json(cp,{'cameras':cams});write_json(lp,normalize_layout(d.get('layout',{}),len(cams)));return self.j({'ok':True})
