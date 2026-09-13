@@ -374,6 +374,7 @@ copy_items=(
     CMakeLists.txt
     src
     include
+    tests
     scripts
     systemd
     config
