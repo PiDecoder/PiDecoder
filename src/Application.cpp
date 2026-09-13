@@ -116,6 +116,7 @@ int Application::run()
             }
 
             update_inspection_animation();
+            update_ptz_overlay_visibility();
 
             if (redraw_requested_) {
                 render();
@@ -123,6 +124,7 @@ int Application::run()
             }
         }
 
+        stop_ptz_command();
         focus_player_.reset();
         players_.clear();
         renderer_.reset();
@@ -138,6 +140,7 @@ int Application::run()
             << exception.what()
             << std::endl;
 
+        stop_ptz_command();
         focus_player_.reset();
         players_.clear();
         renderer_.reset();
@@ -232,8 +235,17 @@ void Application::process_sdl_event(
 )
 {
     if (event.type == SDL_QUIT) {
+        stop_ptz_command();
         running_ = false;
         return;
+    }
+
+    if (
+        event.type == SDL_MOUSEMOTION &&
+        focus_player_ != nullptr &&
+        focused_camera_has_ptz()
+    ) {
+        show_ptz_overlay();
     }
 
     if (event.type == SDL_KEYDOWN) {
@@ -328,6 +340,72 @@ void Application::process_sdl_event(
         focus_player_ != nullptr &&
         event.button.button ==
             SDL_BUTTON_LEFT &&
+        focused_camera_has_ptz() &&
+        ptz_overlay_visible_
+    ) {
+        const CameraConfig* camera =
+            focused_camera();
+
+        if (
+            camera != nullptr &&
+            !camera->ptz_presets.empty()
+        ) {
+            const auto preset_hit =
+                renderer_->ptz_preset_hit_at(
+                    event.button.x,
+                    event.button.y,
+                    camera->ptz_presets.size(),
+                    ptz_preset_menu_open_
+                );
+
+            if (preset_hit.has_value()) {
+                if (preset_hit->selector) {
+                    ptz_preset_menu_open_ =
+                        !ptz_preset_menu_open_;
+                    show_ptz_overlay();
+                } else {
+                    call_ptz_preset(
+                        preset_hit->index
+                    );
+                }
+
+                return;
+            }
+        }
+
+        if (ptz_preset_menu_open_) {
+            ptz_preset_menu_open_ = false;
+            redraw_requested_ = true;
+        }
+
+        const auto ptz_command =
+            renderer_->ptz_command_at(
+                event.button.x,
+                event.button.y
+            );
+
+        if (ptz_command.has_value()) {
+            if (
+                *ptz_command ==
+                PtzCommand::Stop
+            ) {
+                stop_ptz_command(true);
+            } else {
+                begin_ptz_command(
+                    *ptz_command
+                );
+            }
+
+            return;
+        }
+    }
+
+    if (
+        event.type ==
+            SDL_MOUSEBUTTONDOWN &&
+        focus_player_ != nullptr &&
+        event.button.button ==
+            SDL_BUTTON_LEFT &&
         event.button.clicks == 1
     ) {
         begin_pan(
@@ -344,7 +422,34 @@ void Application::process_sdl_event(
         event.button.button ==
             SDL_BUTTON_LEFT
     ) {
+        if (ptz_pointer_active_) {
+            stop_ptz_command();
+            return;
+        }
+
         end_pan();
+        return;
+    }
+
+    if (
+        event.type ==
+            SDL_MOUSEMOTION &&
+        ptz_pointer_active_ &&
+        focus_player_ != nullptr
+    ) {
+        const auto command =
+            renderer_->ptz_command_at(
+                event.motion.x,
+                event.motion.y
+            );
+
+        if (
+            !command.has_value() ||
+            *command != active_ptz_command_
+        ) {
+            stop_ptz_command();
+        }
+
         return;
     }
 
@@ -388,6 +493,15 @@ void Application::process_sdl_event(
     }
 
     if (event.type == SDL_WINDOWEVENT) {
+        if (
+            event.window.event ==
+                SDL_WINDOWEVENT_FOCUS_LOST ||
+            event.window.event ==
+                SDL_WINDOWEVENT_LEAVE
+        ) {
+            stop_ptz_command();
+        }
+
         if (
             event.window.event ==
                 SDL_WINDOWEVENT_EXPOSED ||
@@ -504,7 +618,15 @@ void Application::open_focus(
     reset_inspection();
 
     focused_camera_index_ =
-        camera_index;
+        source_camera_index;
+
+    ptz_preset_menu_open_ = false;
+
+    if (camera.ptz_enabled) {
+        show_ptz_overlay();
+    } else {
+        ptz_overlay_visible_ = false;
+    }
 
     redraw_requested_ = true;
 
@@ -520,6 +642,8 @@ void Application::close_focus()
         return;
     }
 
+    stop_ptz_command();
+
     Player* closing_player =
         focus_player_.get();
 
@@ -532,6 +656,9 @@ void Application::close_focus()
 
     focus_player_.reset();
     focused_camera_index_.reset();
+    ptz_overlay_visible_ = false;
+    ptz_preset_menu_open_ = false;
+    ptz_overlay_until_ = {};
     reset_inspection();
     redraw_requested_ = true;
 }
@@ -969,6 +1096,180 @@ void Application::end_pan() noexcept
         false;
 }
 
+const CameraConfig*
+Application::focused_camera() const noexcept
+{
+    if (
+        !focused_camera_index_.has_value() ||
+        *focused_camera_index_ >= cameras_.size()
+    ) {
+        return nullptr;
+    }
+
+    return &cameras_[
+        *focused_camera_index_
+    ];
+}
+
+bool Application::focused_camera_has_ptz() const noexcept
+{
+    const CameraConfig* camera =
+        focused_camera();
+
+    return (
+        focus_player_ != nullptr &&
+        focus_player_->frame_ready() &&
+        camera != nullptr &&
+        camera->ptz_enabled
+    );
+}
+
+void Application::begin_ptz_command(
+    const PtzCommand command
+)
+{
+    const CameraConfig* camera =
+        focused_camera();
+
+    if (
+        camera == nullptr ||
+        !camera->ptz_enabled ||
+        command == PtzCommand::None ||
+        command == PtzCommand::Stop
+    ) {
+        return;
+    }
+
+    ptz_preset_menu_open_ = false;
+    stop_ptz_command();
+
+    if (
+        ptz_controller_.send(
+            *camera,
+            command
+        )
+    ) {
+        active_ptz_command_ =
+            command;
+        ptz_pointer_active_ =
+            true;
+        show_ptz_overlay();
+        SDL_CaptureMouse(
+            SDL_TRUE
+        );
+        redraw_requested_ =
+            true;
+    }
+}
+
+void Application::stop_ptz_command(
+    const bool force
+) noexcept
+{
+    const CameraConfig* camera =
+        focused_camera();
+
+    if (
+        camera != nullptr &&
+        camera->ptz_enabled &&
+        (
+            force ||
+            ptz_pointer_active_ ||
+            active_ptz_command_ !=
+                PtzCommand::None
+        )
+    ) {
+        (void) ptz_controller_.send(
+            *camera,
+            PtzCommand::Stop
+        );
+    }
+
+    active_ptz_command_ =
+        PtzCommand::None;
+    ptz_pointer_active_ =
+        false;
+
+    if (
+        camera != nullptr &&
+        camera->ptz_enabled &&
+        focus_player_ != nullptr
+    ) {
+        show_ptz_overlay();
+    }
+    if (
+        (
+            SDL_WasInit(
+                SDL_INIT_VIDEO
+            ) &
+            SDL_INIT_VIDEO
+        ) != 0
+    ) {
+        SDL_CaptureMouse(
+            SDL_FALSE
+        );
+    }
+    redraw_requested_ =
+        true;
+}
+
+void Application::call_ptz_preset(
+    const std::size_t preset_index
+) noexcept
+{
+    const CameraConfig* camera =
+        focused_camera();
+
+    if (
+        camera == nullptr ||
+        !camera->ptz_enabled ||
+        preset_index >=
+            camera->ptz_presets.size()
+    ) {
+        return;
+    }
+
+    stop_ptz_command();
+    ptz_preset_menu_open_ = false;
+
+    (void) ptz_controller_.send_preset(
+        *camera,
+        camera->ptz_presets[
+            preset_index
+        ].token
+    );
+
+    show_ptz_overlay();
+}
+
+void Application::show_ptz_overlay() noexcept
+{
+    ptz_overlay_visible_ = true;
+    ptz_overlay_until_ =
+        std::chrono::steady_clock::now() +
+        ptz_overlay_timeout_;
+    redraw_requested_ = true;
+}
+
+void Application::update_ptz_overlay_visibility() noexcept
+{
+    if (
+        !ptz_overlay_visible_ ||
+        ptz_pointer_active_ ||
+        ptz_preset_menu_open_
+    ) {
+        return;
+    }
+
+    if (
+        std::chrono::steady_clock::now() >=
+        ptz_overlay_until_
+    ) {
+        ptz_overlay_visible_ = false;
+        redraw_requested_ = true;
+    }
+}
+
 bool Application::zoom_indicator_visible() const noexcept
 {
     return (
@@ -996,12 +1297,25 @@ void Application::render()
         focus_player_ != nullptr &&
         focus_player_->frame_ready()
     ) {
+        const CameraConfig* camera =
+            focused_camera();
+
+        static const std::vector<PtzPreset>
+            no_presets;
+
         renderer_->render_focus(
             *focus_player_,
             inspection_zoom_,
             inspection_center_x_,
             inspection_center_y_,
-            zoom_indicator_visible()
+            zoom_indicator_visible(),
+            focused_camera_has_ptz(),
+            ptz_overlay_visible_,
+            active_ptz_command_,
+            camera != nullptr
+                ? camera->ptz_presets
+                : no_presets,
+            ptz_preset_menu_open_
         );
         return;
     }

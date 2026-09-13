@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     PiDecoder
-    VERSION 0.9.9.4
+    VERSION 0.9.9.5
     DESCRIPTION "Low-latency RTSP video decoder for Raspberry Pi"
     LANGUAGES CXX
 )
@@ -28,6 +28,7 @@ add_executable(
     pidecoder
     src/main.cpp
     src/Application.cpp
+    src/PtzController.cpp
     src/Config.cpp
     src/Window.cpp
     src/Player.cpp

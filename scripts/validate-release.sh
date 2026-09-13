@@ -14,30 +14,15 @@ echo "[1/8] Vérification Python"
 python3 -m py_compile \
     "$ROOT/scripts/config-web.py" \
     "$ROOT/scripts/onvif_client.py" \
-    "$ROOT/scripts/check-camera-config.py"
+    "$ROOT/scripts/check-camera-config.py" \
+    "$ROOT/scripts/ptz-bridge.py"
 
 # py_compile creates caches by design; remove them before package checks.
 cleanup_python_cache
 
 echo "[2/8] Vérification JavaScript"
 if command -v node >/dev/null 2>&1; then
-    python3 - "$ROOT" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-root=Path(sys.argv[1])
-text=(root/'scripts/config-web.py').read_text(encoding='utf-8')
-match=re.search(r'<script>(.*)</script>',text,re.S)
-
-if not match:
-    raise SystemExit('Bloc JavaScript introuvable')
-
-target=root/'scripts/config-web.embedded.js'
-target.write_text(match.group(1),encoding='utf-8')
-PY
-    node --check "$ROOT/scripts/config-web.embedded.js"
-    rm -f "$ROOT/scripts/config-web.embedded.js"
+    node --check "$ROOT/scripts/web/app.js"
 else
     echo "  Node.js absent : contrôle JavaScript ignoré"
 fi
@@ -49,27 +34,34 @@ bash -n \
 
 echo "[4/8] Vérification de la version CMake"
 grep -Eq \
-    '^[[:space:]]*VERSION[[:space:]]+0\.9\.9\.4([[:space:]]|$)' \
+    '^[[:space:]]*VERSION[[:space:]]+0\.9\.9\.5([[:space:]]|$)' \
     "$ROOT/CMakeLists.txt"
 
 echo "[5/8] Vérification des fichiers essentiels"
 required=(
     "CMakeLists.txt"
     "scripts/config-web.py"
+    "scripts/web/index.html"
+    "scripts/web/app.css"
+    "scripts/web/app.js"
     "scripts/onvif_client.py"
     "scripts/install.sh"
     "scripts/check-camera-config.py"
+    "scripts/ptz-bridge.py"
     "systemd/pidecoder.service.in"
     "systemd/pidecoder-config.service.in"
     "systemd/pidecoder-wayland.path.in"
     "systemd/pidecoder-wayland.target.in"
+    "systemd/pidecoder-ptz.service.in"
     "src/main.cpp"
     "src/Application.cpp"
+    "src/PtzController.cpp"
     "src/Player.cpp"
     "src/Renderer.cpp"
     "src/Grid.cpp"
     "src/Layout.cpp"
     "include/pidecoder/Application.hpp"
+    "include/pidecoder/PtzController.hpp"
     "include/pidecoder/Player.hpp"
     "include/pidecoder/Renderer.hpp"
     "include/pidecoder/Grid.hpp"
@@ -111,4 +103,4 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
 fi
 
 echo "[8/8] Validation terminée"
-echo "PiDecoder v0.9.9.4 RC1 : paquet cohérent."
+echo "PiDecoder v0.9.9.5 RC3 : paquet cohérent."

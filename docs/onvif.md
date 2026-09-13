@@ -1,6 +1,7 @@
-# ONVIF camera setup
+# ONVIF camera and PTZ setup
 
-PiDecoder can discover ONVIF devices, identify them, list usable media profiles and create the RTSP camera configuration.
+PiDecoder can discover ONVIF devices, identify them, list usable media profiles,
+read PTZ capabilities and presets, and create the RTSP camera configuration.
 
 Open the **ONVIF** tab in the Web administration interface.
 
@@ -10,7 +11,7 @@ Before discovery:
 
 - the Raspberry Pi must be able to reach the camera network;
 - the camera must have ONVIF enabled;
-- the ONVIF account must have permission to read device and media information;
+- the ONVIF account must have permission to read device, media and PTZ information;
 - multicast discovery must be allowed when using automatic discovery;
 - routed cameras can be added manually by IPv4.
 
@@ -89,8 +90,11 @@ PiDecoder requests:
 - serial number;
 - hardware identifier;
 - media service address;
+- PTZ service address when available;
 - available media profiles;
-- RTSP stream URIs.
+- profile PTZ compatibility;
+- RTSP stream URIs;
+- presets for compatible PTZ profiles.
 
 A failed identification displays the error and points to:
 
@@ -110,9 +114,52 @@ After identification, select:
 Recommended approach:
 
 - choose a lower-resolution H.264 profile for the mosaic;
-- choose a higher-resolution H.264 profile for full screen.
+- choose a higher-resolution H.264 profile for full screen;
+- keep the mosaic frame rate low when the camera limits simultaneous streams.
 
-PiDecoder prioritizes H.264 profiles with a usable RTSP URI. When no H.264 profile is available, it may display other profiles that expose a stream URI, but the validated playback target remains H.264.
+Typical PiDecoder defaults:
+
+| View | Resolution | Frame rate |
+|---|---:|---:|
+| Mosaic | 640 × 360 | 12 FPS |
+| Focus | 1920 × 1080 | 25 FPS |
+
+PiDecoder prioritizes H.264 profiles with a usable RTSP URI. When no H.264 profile
+is available, it may display other profiles that expose a stream URI, but the
+validated playback target remains H.264.
+
+## PTZ metadata and presets
+
+When a selected profile supports PTZ, PiDecoder stores the PTZ service address,
+the selected PTZ profile token and the presets returned by the camera.
+
+A generated camera entry can contain:
+
+```json
+{
+  "onvif": {
+    "device_xaddr": "http://192.168.1.90/onvif/device_service",
+    "media_xaddr": "http://192.168.1.90/onvif/media_service",
+    "ptz_xaddr": "http://192.168.1.90/onvif/ptz_service",
+    "ip": "192.168.1.90",
+    "grid_profile_token": "profile-low",
+    "focus_profile_token": "profile-high",
+    "ptz_profile_token": "profile-high",
+    "ptz_presets": [
+      {
+        "token": "preset-token",
+        "name": "Entrance"
+      }
+    ],
+    "manufacturer": "Example",
+    "model": "Example PTZ Camera",
+    "serial_number": "REDACTED",
+    "hardware_id": "REDACTED"
+  }
+}
+```
+
+The actual endpoint paths and token values depend on the camera.
 
 ## Add or update a camera
 
@@ -137,25 +184,28 @@ PiDecoder attempts to match an existing camera by:
 
 When multiple entries match the same ONVIF device, duplicate entries may be removed during the update.
 
-The generated camera metadata may include:
+Before changing the camera list, PiDecoder rotates timestamped camera backups and keeps the latest five.
 
-```json
-{
-  "onvif": {
-    "device_xaddr": "http://192.168.1.90/onvif/device_service",
-    "media_xaddr": "http://192.168.1.90/onvif/media_service",
-    "ip": "192.168.1.90",
-    "grid_profile_token": "profile-low",
-    "focus_profile_token": "profile-high",
-    "manufacturer": "Example",
-    "model": "Example Camera",
-    "serial_number": "REDACTED",
-    "hardware_id": "REDACTED"
-  }
-}
+## Changing video values safely
+
+In v0.9.9.5 RC3, changing camera resolution or FPS from the **Caméras** tab preserves
+the stored ONVIF and PTZ metadata.
+
+This includes:
+
+```text
+Valeurs PiDecoder
+→ Sauvegarder
+→ Appliquer
 ```
 
-Before changing the camera list, PiDecoder rotates timestamped camera backups and keeps the latest five.
+Protection is implemented twice:
+
+- the browser keeps the existing camera `onvif` object;
+- the server merges stored ONVIF metadata if an older browser tab omits it.
+
+Reload the Web interface with `Ctrl + F5` after upgrading to RC3 so the browser uses
+the newest JavaScript.
 
 ## Apply the new camera
 
@@ -172,6 +222,38 @@ The Web service restarts:
 ```text
 pidecoder.service
 ```
+
+The persistent PTZ bridge remains available through:
+
+```text
+pidecoder-ptz.service
+```
+
+## Native PTZ controls
+
+Open a PTZ camera in the native focus view.
+
+PiDecoder displays:
+
+- left, right, up and down controls;
+- optical zoom out and in;
+- a forced Stop control;
+- a `PRESET` selector when presets are available.
+
+Selecting a preset immediately sends ONVIF `GotoPreset`.
+
+The controls disappear after five seconds without mouse movement and return as soon
+as the pointer moves. They remain visible while a PTZ command or preset menu is active.
+
+PiDecoder sends Stop when:
+
+- the mouse button is released;
+- the pointer leaves the active button;
+- the application window loses focus;
+- Escape closes the focus view;
+- the focus view is otherwise closed.
+
+Fixed cameras and cameras without complete PTZ metadata do not display the overlay.
 
 ## Discovery diagnostics
 
@@ -229,6 +311,41 @@ Check whether the camera exposes:
 
 JPEG-only or unsupported profiles are not part of the currently validated PiDecoder target.
 
+### PTZ controls are not displayed
+
+Confirm that the camera entry contains both:
+
+```text
+onvif.ptz_xaddr
+onvif.ptz_profile_token
+```
+
+Then restart:
+
+```bash
+sudo systemctl restart pidecoder-ptz.service
+sudo systemctl restart pidecoder.service
+```
+
+Reload the focus view after the services are active.
+
+### No presets are displayed
+
+Confirm that the camera exposes presets for the selected PTZ profile and that the
+camera entry contains a non-empty:
+
+```text
+onvif.ptz_presets
+```
+
+Identify the camera again and use **Mettre à jour** to refresh the preset list.
+
+### Focus view is delayed
+
+Some cameras restrict simultaneous streams or aggregate frame rate. Use a lightweight
+mosaic profile and avoid requesting two high-frame-rate streams at the same time.
+
 ### Camera already configured more than once
 
-Identify the camera again and use **Mettre à jour**. PiDecoder uses ONVIF identity fields and stream information to detect matching entries and remove duplicates when possible.
+Identify the camera again and use **Mettre à jour**. PiDecoder uses ONVIF identity
+fields and stream information to detect matching entries and remove duplicates when possible.

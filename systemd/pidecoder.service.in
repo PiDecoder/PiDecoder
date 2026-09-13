@@ -1,7 +1,7 @@
 [Unit]
 Description=PiDecoder Video Wall
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target pidecoder-ptz.service
+After=network-online.target pidecoder-ptz.service
 
 [Service]
 Type=simple

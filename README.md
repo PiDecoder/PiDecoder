@@ -10,7 +10,7 @@
   <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
     <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
   </a>
-  <img src="https://img.shields.io/badge/release-v0.9.9.4%20RC1-7A1F5C" alt="Release v0.9.9.4 RC1">
+  <img src="https://img.shields.io/badge/release-v0.9.9.5%20RC3-7A1F5C" alt="Release v0.9.9.5 RC3">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
   <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
@@ -22,18 +22,24 @@
 
 <p align="center">
   PiDecoder turns a Raspberry Pi 5 into a dedicated multi-camera display with a native video engine,
-  ONVIF discovery, flexible layouts and a modern Web administration interface.
+  ONVIF discovery, native PTZ controls, flexible layouts and a modern Web administration interface.
 </p>
 
 ---
 
 > [!NOTE]
-> **PiDecoder v0.9.9.4 RC1** is the current release candidate.
+> **PiDecoder v0.9.9.5 RC3** is the current release candidate.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
+> Native PTZ movement, optical zoom, Stop and preset selection have been field-tested with an
+> Axis Q6074.
+>
+> RC3 also protects stored ONVIF and PTZ metadata when camera video settings are changed from the
+> Web interface, including when an older browser tab submits a camera without that metadata.
+>
 > The upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
-> have been successfully tested on real hardware.
-> A fresh installation on a blank Debian 13 system, Web configuration restore and a forced-failure
-> installer rollback have also been successfully validated.
+> were validated during the previous release-candidate phase. A fresh installation on a blank
+> Debian 13 system, Web configuration restore and a forced-failure installer rollback were also
+> successfully validated.
 >
 > The blank-system installation test was performed on an x86_64 virtual machine.
 > Raspberry Pi 5 AArch64 remains the official validated hardware target.
@@ -57,7 +63,7 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
     </td>
     <td width="25%" valign="top">
       <strong>Practical</strong><br>
-      Configure cameras, layouts and services from a Web interface.
+      Configure cameras, layouts, ONVIF and services from a Web interface.
     </td>
     <td width="25%" valign="top">
       <strong>Open</strong><br>
@@ -68,13 +74,45 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 
 ## Features
 
-| Video wall | ONVIF | Layout | Administration |
+| Video wall | ONVIF and PTZ | Layout | Administration |
 |---|---|---|---|
 | Multiple RTSP streams | Automatic discovery | Drag and drop | Web interface |
 | H.264 playback | Manual IPv4 addition | Resize camera tiles | System diagnostics |
-| Automatic reconnection | Profile detection | Main-camera layout | Service controls |
-| Fullscreen display | RTSP URI extraction | Persistent configuration | Logs and backups |
-| Native Raspberry Pi display | Camera configuration | Flexible mosaics | Authentication |
+| Automatic reconnection | Profile and preset detection | Main-camera layout | Service controls |
+| Fullscreen focus view | Native pan and tilt | Persistent configuration | Logs and backups |
+| Digital zoom and pan | Optical zoom and forced Stop | Flexible mosaics | Authentication |
+| Native Raspberry Pi display | Native preset selector | PTZ overlay auto-hide | Configuration export |
+
+## Native PTZ controls
+
+When a configured camera contains valid ONVIF PTZ metadata, opening its native focus view displays a compact PTZ overlay.
+
+Available controls:
+
+- pan left and right;
+- tilt up and down;
+- optical zoom out and in;
+- forced Stop;
+- preset selection through a compact drop-down menu.
+
+The controls disappear after five seconds without mouse activity and reappear as soon as the pointer moves. They remain visible while a PTZ command or preset menu is active.
+
+Safety stops are sent when the pointer is released, leaves the active control, the window loses focus, the focus view closes or Escape is pressed.
+
+Fixed cameras do not display the PTZ overlay.
+
+## Video profile guidance
+
+Use a lightweight stream for the mosaic and a higher-quality stream for the focus view.
+
+Typical PiDecoder defaults:
+
+| View | Resolution | Frame rate |
+|---|---:|---:|
+| Mosaic | 640 × 360 | 12 FPS |
+| Focus | 1920 × 1080 | 25 FPS |
+
+Some cameras limit the number or total frame rate of simultaneous streams. When focus opening becomes slow or delayed, reduce the mosaic profile before increasing the focus profile.
 
 ## Preview
 
@@ -107,13 +145,13 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 |---|---|
 | [Installation and updates](docs/installation.md) | Requirements, installer options, updates and systemd startup |
 | [Camera configuration](docs/configuration.md) | RTSP streams, credentials, camera order and applying changes |
-| [ONVIF camera setup](docs/onvif.md) | Discovery, manual identification, profiles and camera updates |
+| [ONVIF and PTZ setup](docs/onvif.md) | Discovery, profiles, PTZ metadata, presets and native controls |
 | [Mosaic layout](docs/layout.md) | Grid size, templates, moving and resizing camera tiles |
 | [Backup and restore](docs/backup.md) | Web exports, runtime backups and installer recovery |
 | [FAQ and troubleshooting](docs/faq.md) | Common startup, RTSP, ONVIF and Wayland issues |
 
 The public documentation is currently written in English.
-The Web administration interface remains in French in v0.9.9.4 RC1; English localization is planned before the stable v1.0 release.
+The Web administration interface remains in French in v0.9.9.5 RC3; English localization is planned before the stable v1.0 release.
 
 ## Quick start
 
@@ -149,7 +187,7 @@ The installer:
 - installs the required Debian packages;
 - builds PiDecoder in release mode;
 - installs it under `/opt/pidecoder`;
-- preserves an existing camera, layout and Web configuration;
+- preserves existing camera, ONVIF, layout and Web configuration;
 - creates a backup under `/var/backups/pidecoder`;
 - installs and enables the systemd services;
 - starts the video wall when the Wayland session becomes available.
@@ -165,7 +203,7 @@ http://RASPBERRY_PI_IP:8080
 Update the repository and run the same installer again:
 
 ```bash
-git pull
+git pull --ff-only
 sudo ./scripts/install.sh
 ```
 
@@ -176,6 +214,10 @@ Existing runtime configuration is preserved automatically before the new version
 ```text
 pidecoder-config.service
 └── Web administration on port 8080
+
+pidecoder-ptz.service
+└── persistent local ONVIF PTZ bridge
+    └── /run/pidecoder/ptz.sock
 
 pidecoder-wayland.path
 └── waits for /run/user/<uid>/wayland-0
@@ -188,10 +230,13 @@ The Wayland path trigger prevents the video engine from starting before the grap
 The intermediate target keeps the path unit healthy when no camera is configured; the video service
 remains inactive until a valid camera configuration exists.
 
+The PTZ bridge uses a local Unix datagram socket. Camera PTZ credentials and endpoints are read from the protected runtime configuration when a native command is sent.
+
 ## Service status
 
 ```bash
 systemctl status pidecoder-config.service --no-pager
+systemctl status pidecoder-ptz.service --no-pager
 systemctl status pidecoder-wayland.path --no-pager
 systemctl status pidecoder-wayland.target --no-pager
 systemctl status pidecoder.service --no-pager
@@ -201,6 +246,7 @@ Logs:
 
 ```bash
 journalctl -u pidecoder-config.service -n 50 --no-pager
+journalctl -u pidecoder-ptz.service -n 50 --no-pager
 journalctl -u pidecoder.service -n 50 --no-pager
 ```
 
@@ -217,7 +263,8 @@ journalctl -u pidecoder.service -n 50 --no-pager
 | Architecture | AArch64 |
 | Display server | Wayland |
 | Video engine | libmpv / FFmpeg |
-| Rendering | SDL2 |
+| Rendering | SDL2 / OpenGL |
+| PTZ transport | ONVIF through a local Unix socket bridge |
 | Administration | Python 3 Web service |
 
 Other Linux platforms may work, but they are not yet part of the validated v1.0 target.
@@ -228,7 +275,7 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 |---|---|
 | Source and configuration validation | Passed |
 | Existing installation upgrade | Passed |
-| Camera and layout preservation | Passed |
+| Camera, ONVIF and layout preservation | Passed |
 | Web authentication preservation | Passed |
 | Automatic startup after reboot | Passed |
 | Wayland-triggered video startup | Passed |
@@ -236,20 +283,23 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 | Fresh installation on blank Debian 13 x86_64 | Passed |
 | Web configuration export and restore | Passed |
 | Forced-failure installer rollback | Passed |
+| Native PTZ directions, optical zoom and Stop | Passed on Axis Q6074 |
+| Native PTZ preset selector | Passed on Axis Q6074 |
+| PTZ overlay auto-hide and fixed-camera filtering | Passed |
+| RC3 ONVIF metadata preservation during camera save | Passed in field test |
 
-The Web configuration export contains cameras and layout data.
+The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.
 
 ## Roadmap
 
 | Version | Status | Planned focus |
 |---|---|---|
-| v0.9.9.4 RC1 | Current | Release candidate and field testing |
+| v0.9.9.5 RC3 | Current | Native PTZ field testing and final release hardening |
 | v1.0 | Next milestone | First stable public release and English localization |
-| v1.1 | Planned | PTZ controls |
-| v1.2 | Planned | Audio support |
-| v1.3 | Planned | HTTPS |
-| v1.4 | Planned | REST API |
+| v1.1 | Planned | Audio support |
+| v1.2 | Planned | HTTPS |
+| v1.3 | Planned | REST API |
 | v2.0 | Long-term | Multi-Raspberry cluster |
 
 Roadmap items are planned goals and may change as the project evolves.
