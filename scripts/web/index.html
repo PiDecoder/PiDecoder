@@ -1,0 +1,72 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PiDecoder Admin</title>
+<link rel="stylesheet" href="app.css"></head><body>
+<section id="login"><form class="loginbox" onsubmit="doLogin(event)"><h1>PiDecoder</h1><p class="muted">Administration v0.9.9.5 RC2</p><div class="field"><label>Utilisateur</label><input id="lu" value="admin"></div><div class="field"><label>Mot de passe</label><input id="lp" type="password"></div><button class="primary">Connexion</button><p id="le" class="muted"></p></form></section>
+<section id="app" class="hidden"><header><div><b>PiDecoder</b><div class="muted">Administration v0.9.9.5 RC2</div></div><div class="actions"><span id="engine" class="engine"><span id="globalHealthDot" class="dot"></span><span><strong>PiDecoder</strong><br><small id="engineText">État inconnu</small></span></span><button id="shortcutButton" class="shortcut-button" type="button" title="Raccourcis clavier" onclick="toggleShortcutHelp(event)">⌨️</button><button class="secondary" onclick="save()">Sauvegarder</button><button class="success" onclick="apply()">Appliquer</button><button class="secondary" onclick="logout()">Déconnexion</button></div></header><main>
+<nav class="tabs"><button class="tab active" onclick="tab('cams',this)">📹 Caméras</button><button class="tab" onclick="tab('onvif',this)">🌐 ONVIF</button><button class="tab" onclick="tab('layout',this)">🖥 Disposition</button><button class="tab" onclick="tab('sys',this)">💻 Système</button><button class="tab" onclick="tab('sec',this)">🔐 Sécurité</button><button class="tab" onclick="tab('backup',this)">💾 Sauvegarde</button></nav>
+<section id="cams"><div class="panel"><div class="row" style="justify-content:space-between"><div><h2>Caméras</h2><div class="muted">Déplacement uniquement avec la poignée ☰. Les champs texte restent sélectionnables normalement.</div></div><button class="primary" onclick="addCam()">+ Ajouter</button></div><div id="list"></div></div></section>
+<section id="layout" class="hidden"><div class="panel"><div class="row" style="justify-content:space-between"><div><h2>Disposition de la mosaïque</h2><div class="muted">Déplace et redimensionne les caméras actives dans la grille. Les collisions sont refusées et la disposition est sauvegardée automatiquement.</div></div><button class="secondary" onclick="resetMosaicOrder()">Réinitialiser l’ordre</button></div><div class="mosaic-toolbar"><div class="small"><label>Colonnes</label><input id="cols" type="number" min="1" max="9"></div><div class="small"><label>Lignes</label><input id="rows" type="number" min="1" max="9"></div><label><input id="fs" type="checkbox" style="width:auto"> Plein écran au démarrage</label><div id="mosaicSaved" class="mosaic-saved"></div></div><div class="mosaic-template-bar"><button class="secondary mosaic-template" onclick="applyMosaicTemplate('uniform')"><strong>Grille uniforme</strong><span>Toutes les caméras en 1×1</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('main')"><strong>Caméra principale</strong><span>Une grande caméra, les autres autour</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('dual')"><strong>Deux principales</strong><span>Deux grandes vues puis les autres</span></button><button class="secondary mosaic-template" onclick="applyMosaicTemplate('free')"><strong>Libre</strong><span>Conserver la disposition actuelle</span></button></div><div id="mosaicWarning"></div><div id="mosaicPreview" class="mosaic-preview"></div></div></section>
+<section id="sys" class="hidden">
+  <div class="panel">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div>
+        <h2>Système</h2>
+        <div class="muted">État du Raspberry Pi, de PiDecoder et informations utiles au support.</div>
+      </div>
+      <div class="row">
+        <button class="secondary" onclick="refreshDiagnostics()">Actualiser</button>
+        <button class="secondary" onclick="copyDiagnostics()">Copier le rapport</button>
+      </div>
+    </div>
+
+    <h3 class="sys-section-title">Santé</h3>
+    <div id="systemHealthGrid" class="diag-grid"></div>
+
+    <div class="diag-columns">
+      <div class="backupbox">
+        <h3>PiDecoder</h3>
+        <div id="pidecoderInfo"></div>
+      </div>
+
+      <div class="backupbox">
+        <h3>Caméras</h3>
+        <div id="cameraInfo"></div>
+      </div>
+    </div>
+
+    <div class="backupbox">
+      <h3>Services</h3>
+      <div id="serviceBadges" class="service-badges"></div>
+    </div>
+
+    <div class="backupbox">
+      <div class="row" style="justify-content:space-between;align-items:end">
+        <div>
+          <h3 style="margin:0">Journaux récents</h3>
+          <div class="muted">Journaux de PiDecoder et de l’administration Web.</div>
+        </div>
+        <div class="small">
+          <label>Lignes</label>
+          <select id="diagnosticLogLines" onchange="refreshDiagnostics()">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <pre id="diagnosticsLogs" class="diag-log">Ouvre l’onglet Système pour charger les diagnostics.</pre>
+    </div>
+
+    <textarea id="diagnosticsCopyBuffer" class="hidden" aria-hidden="true"></textarea>
+  </div>
+</section>
+<section id="sec" class="hidden"><div class="panel"><h2>Mot de passe administrateur</h2><div class="muted">Le mot de passe actuel est requis. Le nouveau mot de passe doit être saisi deux fois à l’identique.</div><div class="grid" style="margin-top:14px"><div class="s4"><label>Mot de passe actuel</label><input id="oldp" type="password" autocomplete="current-password"></div><div class="s4"><label>Nouveau mot de passe</label><input id="newp" type="password" autocomplete="new-password"></div><div class="s4"><label>Confirmer le nouveau mot de passe</label><input id="confirmp" type="password" autocomplete="new-password"></div></div><div id="passwordStatus" class="muted" style="margin-top:10px;min-height:20px"></div><div class="row" style="margin-top:12px"><button id="changePwdButton" class="primary" onclick="changePwd()" disabled>Modifier le mot de passe</button></div></div></section>
+<section id="backup" class="hidden"><div class="panel"><h2>Sauvegarde et restauration</h2><div class="backupbox"><h3>Exporter</h3><p class="muted">Télécharge les caméras et la disposition dans un fichier JSON portable. Le mot de passe Web n'est pas exporté.</p><button class="primary" onclick="exportConfig()">📤 Exporter la configuration</button></div><div class="backupbox"><h3>Importer</h3><p class="muted">L'import crée une sauvegarde des fichiers actuels avant de les remplacer.</p><input id="importFile" type="file" accept="application/json,.json"><div style="margin-top:10px"><button class="secondary" onclick="importConfig()">📥 Importer la configuration</button></div></div></div></section>
+<section id="onvif" class="hidden"><div class="panel"><div class="row" style="justify-content:space-between"><div><h2>ONVIF — Gestion des caméras</h2><div class="muted">Recherche locale ou identification manuelle par adresse IPv4. Choix séparé des profils mosaïque et plein écran.</div></div><button class="primary" onclick="discoverOnvif()">🔎 Rechercher les caméras</button></div><div class="row" style="margin-top:14px"><div class="grow"><label>Utilisateur ONVIF</label><input id="onvifUser" autocomplete="off"></div><div class="grow"><label>Mot de passe ONVIF</label><input id="onvifPassword" type="password" autocomplete="new-password"></div></div><div class="backupbox"><h3 style="margin-top:0">Ajouter manuellement par IPv4</h3><div class="muted">Pour une caméra non découverte, située sur un autre réseau routé ou dont WS-Discovery est désactivé.</div><div class="manual-onvif-grid" style="margin-top:12px"><div><label>Adresse</label><input id="manualOnvifIp" placeholder="192.168.1.100" inputmode="decimal" autocomplete="off"></div><div><label>Port ONVIF</label><input id="manualOnvifPort" type="number" min="1" max="65535" value="80"></div><div class="manual-onvif-path"><label>Chemin ONVIF</label><input id="manualOnvifPath" value="/onvif/device_service"></div><div class="manual-onvif-action"><button id="manualOnvifButton" class="secondary" onclick="identifyManualOnvif()">Identifier</button></div></div></div><div id="onvifStatus" class="muted" style="margin-top:14px"></div><div id="onvifDiagnostics" class="backupbox" style="display:none"></div><div id="onvifResults"></div></div>
+</section></main></section><div id="toast" class="toast"></div><button id="notificationToggle" class="notification-toggle" type="button" title="Historique des notifications" onclick="toggleNotificationHistory(event)">🔔<span id="notificationCount" class="notification-count"></span></button><div id="shortcutHelp" class="shortcut-help">
+  <div class="shortcut-help-title">Raccourcis clavier</div>
+  <div><kbd>Ctrl</kbd> + <kbd>S</kbd><span>Sauvegarder</span></div>
+  <div><kbd>Ctrl</kbd> + <kbd>Entrée</kbd><span>Appliquer</span></div>
+  <div><kbd>Alt</kbd> + <kbd>1–6</kbd><span>Changer d’onglet</span></div>
+  <div><kbd>Échap</kbd><span>Fermer les fenêtres</span></div>
+</div><div id="notificationHistory" class="notification-history"><div class="notification-history-header"><strong>Notifications récentes</strong><button class="secondary" type="button" onclick="clearNotificationHistory()">Effacer</button></div><div id="notificationList"></div></div>
+<script src="app.js"></script></body></html>

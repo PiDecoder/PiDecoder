@@ -22,23 +22,7 @@ cleanup_python_cache
 
 echo "[2/8] Vérification JavaScript"
 if command -v node >/dev/null 2>&1; then
-    python3 - "$ROOT" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-root=Path(sys.argv[1])
-text=(root/'scripts/config-web.py').read_text(encoding='utf-8')
-match=re.search(r'<script>(.*)</script>',text,re.S)
-
-if not match:
-    raise SystemExit('Bloc JavaScript introuvable')
-
-target=root/'scripts/config-web.embedded.js'
-target.write_text(match.group(1),encoding='utf-8')
-PY
-    node --check "$ROOT/scripts/config-web.embedded.js"
-    rm -f "$ROOT/scripts/config-web.embedded.js"
+    node --check "$ROOT/scripts/web/app.js"
 else
     echo "  Node.js absent : contrôle JavaScript ignoré"
 fi
@@ -57,6 +41,9 @@ echo "[5/8] Vérification des fichiers essentiels"
 required=(
     "CMakeLists.txt"
     "scripts/config-web.py"
+    "scripts/web/index.html"
+    "scripts/web/app.css"
+    "scripts/web/app.js"
     "scripts/onvif_client.py"
     "scripts/install.sh"
     "scripts/check-camera-config.py"
