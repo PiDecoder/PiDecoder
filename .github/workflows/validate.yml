@@ -1,35 +1,66 @@
-diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
-index 215b794..12071b0 100755
---- a/.github/workflows/validate.yml
-+++ b/.github/workflows/validate.yml
-@@ -37,3 +37,30 @@ jobs:
-             --exclude='config-web.py' \
-             --exclude-dir='.git' \
-             .
-+
-+  build:
-+    runs-on: ubuntu-latest
-+
-+    steps:
-+      - name: Checkout
-+        uses: actions/checkout@v4
-+
-+      # Same package list as scripts/install.sh, minus runtime-only tools
-+      # (ffmpeg, iproute2, python3) that aren't needed to compile pidecoder.
-+      - name: Install build dependencies
-+        run: |
-+          sudo apt-get update
-+          sudo apt-get install -y --no-install-recommends \
-+            build-essential \
-+            cmake \
-+            libgl1-mesa-dev \
-+            libmpv-dev \
-+            libsdl2-dev \
-+            nlohmann-json3-dev \
-+            pkg-config
-+
-+      - name: Configure
-+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-+
-+      - name: Build
-+        run: cmake --build build -j"$(nproc)"
+name: Validate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 nodejs
+
+      - name: Validate Python, JavaScript and JSON
+        run: |
+          ./scripts/validate-release.sh
+
+      - name: Check for committed runtime secrets
+        run: |
+          test ! -f config/cameras.json
+          test ! -f config/auth.json
+
+          ! grep -RInE \
+            'rtsp://[^[:space:]*/]+:[^[:space:]*/]+@' \
+            --exclude='cameras.example.json' \
+            --exclude='config-web.py' \
+            --exclude-dir='.git' \
+            .
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same package list as scripts/install.sh, minus runtime-only tools
+      # (ffmpeg, iproute2, python3) that aren't needed to compile pidecoder.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            libgl1-mesa-dev \
+            libmpv-dev \
+            libsdl2-dev \
+            nlohmann-json3-dev \
+            pkg-config
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
