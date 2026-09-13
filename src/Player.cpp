@@ -1,4 +1,5 @@
 #include "pidecoder/Player.hpp"
+#include "pidecoder/RedactUrl.hpp"
 #include <SDL2/SDL_opengl.h>
 #include <algorithm>
 #include <iostream>
@@ -128,7 +129,7 @@ bool Player::tick()
             << "Watchdog video: aucune nouvelle image depuis "
             << frame_stall_timeout_.count()
             << " s : "
-            << url_
+            << redact_credentials(url_)
             << std::endl;
 
         schedule_reconnect();
@@ -152,7 +153,7 @@ bool Player::tick()
 
         std::cerr
             << "Watchdog connexion: timeout RTSP : "
-            << url_
+            << redact_credentials(url_)
             << std::endl;
 
         schedule_reconnect();
@@ -191,7 +192,10 @@ void Player::process_events(bool& application_running)
                 reconnect_delay_ = std::chrono::seconds{2};
                 last_frame_at_ =
                     std::chrono::steady_clock::now();
-                std::cout << "Flux RTSP chargé : " << url_ << std::endl;
+                std::cout
+                    << "Flux RTSP chargé : "
+                    << redact_credentials(url_)
+                    << std::endl;
                 break;
 
             case MPV_EVENT_VIDEO_RECONFIG:
@@ -215,7 +219,7 @@ void Player::process_events(bool& application_running)
 
                 std::cerr
                     << "Flux indisponible : "
-                    << url_
+                    << redact_credentials(url_)
                     << ", raison="
                     << end_event->reason
                     << ", erreur="
@@ -942,7 +946,7 @@ void Player::reconnect_now()
 
         std::cerr
             << "Echec reconnexion RTSP : "
-            << url_
+            << redact_credentials(url_)
             << " : "
             << exception.what()
             << std::endl;

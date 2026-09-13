@@ -8,8 +8,10 @@ add_executable(
     test_main.cpp
     test_grid.cpp
     test_layout.cpp
+    test_redact_url.cpp
     ${CMAKE_SOURCE_DIR}/src/Grid.cpp
     ${CMAKE_SOURCE_DIR}/src/Layout.cpp
+    ${CMAKE_SOURCE_DIR}/src/RedactUrl.cpp
 )
 
 target_include_directories(

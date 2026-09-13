@@ -172,6 +172,26 @@ case "$TARGET" in
         ;;
 esac
 
+# Garde-fou : ce script fait un « rm -rf "$TARGET" » plus loin. S'il est
+# lancé depuis la copie déjà installée dans $TARGET (au lieu du dépôt git
+# cloné), ou depuis un shell dont le répertoire courant se trouve sous
+# $TARGET, cette suppression invalide le répertoire courant du processus en
+# cours d'exécution en plein milieu de l'installation — ce qui a déjà
+# provoqué un échec cryptique de cmake ("Current working directory cannot be
+# established"). On le détecte tôt, avant toute modification, avec un
+# message clair plutôt que de laisser planter la compilation à mi-chemin.
+case "$SOURCE_ROOT" in
+    "$TARGET"|"$TARGET"/*)
+        fail "Ce script est lancé depuis l’installation existante ($TARGET) au lieu du dépôt source. Relance-le depuis ton clone git, ex. : cd ~/PiDecoder && sudo bash scripts/install.sh"
+        ;;
+esac
+
+case "$(pwd -P)" in
+    "$TARGET"|"$TARGET"/*)
+        fail "Le répertoire courant est sous $TARGET, qui va être recréé pendant l’installation. Déplace-toi ailleurs (ex. : cd ~/PiDecoder) avant de relancer."
+        ;;
+esac
+
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || fail "Port Web invalide : $WEB_PORT"
 (( WEB_PORT >= 1 && WEB_PORT <= 65535 )) || fail "Port Web hors plage : $WEB_PORT"
 [[ "$WAYLAND_DISPLAY_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail "Nom de socket Wayland invalide"

@@ -235,8 +235,14 @@ void run_layout_persistence_tests(TestResult& result)
         PD_CHECK_EQ(result, reloaded.rows, 2);
         PD_CHECK_EQ(result, reloaded.fullscreen_on_start, true);
         PD_CHECK_EQ(result, reloaded.placements.size(), std::size_t{2});
-        PD_CHECK_EQ(result, reloaded.placements[0].width, 2);
-        PD_CHECK_EQ(result, reloaded.placements[1].x, 2);
+
+        // On n'indexe qu'après avoir vérifié la taille : si une régression
+        // change ce nombre, on veut un échec de test propre ci-dessus, pas
+        // un accès hors bornes qui plante tout le binaire de tests.
+        if (reloaded.placements.size() == std::size_t{2}) {
+            PD_CHECK_EQ(result, reloaded.placements[0].width, 2);
+            PD_CHECK_EQ(result, reloaded.placements[1].x, 2);
+        }
 
         std::filesystem::remove(path);
     }
@@ -270,14 +276,19 @@ void run_layout_persistence_tests(TestResult& result)
         PD_CHECK_EQ(result, reloaded.placements.size(), std::size_t{2});
 
         // Les deux caméras revendiquaient la même cellule : la normalisation
-        // doit les avoir séparées (pas de recouvrement).
-        PD_CHECK(
-            result,
-            !(
-                reloaded.placements[0].x == reloaded.placements[1].x &&
-                reloaded.placements[0].y == reloaded.placements[1].y
-            )
-        );
+        // doit les avoir séparées (pas de recouvrement). On n'indexe qu'après
+        // avoir vérifié la taille ci-dessus, pour ne jamais planter le
+        // binaire de tests sur un accès hors bornes si une régression change
+        // ce nombre.
+        if (reloaded.placements.size() == std::size_t{2}) {
+            PD_CHECK(
+                result,
+                !(
+                    reloaded.placements[0].x == reloaded.placements[1].x &&
+                    reloaded.placements[0].y == reloaded.placements[1].y
+                )
+            );
+        }
 
         std::filesystem::remove(path);
     }

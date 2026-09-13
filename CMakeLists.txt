@@ -35,6 +35,7 @@ add_executable(
     src/Renderer.cpp
     src/Grid.cpp
     src/Layout.cpp
+    src/RedactUrl.cpp
 )
 
 target_include_directories(
