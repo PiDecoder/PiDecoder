@@ -8,6 +8,29 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=@TARGET@
+
+# Durcissement systemd. S'applique même en root : namespaces de montage
+# confinés, syscalls et écritures limités à ce qui est réellement utilisé
+# (config caméras, redémarrage des autres services via systemctl).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=true
+ReadWritePaths=@TARGET@/config
+
 Environment=PIDECODER_USER=@SERVICE_USER@
 ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@
 Restart=on-failure

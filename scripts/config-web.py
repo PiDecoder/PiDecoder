@@ -11,6 +11,34 @@ from onvif_client import Credentials, continuous_move, discover, goto_preset, ge
 
 VERSION='0.9.9.5-rc3'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
+# Anti-bruteforce sur /api/login : au-delà de LOGIN_MAX_ATTEMPTS échecs pour une
+# même adresse IP en LOGIN_WINDOW secondes, l'IP est bloquée LOGIN_LOCKOUT
+# secondes. État en mémoire seulement (remis à zéro au redémarrage du service),
+# suffisant pour une interface d'administration destinée à rester sur un réseau
+# de confiance (voir l'avertissement HTTP dans docs/installation.md).
+LOGIN_ATTEMPTS={}
+LOGIN_MAX_ATTEMPTS=5
+LOGIN_WINDOW=300
+LOGIN_LOCKOUT=300
+
+def login_blocked(ip):
+    with LOCK:
+        _,locked_until=LOGIN_ATTEMPTS.get(ip,([],0))
+        return bool(locked_until) and locked_until>time.time()
+
+def register_login_failure(ip):
+    now=time.time()
+    with LOCK:
+        attempts,_=LOGIN_ATTEMPTS.get(ip,([],0))
+        attempts=[t for t in attempts if now-t<LOGIN_WINDOW]
+        attempts.append(now)
+        locked_until=now+LOGIN_LOCKOUT if len(attempts)>=LOGIN_MAX_ATTEMPTS else 0
+        LOGIN_ATTEMPTS[ip]=([] if locked_until else attempts,locked_until)
+
+def clear_login_failures(ip):
+    with LOCK:
+        LOGIN_ATTEMPTS.pop(ip,None)
+
 WEB_DIR=Path(__file__).resolve().parent/'web'
 STATIC_FILES={
     '/':('index.html','text/html;charset=utf-8'),
@@ -963,8 +991,14 @@ class H(BaseHTTPRequestHandler):
         p=urlparse(self.path).path
         try:
             if p=='/api/login':
+                ip=self.client_address[0]
+                if login_blocked(ip):
+                    return self.j({'ok':False,'error':'Trop de tentatives, réessaie dans quelques minutes'},429)
                 d=self.body();a=self.authdoc()
-                if not(hmac.compare_digest(str(d.get('username','')),str(a.get('username',''))) and verify(str(d.get('password','')),a)):return self.j({'ok':False,'error':'Mot de passe incorrect'},401)
+                if not(hmac.compare_digest(str(d.get('username','')),str(a.get('username',''))) and verify(str(d.get('password','')),a)):
+                    register_login_failure(ip)
+                    return self.j({'ok':False,'error':'Mot de passe incorrect'},401)
+                clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
                 return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/')
