@@ -16,7 +16,57 @@
 - native PTZ movement validated on an Axis Q6074;
 - native preset selection validated on an Axis Q6074;
 - five-second PTZ overlay auto-hide validated;
-- ONVIF/PTZ metadata preservation validated after applying PiDecoder stream defaults.
+- ONVIF/PTZ metadata preservation validated after applying PiDecoder stream defaults;
+- full reboot test performed on the production Raspberry Pi: all four
+  services active, mosaic/focus autostart, native PTZ movement and preset
+  selection, and PTZ metadata preservation all confirmed again after reboot.
+
+### CI and tooling
+
+- CI now actually compiles the C++ project (`cmake` + build) on every push,
+  in addition to the existing Python/JavaScript/JSON checks;
+- removed roughly 40 redundant `apply-v0XX.sh` update scripts, superseded by
+  `install.sh`'s own idempotent update logic;
+- split the monolithic embedded HTML/CSS/JS in `scripts/config-web.py` into
+  `scripts/web/index.html`, `app.css` and `app.js`;
+- fixed a repository-wide file-mode regression (scripts losing their
+  executable bit through certain git/OneDrive workflows) and restored the
+  affected permissions;
+- `install.sh` now refuses to run when launched from the already-installed
+  target directory, or when the current shell is positioned inside it —
+  both previously invalidated the running process's working directory
+  mid-install and produced a cryptic `cmake` failure.
+
+### Security hardening
+
+- added login rate-limiting on `/api/login` (5 attempts per 5 minutes per
+  IP address, 5-minute lockout);
+- added systemd sandboxing directives to all three services (`pidecoder`,
+  `pidecoder-config`, `pidecoder-ptz`), tuned to each service's actual
+  needs — the video engine keeps a more conservative profile because of its
+  Wayland/OpenGL dependency;
+- deduplicated the PTZ movement table (pan/tilt/zoom vectors) between
+  `ptz-bridge.py` and `config-web.py` into a single definition in
+  `onvif_client.py`;
+- `/api/onvif/ptz` and `/api/onvif/preset` now derive ONVIF credentials
+  from the camera's stored RTSP URL once it is registered in
+  `cameras.json`, instead of requiring them from the browser on every
+  movement; browser-supplied credentials remain a fallback while a camera
+  is still being discovered and tested, before it has been saved;
+- fixed a credential leak: the video engine was logging the full RTSP URL —
+  including the embedded ONVIF username and password — to `journalctl` on
+  every stream load, stall, disconnect and reconnect attempt. A shared
+  `redact_credentials()` helper now masks the credentials part everywhere a
+  stream URL is logged.
+
+### Testing
+
+- added a lightweight, dependency-free C++ unit test suite (`tests/`, wired
+  into CMake and `ctest`) covering `Grid::calculate()`,
+  `LayoutStore::normalize()`/`load()`/`save()`, and the new
+  `redact_credentials()` helper;
+- the CI build job now runs `ctest` after building, failing the pipeline on
+  any regression in this logic.
 
 ## 0.9.9.5 RC2
 

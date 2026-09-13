@@ -5,7 +5,7 @@
 - Development version: **v0.9.9.5 RC3**
 - Branch: `feature/ptz-native-v0.9.9.5-rc2`
 - Base version: v0.9.9.4 RC1
-- Active phase: native PTZ field validation and release hardening
+- Active phase: field validation complete, ready to merge to `main` and tag
 
 ## Operational field state
 
@@ -48,7 +48,42 @@ service and is no longer required once RC3 is installed.
 - changing camera resolution or FPS no longer removes PTZ endpoints, tokens or presets;
 - using **Valeurs PiDecoder**, then saving and applying, preserves the native PTZ module;
 - the digital zoom percentage is moved to the top-right corner;
-- Web, installer and release-validator labels changed from RC2 to RC3.
+- Web, installer and release-validator labels changed from RC2 to RC3;
+- the PTZ movement table (pan/tilt/zoom vectors) is now defined once in
+  `onvif_client.py` and shared by `ptz-bridge.py` and `config-web.py`,
+  instead of two copies that could silently diverge;
+- `/api/onvif/ptz` and `/api/onvif/preset` now derive ONVIF credentials from
+  the camera's stored RTSP URL when it is already registered in
+  `cameras.json`, instead of requiring them from the browser on every
+  movement; the browser-supplied credentials are still used as a fallback
+  while a camera is being discovered and tested, before it has been saved;
+- a lightweight Layout/Grid unit test suite (`tests/`, `ctest`) now runs in
+  CI on every push, as a regression safety net for the mosaic/layout logic.
+
+## RC3 field validation (reboot test)
+
+Full reboot test performed on the production Raspberry Pi
+(`olympus-vss-mon1`) after installing RC3 with the fixes above:
+
+- all four services (`pidecoder`, `pidecoder-config`, `pidecoder-ptz`,
+  `pidecoder-wayland.path`) report `active` after reboot;
+- mosaic and focus video start automatically without manual action;
+- native PTZ movement (pan/tilt/zoom) and Stop behave correctly on the Axis
+  Q6074 after reboot;
+- native preset selection works after reboot;
+- applying **Valeurs PiDecoder** again, then saving and applying, still
+  preserves `ptz_xaddr`, `ptz_profile_token` and the 3 stored presets.
+
+During this validation, a real credential leak was found and fixed: the
+video engine (`src/Player.cpp`) was logging the full RTSP URL — including
+the embedded ONVIF username and password — to `journalctl` every time a
+stream loaded, stalled, disconnected, or reconnected. A shared
+`redact_credentials()` helper (`include/pidecoder/RedactUrl.hpp`,
+`src/RedactUrl.cpp`, covered by `tests/test_redact_url.cpp`) now masks the
+`user:pass@` part of any logged URL. Verified clean after rebuilding: a
+grep for the `rtsp://user:pass@` pattern across `pidecoder`,
+`pidecoder-ptz` and `pidecoder-config` logs generated since the rebuild
+returns `0` matches.
 
 ## Field performance note
 
@@ -85,14 +120,14 @@ Never commit runtime configuration or raw camera logs.
 
 ## Remaining validation before merge to main
 
-1. Reboot the Raspberry Pi with RC3 installed.
-2. Confirm all four services return `active`.
-3. Confirm mosaic and focus video start automatically.
-4. Confirm native PTZ movement works after reboot.
-5. Confirm native preset selection works after reboot.
-6. Apply **Valeurs PiDecoder** once more and confirm PTZ metadata remains present.
-7. Review runtime logs and remove or redact full credential-bearing RTSP URLs before public release.
-8. Update this file with the reboot result.
+1. ~~Reboot the Raspberry Pi with RC3 installed.~~ Done.
+2. ~~Confirm all four services return `active`.~~ Done.
+3. ~~Confirm mosaic and focus video start automatically.~~ Done.
+4. ~~Confirm native PTZ movement works after reboot.~~ Done.
+5. ~~Confirm native preset selection works after reboot.~~ Done.
+6. ~~Apply **Valeurs PiDecoder** once more and confirm PTZ metadata remains present.~~ Done.
+7. ~~Review runtime logs and remove or redact full credential-bearing RTSP URLs before public release.~~ Done — see "RC3 field validation" above.
+8. ~~Update this file with the reboot result.~~ Done.
 9. Merge the feature branch to `main`.
 10. Create the release tag only after the final validation passes.
 
