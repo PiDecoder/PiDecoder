@@ -1165,3 +1165,87 @@ def stop(x,token,c):
     _soap(x,f'{TPTZ}/Stop',f'<tptz:Stop><tptz:ProfileToken>{token}</tptz:ProfileToken><tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom></tptz:Stop>',c)
 def goto_preset(x,token,preset,c):
     _soap(x,f'{TPTZ}/GotoPreset',f'<tptz:GotoPreset><tptz:ProfileToken>{token}</tptz:ProfileToken><tptz:PresetToken>{preset}</tptz:PresetToken></tptz:GotoPreset>',c)
+
+# Table des mouvements PTZ continus (pan, tilt, zoom), partagée entre le pont
+# natif (scripts/ptz-bridge.py) et l'API Web (scripts/config-web.py) : avant,
+# chacun avait sa propre copie, avec le risque qu'elles divergent un jour
+# sans que ça saute aux yeux en relecture.
+PTZ_MOVES: dict[str, tuple[float, float, float]] = {
+    'up': (0.0, 0.5, 0.0),
+    'down': (0.0, -0.5, 0.0),
+    'left': (-0.5, 0.0, 0.0),
+    'right': (0.5, 0.0, 0.0),
+    'zoomin': (0.0, 0.0, 0.5),
+    'zoomout': (0.0, 0.0, -0.5),
+}
+
+
+def credentials_from_stream_url(uri: str) -> 'Credentials':
+    """Extrait les identifiants ONVIF intégrés dans une URL RTSP telle que
+    stockée en configuration (cameras.json: grid_url/focus_url), pour éviter
+    d'avoir à les redemander ailleurs une fois la caméra enregistrée."""
+    parsed = urlparse(str(uri or '').strip())
+
+    if parsed.scheme.lower() != 'rtsp':
+        raise ValueError("URL RTSP absente pour la caméra PTZ")
+
+    return Credentials(
+        unquote(parsed.username or ''),
+        unquote(parsed.password or ''),
+    )
+
+
+def credentials_for_ptz_camera(camera: dict) -> 'Credentials':
+    """Dérive les identifiants ONVIF d'une caméra enregistrée à partir de
+    son URL RTSP stockée (focus_url en priorité, sinon grid_url)."""
+    uri = camera.get('focus_url') or camera.get('grid_url') or ''
+    return credentials_from_stream_url(uri)
+
+
+def find_ptz_camera(
+    cameras: Any,
+    ptz_xaddr: str,
+    profile_token: str = '',
+) -> tuple[dict, str]:
+    """Retrouve, dans la liste `cameras` telle que stockée dans
+    config/cameras.json, la caméra dont les métadonnées ONVIF référencent
+    `ptz_xaddr` (et, si fourni, `profile_token`), et renvoie (camera, token
+    à utiliser). Lève ValueError si aucune caméra ne correspond."""
+    if not isinstance(cameras, list):
+        raise ValueError('La clé cameras doit contenir une liste')
+
+    ptz_xaddr = str(ptz_xaddr or '').strip()
+    profile_token = str(profile_token or '').strip()
+
+    for camera in cameras:
+        if not isinstance(camera, dict):
+            continue
+
+        metadata = camera.get('onvif', {})
+
+        if not isinstance(metadata, dict):
+            continue
+
+        stored_xaddr = str(metadata.get('ptz_xaddr', '')).strip()
+
+        if stored_xaddr != ptz_xaddr:
+            continue
+
+        stored_token = str(
+            metadata.get('ptz_profile_token')
+            or metadata.get('focus_profile_token')
+            or metadata.get('grid_profile_token')
+            or ''
+        ).strip()
+
+        token = profile_token or stored_token
+
+        if not token:
+            raise ValueError('Profil PTZ absent')
+
+        if profile_token and stored_token and profile_token != stored_token:
+            continue
+
+        return camera, token
+
+    raise ValueError('Caméra PTZ introuvable dans la configuration')

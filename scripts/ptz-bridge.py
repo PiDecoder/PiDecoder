@@ -10,18 +10,15 @@ import signal
 import socket
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
 
-from onvif_client import Credentials, continuous_move, goto_preset, stop
-
-MOVES: dict[str, tuple[float, float, float]] = {
-    "up": (0.0, 0.5, 0.0),
-    "down": (0.0, -0.5, 0.0),
-    "left": (-0.5, 0.0, 0.0),
-    "right": (0.5, 0.0, 0.0),
-    "zoomin": (0.0, 0.0, 0.5),
-    "zoomout": (0.0, 0.0, -0.5),
-}
+from onvif_client import (
+    PTZ_MOVES,
+    continuous_move,
+    credentials_for_ptz_camera,
+    find_ptz_camera,
+    goto_preset,
+    stop,
+)
 
 RUNNING = True
 
@@ -46,70 +43,6 @@ def load_document(root: Path) -> dict:
     return document
 
 
-def credentials_from_camera(camera: dict) -> Credentials:
-    uri = str(
-        camera.get("focus_url")
-        or camera.get("grid_url")
-        or ""
-    ).strip()
-
-    parsed = urlsplit(uri)
-
-    if parsed.scheme.lower() != "rtsp":
-        raise ValueError("URL RTSP absente pour la caméra PTZ")
-
-    return Credentials(
-        unquote(parsed.username or ""),
-        unquote(parsed.password or ""),
-    )
-
-
-def find_camera(
-    document: dict,
-    ptz_xaddr: str,
-    profile_token: str,
-) -> tuple[dict, str]:
-    cameras = document.get("cameras", [])
-
-    if not isinstance(cameras, list):
-        raise ValueError("La clé cameras doit contenir une liste")
-
-    for camera in cameras:
-        if not isinstance(camera, dict):
-            continue
-
-        metadata = camera.get("onvif", {})
-
-        if not isinstance(metadata, dict):
-            continue
-
-        stored_xaddr = str(
-            metadata.get("ptz_xaddr", "")
-        ).strip()
-
-        if stored_xaddr != ptz_xaddr:
-            continue
-
-        stored_token = str(
-            metadata.get("ptz_profile_token")
-            or metadata.get("focus_profile_token")
-            or metadata.get("grid_profile_token")
-            or ""
-        ).strip()
-
-        token = profile_token or stored_token
-
-        if not token:
-            raise ValueError("Profil PTZ absent")
-
-        if profile_token and stored_token and profile_token != stored_token:
-            continue
-
-        return camera, token
-
-    raise ValueError("Caméra PTZ introuvable dans la configuration")
-
-
 def execute(root: Path, request: dict) -> None:
     action = str(request.get("action", "")).strip().lower()
     ptz_xaddr = str(request.get("ptz_xaddr", "")).strip()
@@ -117,19 +50,19 @@ def execute(root: Path, request: dict) -> None:
         request.get("profile_token", "")
     ).strip()
 
-    if action not in MOVES and action not in {"stop", "preset"}:
+    if action not in PTZ_MOVES and action not in {"stop", "preset"}:
         raise ValueError("Commande PTZ inconnue")
 
     if not ptz_xaddr:
         raise ValueError("Adresse PTZ absente")
 
     document = load_document(root)
-    camera, token = find_camera(
-        document,
+    camera, token = find_ptz_camera(
+        document.get("cameras", []),
         ptz_xaddr,
         profile_token,
     )
-    credentials = credentials_from_camera(camera)
+    credentials = credentials_for_ptz_camera(camera)
 
     if action == "preset":
         preset_token = str(
@@ -155,7 +88,7 @@ def execute(root: Path, request: dict) -> None:
         )
         return
 
-    pan, tilt, zoom = MOVES[action]
+    pan, tilt, zoom = PTZ_MOVES[action]
     continuous_move(
         ptz_xaddr,
         token,
