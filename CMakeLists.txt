@@ -35,6 +35,7 @@ add_executable(
     src/Renderer.cpp
     src/Grid.cpp
     src/Layout.cpp
+    src/RedactUrl.cpp
 )
 
 target_include_directories(
@@ -80,3 +81,17 @@ install(
     TARGETS pidecoder
     RUNTIME DESTINATION bin
 )
+
+# Garde-fou : petite suite de tests unitaires pour Layout/Grid (logique pure,
+# sans SDL2/mpv). Activée par défaut mais désactivable si besoin, par ex.
+# pour accélérer une compilation sur le Pi.
+option(
+    PIDECODER_BUILD_TESTS
+    "Compiler les tests unitaires (Layout/Grid)"
+    ON
+)
+
+if(PIDECODER_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

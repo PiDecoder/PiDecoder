@@ -9,6 +9,31 @@ User=@SERVICE_USER@
 Group=@SERVICE_GROUP@
 @SUPPLEMENTARY_GROUPS@
 WorkingDirectory=@TARGET@
+
+# Durcissement systemd. Pas de SystemCallFilter ni MemoryDenyWriteExecute ici :
+# ce service touche l'affichage (SDL2/OpenGL/Wayland) et un filtre trop strict
+# pourrait casser le rendu vidéo sans qu'on puisse le tester sans le matériel.
+# Pas de ProtectHome non plus : cette option rend /run/user/ vide, qui est
+# justement là où vit le socket Wayland (@WAYLAND_DISPLAY@) dont ce service
+# a besoin pour se connecter à l'affichage.
+# ProtectSystem=full (et non strict) par prudence : "strict" passe /run en
+# lecture seule, et on préfère ne prendre aucun risque sur ce chemin pour le
+# service qui gère l'affichage. "full" protège déjà /usr, /boot et /etc.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
 Environment=PIDECODER_USER=@SERVICE_USER@
 Environment=XDG_RUNTIME_DIR=/run/user/@SERVICE_UID@
 Environment=WAYLAND_DISPLAY=@WAYLAND_DISPLAY@

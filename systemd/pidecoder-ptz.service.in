@@ -11,6 +11,26 @@ Group=@SERVICE_GROUP@
 WorkingDirectory=@TARGET@
 RuntimeDirectory=pidecoder
 RuntimeDirectoryMode=0750
+
+# Durcissement systemd. Service Python pur (pas de rendu GPU) : filtre de
+# syscalls et interdiction mémoire write+exec activés sans risque particulier.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=true
 ExecStart=/usr/bin/python3 @TARGET@/scripts/ptz-bridge.py --root @TARGET@ --socket /run/pidecoder/ptz.sock
 Restart=on-failure
 RestartSec=2

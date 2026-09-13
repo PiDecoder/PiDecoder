@@ -7,9 +7,37 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
-from onvif_client import Credentials, continuous_move, discover, goto_preset, get_stream_uri, identify_device, inspect_device, stop
+from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_for_ptz_camera, discover, find_ptz_camera, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 
 VERSION='0.9.9.5-rc3'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+
+# Anti-bruteforce sur /api/login : au-delà de LOGIN_MAX_ATTEMPTS échecs pour une
+# même adresse IP en LOGIN_WINDOW secondes, l'IP est bloquée LOGIN_LOCKOUT
+# secondes. État en mémoire seulement (remis à zéro au redémarrage du service),
+# suffisant pour une interface d'administration destinée à rester sur un réseau
+# de confiance (voir l'avertissement HTTP dans docs/installation.md).
+LOGIN_ATTEMPTS={}
+LOGIN_MAX_ATTEMPTS=5
+LOGIN_WINDOW=300
+LOGIN_LOCKOUT=300
+
+def login_blocked(ip):
+    with LOCK:
+        _,locked_until=LOGIN_ATTEMPTS.get(ip,([],0))
+        return bool(locked_until) and locked_until>time.time()
+
+def register_login_failure(ip):
+    now=time.time()
+    with LOCK:
+        attempts,_=LOGIN_ATTEMPTS.get(ip,([],0))
+        attempts=[t for t in attempts if now-t<LOGIN_WINDOW]
+        attempts.append(now)
+        locked_until=now+LOGIN_LOCKOUT if len(attempts)>=LOGIN_MAX_ATTEMPTS else 0
+        LOGIN_ATTEMPTS[ip]=([] if locked_until else attempts,locked_until)
+
+def clear_login_failures(ip):
+    with LOCK:
+        LOGIN_ATTEMPTS.pop(ip,None)
 
 WEB_DIR=Path(__file__).resolve().parent/'web'
 STATIC_FILES={
@@ -198,6 +226,25 @@ def normalize_layout(x,n):
         'camera_order':order,
         'placements':placements,
     }
+
+def credentials_for_ptz_request(root, d, ptz_xaddr, profile_token):
+    """Réutilise les identifiants déjà enregistrés pour une caméra PTZ
+    connue de la configuration (dérivés de son URL RTSP stockée), pour
+    éviter qu'ils ne transitent depuis le navigateur à chaque mouvement.
+    Si la caméra n'est pas encore enregistrée (test PTZ pendant la
+    configuration initiale, avant de cliquer sur "Enregistrer"), on
+    retombe sur les identifiants transmis par le formulaire, seule
+    source disponible à ce stade."""
+    try:
+        document = load(root / 'config/cameras.json', {'cameras': []})
+        camera, _ = find_ptz_camera(
+            document.get('cameras', []),
+            ptz_xaddr,
+            profile_token,
+        )
+        return credentials_for_ptz_camera(camera)
+    except ValueError:
+        return Credentials(str(d.get('username', '')), str(d.get('password', '')))
 
 def rtsp_with_credentials(uri, username, password):
     parsed = urlsplit(str(uri).strip())
@@ -963,8 +1010,14 @@ class H(BaseHTTPRequestHandler):
         p=urlparse(self.path).path
         try:
             if p=='/api/login':
+                ip=self.client_address[0]
+                if login_blocked(ip):
+                    return self.j({'ok':False,'error':'Trop de tentatives, réessaie dans quelques minutes'},429)
                 d=self.body();a=self.authdoc()
-                if not(hmac.compare_digest(str(d.get('username','')),str(a.get('username',''))) and verify(str(d.get('password','')),a)):return self.j({'ok':False,'error':'Mot de passe incorrect'},401)
+                if not(hmac.compare_digest(str(d.get('username','')),str(a.get('username',''))) and verify(str(d.get('password','')),a)):
+                    register_login_failure(ip)
+                    return self.j({'ok':False,'error':'Mot de passe incorrect'},401)
+                clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
                 return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/')
@@ -1145,13 +1198,13 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/onvif/inspect':
                 d=self.body();device=inspect_device(str(d.get('xaddr','')),str(d.get('username','')),str(d.get('password','')));return self.j({'ok':True,'device':device})
             if p=='/api/onvif/ptz':
-                d=self.body();creds=Credentials(str(d.get('username','')),str(d.get('password','')));action=str(d.get('action','stop'));xaddr=str(d.get('ptz_xaddr',''));token=str(d.get('profile_token',''));moves={'up':(0,0.5,0),'down':(0,-0.5,0),'left':(-0.5,0,0),'right':(0.5,0,0),'zoomin':(0,0,0.5),'zoomout':(0,0,-0.5)}
+                d=self.body();action=str(d.get('action','stop'));xaddr=str(d.get('ptz_xaddr',''));token=str(d.get('profile_token',''));creds=credentials_for_ptz_request(self.server.root,d,xaddr,token)
                 if action=='stop':stop(xaddr,token,creds)
-                elif action in moves:continuous_move(xaddr,token,creds,*moves[action])
+                elif action in PTZ_MOVES:continuous_move(xaddr,token,creds,*PTZ_MOVES[action])
                 else:raise ValueError('Commande PTZ inconnue')
                 return self.j({'ok':True})
             if p=='/api/onvif/preset':
-                d=self.body();goto_preset(str(d.get('ptz_xaddr','')),str(d.get('profile_token','')),str(d.get('preset_token','')),Credentials(str(d.get('username','')),str(d.get('password',''))));return self.j({'ok':True})
+                d=self.body();xaddr=str(d.get('ptz_xaddr',''));token=str(d.get('profile_token',''));creds=credentials_for_ptz_request(self.server.root,d,xaddr,token);goto_preset(xaddr,token,str(d.get('preset_token','')),creds);return self.j({'ok':True})
             if p=='/api/config':
                 d=self.body();cams=[sanitize(c) for c in d.get('cameras',[]) if isinstance(c,dict)]
                 if not cams:raise ValueError('Au moins une caméra est nécessaire')
