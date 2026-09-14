@@ -157,7 +157,14 @@ async function api(path,opt={}){
 
 function showLogin(){app.classList.add('hidden');login.classList.remove('hidden')}
 async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');await loadCfg();sysInfo()}
-async function boot(){let s=await api('/api/session');s.authenticated?showApp():showLogin()}
+let currentVersion='';
+function updateVersionLabel(){
+  if(!currentVersion)return;
+  const label=t('header.version',{version:currentVersion});
+  if(loginVersion)loginVersion.textContent=label;
+  if(appVersion)appVersion.textContent=label;
+}
+async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();s.authenticated?showApp():showLogin()}
 async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
 function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}}
@@ -2084,6 +2091,7 @@ window.I18N.applyTranslations();
 
 window.onLanguageChange=function(){
   window.I18N.applyTranslations();
+  updateVersionLabel();
 
   if(!app.classList.contains('hidden')){
     render();

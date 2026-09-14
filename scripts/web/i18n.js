@@ -20,6 +20,7 @@
       'login.submit':'Connexion',
 
       'header.engine_unknown':'État inconnu',
+      'header.version':'Administration v{version}',
       'shortcuts.title':'Raccourcis clavier',
       'common.save':'Sauvegarder',
       'common.apply':'Appliquer',
@@ -252,6 +253,7 @@
       'login.submit':'Sign in',
 
       'header.engine_unknown':'Unknown status',
+      'header.version':'Administration v{version}',
       'shortcuts.title':'Keyboard shortcuts',
       'common.save':'Save',
       'common.apply':'Apply',

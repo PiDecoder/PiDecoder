@@ -820,8 +820,8 @@ def diagnostics_payload(root, log_lines=50):
 
     payload={
         'ok':True,
-        'version':'0.9.9.5 RC2',
-        'release':'Release Candidate',
+        'version':VERSION,
+        'release':'Release Candidate' if '-rc' in VERSION.lower() else 'Stable',
         'system':{
             'hostname':platform.node(),
             'kernel':platform.release(),
