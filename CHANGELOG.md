@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.0.0
+
+### English localization
+
+- the Web interface is now bilingual (FR/EN), selectable from a toggle on
+  the login screen and in the app header, instead of French-only;
+- language choice is stored in a `pidecoder_lang` cookie shared between the
+  browser and the server, plus a new `POST /api/language` endpoint;
+- `scripts/web/i18n.js` (new): dependency-free FR/EN translation engine for
+  the frontend (219 keys, full FR/EN parity verified by an automated
+  cross-check against every `t()` call site);
+- `scripts/i18n.py` (new): FR/EN message dictionary for the backend's
+  HTTP-facing error/message strings (25 keys, same parity check);
+- validated live on the Raspberry Pi, in both languages, across every Web
+  UI tab; wording adjusted for a few keys after review (`sys.hint`,
+  `onvif.hint`, `notifications.none`, `diag.no_logs`);
+- known limitation, deliberately deferred: `onvif_client.py`'s detailed
+  ONVIF failure messages and the System tab's backend-sourced service
+  state words are not yet translated — see `docs/PROJECT-STATE.md`.
+
+### Bug fixes found during localization testing
+
+- the header/login version label was a static piece of HTML text instead
+  of coming from `/api/session`; it now updates dynamically and reflects
+  the real running version;
+- the Diagnostics tab's `version` and `release` fields were hardcoded to
+  `'0.9.9.5 RC2'` / `'Release Candidate'` inside `diagnostics_payload()`,
+  disconnected from the actual version in use since RC2; they now derive
+  from the real `VERSION` constant, with the release label classified from
+  its `-dev`/`-rc`/`-beta`/`-alpha` suffix (or `Stable` when none).
+
+### Release
+
+- first stable public release: version finalized to `1.0.0` (from the
+  `1.0.0-dev` marker used during the localization work) in
+  `scripts/config-web.py` (`VERSION`), `CMakeLists.txt` /
+  `include/pidecoder/Version.hpp.in` (native engine's on-screen overlay),
+  and `scripts/install.sh` (`INSTALLER_VERSION`); `scripts/validate-release.sh`
+  updated to match;
+- the README/CONTRIBUTING/SECURITY public-launch documentation pass is
+  tracked separately and is not required to hold up this release.
+
 ## 0.9.9.5 RC3
 
 ### Native PTZ field hotfix

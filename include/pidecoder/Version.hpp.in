@@ -1,5 +1,2 @@
 #pragma once
-// Suffixe "-dev" ajouté manuellement pendant les travaux du jalon v1.0 (voir
-// docs/PROJECT-STATE.md) ; à retirer avant le tag de sortie final 1.0.0,
-// pour que ce fichier redevienne "@PROJECT_VERSION@" tout court.
-#define PIDECODER_VERSION_STRING "@PROJECT_VERSION@-dev"
+#define PIDECODER_VERSION_STRING "@PROJECT_VERSION@"
