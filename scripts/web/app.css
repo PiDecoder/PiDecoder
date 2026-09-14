@@ -89,6 +89,29 @@
   .diag-grid{grid-template-columns:1fr}
 }
 
+.lang-switch{
+  display:flex;
+  gap:2px;
+  background:#1b212b;
+  border-radius:9px;
+  padding:2px;
+  align-self:center
+}
+.lang-option{
+  background:transparent;
+  color:var(--m);
+  padding:6px 10px;
+  border-radius:7px;
+  font-size:12px
+}
+.lang-option.active{
+  background:var(--b);
+  color:#fff
+}
+#login .lang-switch{
+  justify-content:center;
+  margin-top:14px
+}
 .shortcut-button{
   width:44px;
   min-width:44px;

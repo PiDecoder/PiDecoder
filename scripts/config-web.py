@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_for_ptz_camera, discover, find_ptz_camera, goto_preset, get_stream_uri, identify_device, inspect_device, stop
+from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
 
 VERSION='0.9.9.5-rc3'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
@@ -44,6 +45,7 @@ STATIC_FILES={
     '/':('index.html','text/html;charset=utf-8'),
     '/app.js':('app.js','application/javascript;charset=utf-8'),
     '/app.css':('app.css','text/css;charset=utf-8'),
+    '/i18n.js':('i18n.js','application/javascript;charset=utf-8'),
 }
 
 def owner():
@@ -246,11 +248,11 @@ def credentials_for_ptz_request(root, d, ptz_xaddr, profile_token):
     except ValueError:
         return Credentials(str(d.get('username', '')), str(d.get('password', '')))
 
-def rtsp_with_credentials(uri, username, password):
+def rtsp_with_credentials(uri, username, password, lang=DEFAULT_LANG):
     parsed = urlsplit(str(uri).strip())
 
     if parsed.scheme.lower() != 'rtsp' or not parsed.hostname:
-        raise ValueError('URI RTSP ONVIF invalide')
+        raise ValueError(i18n_t('onvif.rtsp_uri_invalid', lang))
 
     host = parsed.hostname
 
@@ -279,9 +281,9 @@ def rtsp_with_credentials(uri, username, password):
     ))
 
 
-def sanitize(c):
+def sanitize(c,lang=DEFAULT_LANG):
     name=str(c.get('name','Caméra')).strip() or 'Caméra'; g=str(c.get('grid_url','')).strip(); f=str(c.get('focus_url','')).strip() or g
-    if not g: raise ValueError(f'URL mosaïque absente pour {name}')
+    if not g: raise ValueError(i18n_t('camera.grid_url_missing',lang,name=name))
     result={'name':name,'enabled':bool(c.get('enabled',True)),'grid_url':g,'focus_url':f}
     if isinstance(c.get('onvif'),dict):result['onvif']=c['onvif']
     return result
@@ -945,6 +947,8 @@ class H(BaseHTTPRequestHandler):
     def authdoc(self): return load(self.server.auth,{})
     def token(self):
         c=SimpleCookie(); c.load(self.headers.get('Cookie','')); m=c.get('pidecoder_session'); return m.value if m else None
+    def lang(self):
+        return lang_from_cookie_header(self.headers.get('Cookie',''))
     def authed(self):
         t=self.token(); now=time.time()
         if not t:return False
@@ -954,7 +958,7 @@ class H(BaseHTTPRequestHandler):
         return True
     def need(self):
         if self.authed():return True
-        self.j({'ok':False,'error':'Authentification requise'},401);return False
+        self.j({'ok':False,'error':i18n_t('auth.required',self.lang())},401);return False
     def do_GET(self):
         p=urlparse(self.path).path
         if p in STATIC_FILES:
@@ -988,9 +992,10 @@ class H(BaseHTTPRequestHandler):
                 return self.j(
                     {
                         'ok':False,
-                        'error':(
-                            'Impossible de générer les diagnostics : '
-                            + str(error)
+                        'error':i18n_t(
+                            'diagnostics.failed',
+                            self.lang(),
+                            error=str(error),
                         ),
                     },
                     500,
@@ -1012,11 +1017,11 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/login':
                 ip=self.client_address[0]
                 if login_blocked(ip):
-                    return self.j({'ok':False,'error':'Trop de tentatives, réessaie dans quelques minutes'},429)
+                    return self.j({'ok':False,'error':i18n_t('login.too_many_attempts',self.lang())},429)
                 d=self.body();a=self.authdoc()
                 if not(hmac.compare_digest(str(d.get('username','')),str(a.get('username',''))) and verify(str(d.get('password','')),a)):
                     register_login_failure(ip)
-                    return self.j({'ok':False,'error':'Mot de passe incorrect'},401)
+                    return self.j({'ok':False,'error':i18n_t('login.invalid_password',self.lang())},401)
                 clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
@@ -1024,6 +1029,10 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/logout':
                 with LOCK:SESSIONS.pop(self.token(),None)
                 return self.j({'ok':True})
+            if p=='/api/language':
+                d=self.body();value=str(d.get('lang','')).strip().lower()
+                if value not in SUPPORTED_LANGS:value=DEFAULT_LANG
+                return self.j({'ok':True,'lang':value},cookie=f'pidecoder_lang={value}; SameSite=Lax; Path=/; Max-Age=31536000')
             if not self.need():return
             if p=='/api/onvif/discover':
                 d=self.body();result=discover(float(d.get('timeout',5)))
@@ -1083,18 +1092,20 @@ class H(BaseHTTPRequestHandler):
                 information=d.get('information',{}) if isinstance(d.get('information'),dict) else {}
 
                 if not media_xaddr or not grid_token or not focus_token:
-                    raise ValueError('Service Media ou profil mosaïque/plein écran absent')
+                    raise ValueError(i18n_t('onvif.media_or_profile_missing',self.lang()))
 
                 credentials=Credentials(username,password)
                 grid_uri=rtsp_with_credentials(
                     get_stream_uri(media_xaddr,grid_token,credentials),
                     username,
                     password,
+                    self.lang(),
                 )
                 focus_uri=rtsp_with_credentials(
                     get_stream_uri(media_xaddr,focus_token,credentials),
                     username,
                     password,
+                    self.lang(),
                 )
 
                 manufacturer=str(information.get('Manufacturer','')).strip()
@@ -1149,16 +1160,18 @@ class H(BaseHTTPRequestHandler):
 
                 removed_duplicates=0
 
+                lang=self.lang()
+
                 if existing_index is None:
-                    cameras.append(sanitize(camera))
-                    action='ajoutée'
+                    cameras.append(sanitize(camera,lang))
+                    action=i18n_t('camera.manage.action_added',lang)
                 else:
                     previous=cameras[existing_index]
 
                     if isinstance(previous,dict):
                         camera['enabled']=bool(previous.get('enabled',True))
 
-                    cameras[existing_index]=sanitize(camera)
+                    cameras[existing_index]=sanitize(camera,lang)
 
                     for duplicate_index in sorted(
                         matching_indexes[1:],
@@ -1170,7 +1183,7 @@ class H(BaseHTTPRequestHandler):
                         del cameras[duplicate_index]
                         removed_duplicates += 1
 
-                    action='mise à jour'
+                    action=i18n_t('camera.manage.action_updated',lang)
 
                 write_json(cp,{'cameras':cameras})
 
@@ -1183,14 +1196,20 @@ class H(BaseHTTPRequestHandler):
                 return self.j({
                     'ok':True,
                     'updated':existing_index is not None,
-                    'message':(
-                        f'{name} {action}. '
-                        + (
-                            f'{removed_duplicates} doublon(s) supprimé(s). '
+                    'message':i18n_t(
+                        'camera.manage.message',
+                        lang,
+                        name=name,
+                        action=action,
+                        duplicates=(
+                            i18n_t(
+                                'camera.manage.duplicates',
+                                lang,
+                                count=removed_duplicates,
+                            )
                             if removed_duplicates
                             else ''
-                        )
-                        + 'Clique sur Appliquer pour charger les flux.'
+                        ),
                     ),
                     'removed_duplicates':removed_duplicates,
                     'camera':camera,
@@ -1201,13 +1220,13 @@ class H(BaseHTTPRequestHandler):
                 d=self.body();action=str(d.get('action','stop'));xaddr=str(d.get('ptz_xaddr',''));token=str(d.get('profile_token',''));creds=credentials_for_ptz_request(self.server.root,d,xaddr,token)
                 if action=='stop':stop(xaddr,token,creds)
                 elif action in PTZ_MOVES:continuous_move(xaddr,token,creds,*PTZ_MOVES[action])
-                else:raise ValueError('Commande PTZ inconnue')
+                else:raise ValueError(i18n_t('ptz.unknown_command',self.lang()))
                 return self.j({'ok':True})
             if p=='/api/onvif/preset':
                 d=self.body();xaddr=str(d.get('ptz_xaddr',''));token=str(d.get('profile_token',''));creds=credentials_for_ptz_request(self.server.root,d,xaddr,token);goto_preset(xaddr,token,str(d.get('preset_token','')),creds);return self.j({'ok':True})
             if p=='/api/config':
-                d=self.body();cams=[sanitize(c) for c in d.get('cameras',[]) if isinstance(c,dict)]
-                if not cams:raise ValueError('Au moins une caméra est nécessaire')
+                d=self.body();cams=[sanitize(c,self.lang()) for c in d.get('cameras',[]) if isinstance(c,dict)]
+                if not cams:raise ValueError(i18n_t('config.at_least_one_camera',self.lang()))
                 b=self.server.root/'config/backups';b.mkdir(parents=True,exist_ok=True)
                 cp=self.server.root/'config/cameras.json';lp=self.server.root/'config/layout.json'
                 cams=merge_existing_onvif(cams,load(cp,{'cameras':[]}).get('cameras',[]))
@@ -1216,15 +1235,15 @@ class H(BaseHTTPRequestHandler):
                 write_json(cp,{'cameras':cams});write_json(lp,normalize_layout(d.get('layout',{}),len(cams)));return self.j({'ok':True})
             if p=='/api/apply':
                 exists=subprocess.run(['systemctl','cat','pidecoder.service'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
-                if not exists:return self.j({'ok':True,'applied':False,'message':'Configuration sauvegardée. Le moteur PiDecoder doit être redémarré manuellement.'})
+                if not exists:return self.j({'ok':True,'applied':False,'message':i18n_t('apply.saved_manual_restart',self.lang())})
                 r=subprocess.run(['systemctl','restart','pidecoder.service'],capture_output=True,text=True,timeout=15)
-                if r.returncode:raise RuntimeError(r.stderr.strip() or 'Échec du redémarrage')
-                return self.j({'ok':True,'applied':True,'message':'Configuration appliquée. PiDecoder a redémarré.'})
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('apply.restart_failed',self.lang()))
+                return self.j({'ok':True,'applied':True,'message':i18n_t('apply.applied_restarted',self.lang())})
             if p=='/api/import':
                 d=self.body()
-                if d.get('format')!='pidecoder-config':raise ValueError('Fichier PiDecoder invalide')
-                cams=[sanitize(c) for c in d.get('cameras',[]) if isinstance(c,dict)]
-                if not cams:raise ValueError('Le fichier ne contient aucune caméra valide')
+                if d.get('format')!='pidecoder-config':raise ValueError(i18n_t('import.invalid_file',self.lang()))
+                cams=[sanitize(c,self.lang()) for c in d.get('cameras',[]) if isinstance(c,dict)]
+                if not cams:raise ValueError(i18n_t('import.no_valid_camera',self.lang()))
                 lay=normalize_layout(d.get('layout',{}),len(cams))
                 b=self.server.root/'config/backups';b.mkdir(parents=True,exist_ok=True)
                 stamp=time.strftime('%Y%m%d-%H%M%S')
@@ -1232,29 +1251,30 @@ class H(BaseHTTPRequestHandler):
                 if cp.exists():shutil.copy2(cp,b/f'cameras.json.before-import-{stamp}')
                 if lp.exists():shutil.copy2(lp,b/f'layout.json.before-import-{stamp}')
                 write_json(cp,{'cameras':cams});write_json(lp,lay)
-                return self.j({'ok':True,'message':'Configuration importée'})
+                return self.j({'ok':True,'message':i18n_t('import.imported',self.lang())})
             if p=='/api/change-password':
                 d=self.body();a=self.authdoc()
                 current=str(d.get('current_password',''))
                 new_password=str(d.get('new_password',''))
                 confirmation=str(d.get('confirm_password',''))
+                lang=self.lang()
 
                 if not verify(current,a):
-                    raise ValueError('Mot de passe actuel incorrect')
+                    raise ValueError(i18n_t('password.current_incorrect',lang))
 
                 if not new_password or not confirmation:
                     raise ValueError(
-                        'Le nouveau mot de passe doit être saisi deux fois'
+                        i18n_t('password.must_be_typed_twice',lang)
                     )
 
                 if len(new_password)<8:
                     raise ValueError(
-                        'Le nouveau mot de passe doit contenir au moins 8 caractères'
+                        i18n_t('password.too_short',lang)
                     )
 
                 if new_password!=confirmation:
                     raise ValueError(
-                        'Les mots de passe ne correspondent pas'
+                        i18n_t('password.mismatch',lang)
                     )
 
                 set_auth(
@@ -1268,11 +1288,11 @@ class H(BaseHTTPRequestHandler):
 
                 return self.j({
                     'ok':True,
-                    'message':'Mot de passe modifié'
+                    'message':i18n_t('password.changed',lang)
                 })
             self.send_error(404)
         except ValueError as e:self.j({'ok':False,'error':str(e)},400)
-        except Exception as e:self.j({'ok':False,'error':'Erreur serveur : '+str(e)},500)
+        except Exception as e:self.j({'ok':False,'error':i18n_t('server.error',self.lang(),error=str(e))},500)
     def log_message(self,fmt,*args):print('[config-web] '+fmt%args)
 
 def main():

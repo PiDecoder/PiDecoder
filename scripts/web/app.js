@@ -2,6 +2,7 @@ let cfg={cameras:[],layout:{}},drag=null,timer=null;
 const NOTIFICATION_LIMIT=5;
 let notificationItems=[];
 let notificationUnread=0;
+const t=(key,vars)=>window.I18N.t(key,vars);
 
 function notificationTime(){
   return new Intl.DateTimeFormat(
@@ -15,7 +16,7 @@ function renderNotificationHistory(){
 
   if(!notificationItems.length){
     notificationList.innerHTML=
-      '<div class="notification-empty">Aucune notification récente</div>';
+      `<div class="notification-empty">${esc(t('notifications.none'))}</div>`;
   }else{
     notificationItems.forEach(item=>{
       const row=document.createElement('div');
@@ -127,8 +128,8 @@ async function api(path,opt={}){
       ok:false,
       error:
         response.status===404
-          ? 'Fonction indisponible sur cette version du serveur'
-          : `Réponse serveur invalide (${response.status})`
+          ? t('api.unavailable')
+          : t('api.invalid_response',{status:response.status})
     };
 
     console.error(
@@ -140,15 +141,15 @@ async function api(path,opt={}){
 
   if(response.status===401){
     if(path==='/api/login'){
-      throw Error(data.error||'Mot de passe incorrect');
+      throw Error(data.error||t('login.error_fallback'));
     }
 
     showLogin();
-    throw Error('Session expirée');
+    throw Error(t('session.expired'));
   }
 
   if(!response.ok||data.ok===false){
-    throw Error(data.error||'Erreur serveur');
+    throw Error(data.error||t('api.server_error_fallback'));
   }
 
   return data;
@@ -164,11 +165,11 @@ async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.colu
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
 function build(b,w,h,f,orig){if(!b.host)return orig;let a=b.user?encodeURIComponent(b.user)+(b.pwd?':'+encodeURIComponent(b.pwd):'')+'@':'',p=b.port?':'+b.port:'',path=b.path.startsWith('/')?b.path:'/'+b.path,q=new URLSearchParams();try{q=new URL(orig).searchParams}catch{}if(w&&h)q.set('resolution',w+'x'+h);else q.delete('resolution');if(f)q.set('fps',f);else q.delete('fps');return `rtsp://${a}${b.host}${p}${path}${q.toString()?'?'+q.toString():''}`}
-function render(){list.innerHTML='';cfg.cameras.forEach((c,i)=>{let g=parse(c.grid_url),f=parse(c.focus_url),b=g.host?g:f,d=document.createElement('div');d.className='camera';d.innerHTML=`<div class="head"><span class="handle" draggable="true">☰</span><span class="title">${esc(c.name)}</span><label><input class="en" type="checkbox" style="width:auto" ${c.enabled!==false?'checked':''}> active</label><button class="danger del">Supprimer</button></div><div class="grid"><div class="s4"><label>Nom</label><input class="name" value="${esc(c.name)}"></div><div class="s4"><label>Adresse IP</label><input class="host" value="${esc(b.host)}"></div><div class="s4"><label>Port RTSP</label><input class="port" type="number" value="${esc(b.port)}"></div><div class="s4"><label>Utilisateur</label><input class="user" value="${esc(b.user)}"></div><div class="s4"><label>Mot de passe</label><div class="pass"><input class="pwd" type="password" value="${esc(b.pwd)}"><button class="secondary eye" type="button">👁</button></div></div><div class="s4"><label>Chemin RTSP</label><input class="path" value="${esc(b.path)}"></div><div class="s6"><label>Résolution mosaïque</label><div class="pair"><input class="gw" type="number" value="${esc(g.w)}" placeholder="640"><span>×</span><input class="gh" type="number" value="${esc(g.h)}" placeholder="360"></div></div><div class="s3"><label>FPS mosaïque</label><input class="gf" type="number" value="${esc(g.fps)}" placeholder="12"></div><div class="s3"><label>&nbsp;</label><button class="secondary def">Valeurs PiDecoder</button></div><div class="s6"><label>Résolution plein écran</label><div class="pair"><input class="fw" type="number" value="${esc(f.w)}" placeholder="1920"><span>×</span><input class="fh" type="number" value="${esc(f.h)}" placeholder="1080"></div></div><div class="s3"><label>FPS plein écran</label><input class="ff" type="number" value="${esc(f.fps)}" placeholder="25"></div><div class="s12"><details><summary>URL avancées / mode manuel</summary><div class="field"><label>URL mosaïque</label><input class="gu" value="${esc(c.grid_url)}"></div><div class="field"><label>URL plein écran</label><input class="fu" value="${esc(c.focus_url)}"></div><div class="muted">Adresse vide = les URL manuelles sont conservées.</div></details></div></div>`;
+function render(){list.innerHTML='';cfg.cameras.forEach((c,i)=>{let g=parse(c.grid_url),f=parse(c.focus_url),b=g.host?g:f,d=document.createElement('div');d.className='camera';d.innerHTML=`<div class="head"><span class="handle" draggable="true">☰</span><span class="title">${esc(c.name)}</span><label><input class="en" type="checkbox" style="width:auto" ${c.enabled!==false?'checked':''}> ${esc(t('cams.active'))}</label><button class="danger del">${esc(t('cams.delete'))}</button></div><div class="grid"><div class="s4"><label>${esc(t('cams.name'))}</label><input class="name" value="${esc(c.name)}"></div><div class="s4"><label>${esc(t('cams.ip_address'))}</label><input class="host" value="${esc(b.host)}"></div><div class="s4"><label>${esc(t('cams.rtsp_port'))}</label><input class="port" type="number" value="${esc(b.port)}"></div><div class="s4"><label>${esc(t('common.username'))}</label><input class="user" value="${esc(b.user)}"></div><div class="s4"><label>${esc(t('common.password'))}</label><div class="pass"><input class="pwd" type="password" value="${esc(b.pwd)}"><button class="secondary eye" type="button">👁</button></div></div><div class="s4"><label>${esc(t('cams.rtsp_path'))}</label><input class="path" value="${esc(b.path)}"></div><div class="s6"><label>${esc(t('cams.grid_resolution'))}</label><div class="pair"><input class="gw" type="number" value="${esc(g.w)}" placeholder="640"><span>×</span><input class="gh" type="number" value="${esc(g.h)}" placeholder="360"></div></div><div class="s3"><label>${esc(t('cams.grid_fps'))}</label><input class="gf" type="number" value="${esc(g.fps)}" placeholder="12"></div><div class="s3"><label>&nbsp;</label><button class="secondary def">${esc(t('cams.default_values'))}</button></div><div class="s6"><label>${esc(t('cams.focus_resolution'))}</label><div class="pair"><input class="fw" type="number" value="${esc(f.w)}" placeholder="1920"><span>×</span><input class="fh" type="number" value="${esc(f.h)}" placeholder="1080"></div></div><div class="s3"><label>${esc(t('cams.focus_fps'))}</label><input class="ff" type="number" value="${esc(f.fps)}" placeholder="25"></div><div class="s12"><details><summary>${esc(t('cams.advanced_summary'))}</summary><div class="field"><label>${esc(t('cams.grid_url_label'))}</label><input class="gu" value="${esc(c.grid_url)}"></div><div class="field"><label>${esc(t('cams.focus_url_label'))}</label><input class="fu" value="${esc(c.focus_url)}"></div><div class="muted">${esc(t('cams.manual_url_hint'))}</div></details></div></div>`;
 let h=d.querySelector('.handle');h.ondragstart=e=>{sync();drag=i;e.dataTransfer.effectAllowed='move';d.style.opacity='.45'};h.ondragend=()=>{drag=null;d.style.opacity='1'};d.ondragover=e=>{if(drag!==null)e.preventDefault()};d.ondrop=e=>{if(drag===null)return;e.preventDefault();let m=cfg.cameras.splice(drag,1)[0];cfg.cameras.splice(i,0,m);drag=null;render()};d.querySelector('.del').onclick=()=>{sync();cfg.cameras.splice(i,1);render();renderMosaic()};d.querySelector('.eye').onclick=()=>{let x=d.querySelector('.pwd');x.type=x.type==='password'?'text':'password'};d.querySelector('.def').onclick=()=>{d.querySelector('.gw').value=640;d.querySelector('.gh').value=360;d.querySelector('.gf').value=12;d.querySelector('.fw').value=1920;d.querySelector('.fh').value=1080;d.querySelector('.ff').value=25};list.appendChild(d)})}
-function read(d,i){let b={user:d.querySelector('.user').value.trim(),pwd:d.querySelector('.pwd').value,host:d.querySelector('.host').value.trim(),port:d.querySelector('.port').value.trim(),path:d.querySelector('.path').value.trim()},result={name:d.querySelector('.name').value.trim()||'Caméra',enabled:d.querySelector('.en').checked,grid_url:build(b,d.querySelector('.gw').value,d.querySelector('.gh').value,d.querySelector('.gf').value,d.querySelector('.gu').value.trim()),focus_url:build(b,d.querySelector('.fw').value,d.querySelector('.fh').value,d.querySelector('.ff').value,d.querySelector('.fu').value.trim())},previous=cfg.cameras[i];if(previous&&previous.onvif&&typeof previous.onvif==='object')result.onvif=previous.onvif;return result}
+function read(d,i){let b={user:d.querySelector('.user').value.trim(),pwd:d.querySelector('.pwd').value,host:d.querySelector('.host').value.trim(),port:d.querySelector('.port').value.trim(),path:d.querySelector('.path').value.trim()},result={name:d.querySelector('.name').value.trim()||t('cams.default_name'),enabled:d.querySelector('.en').checked,grid_url:build(b,d.querySelector('.gw').value,d.querySelector('.gh').value,d.querySelector('.gf').value,d.querySelector('.gu').value.trim()),focus_url:build(b,d.querySelector('.fw').value,d.querySelector('.fh').value,d.querySelector('.ff').value,d.querySelector('.fu').value.trim())},previous=cfg.cameras[i];if(previous&&previous.onvif&&typeof previous.onvif==='object')result.onvif=previous.onvif;return result}
 function sync(){cfg.cameras=[...document.querySelectorAll('.camera')].map((d,i)=>read(d,i))}
-function addCam(){sync();cfg.cameras.push({name:'Caméra '+(cfg.cameras.length+1),enabled:true,grid_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=640x360&fps=12',focus_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=1920x1080&fps=25'});render();renderMosaic()}
+function addCam(){sync();cfg.cameras.push({name:t('cams.new_camera_prefix')+' '+(cfg.cameras.length+1),enabled:true,grid_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=640x360&fps=12',focus_url:'rtsp://root:@192.168.1.100:554/axis-media/media.amp?videocodec=h264&resolution=1920x1080&fps=25'});render();renderMosaic()}
 let mosaicDragCamera=null;
 let mosaicSaveTimer=null;
 let mosaicCurrentTemplate='free';
@@ -374,7 +375,7 @@ function trySmartPlacement(camera,target){
   const packed=packPlacements(camera,preferred);
 
   if(!packed){
-    toast('La grille est trop petite pour cette disposition',true);
+    toast(t('mosaic.too_small_for_placement'),true);
     return false;
   }
 
@@ -398,7 +399,7 @@ function trySmartResize(camera,width,height){
   const packed=packPlacements(camera,preferred);
 
   if(!packed){
-    toast('Pas assez de place pour agrandir cette caméra',true);
+    toast(t('mosaic.not_enough_space_resize'),true);
     return false;
   }
 
@@ -473,7 +474,7 @@ function swapCameraPositions(sourceCamera,targetCamera){
 
 function cameraAddress(camera){
   const parsed=parse(camera.grid_url||camera.focus_url||'');
-  return parsed.host||'Adresse inconnue';
+  return parsed.host||t('mosaic.unknown_address');
 }
 
 function updateTemplateButtons(){
@@ -512,7 +513,7 @@ function renderMosaic(){
 
   if(usedCells>columns*lines){
     mosaicWarning.innerHTML=
-      '<div class="mosaic-warning">⚠ La grille est trop petite pour cette disposition.</div>';
+      `<div class="mosaic-warning">⚠ ${esc(t('mosaic.too_small_for_placement'))}</div>`;
   }else{
     mosaicWarning.innerHTML='';
   }
@@ -596,7 +597,7 @@ function renderMosaic(){
     tile.innerHTML=`
       <span class="mosaic-position">${camera+1}</span>
       <div>
-        <div class="mosaic-name">${esc(entry.camera.name||'Caméra')}</div>
+        <div class="mosaic-name">${esc(entry.camera.name||t('cams.default_name'))}</div>
         <div class="mosaic-address">${esc(cameraAddress(entry.camera))}</div>
       </div>
       <div>
@@ -608,7 +609,7 @@ function renderMosaic(){
         </div>
         <div class="mosaic-controls">
           <span class="badge">${placement.width}×${placement.height}</span>
-          <span class="muted">Glisser pour déplacer</span>
+          <span class="muted">${esc(t('mosaic.drag_hint'))}</span>
         </div>
       </div>`;
 
@@ -689,7 +690,7 @@ function renderMosaic(){
 
   if(!active.length){
     mosaicPreview.innerHTML=
-      '<div class="mosaic-empty">Aucune caméra active</div>';
+      `<div class="mosaic-empty">${esc(t('mosaic.no_active_camera'))}</div>`;
   }
 
   updateTemplateButtons();
@@ -838,7 +839,7 @@ function applyMosaicTemplate(name){
   }
 
   if(!placements){
-    toast('La grille est trop petite pour ce modèle',true);
+    toast(t('mosaic.too_small_for_template'),true);
     return;
   }
 
@@ -853,13 +854,13 @@ function applyMosaicTemplate(name){
 
 function scheduleMosaicSave(){
   clearTimeout(mosaicSaveTimer);
-  mosaicSaved.textContent='Sauvegarde…';
+  mosaicSaved.textContent=t('mosaic.saving');
 
   mosaicSaveTimer=setTimeout(
     async()=>{
       try{
         await save(false);
-        mosaicSaved.textContent='✔ Disposition sauvegardée — clique sur Appliquer';
+        mosaicSaved.textContent=t('mosaic.saved');
       }catch(error){
         mosaicSaved.textContent='';
         toast(error.message,true);
@@ -891,7 +892,7 @@ function mosaicSettingsChanged(){
 }
 
 function collect(){sync();const activeCount=cfg.cameras.filter(c=>c.enabled!==false).length;ensurePlacements();cfg.layout={columns:+cols.value||3,rows:+rows.value||3,fullscreen_on_start:fs.checked,camera_order:Array.from({length:activeCount},(_,i)=>i),placements:cfg.layout.placements};return cfg}
-async function save(show=true){await api('/api/config',{method:'POST',body:JSON.stringify(collect())});if(show)toast('✓ Sauvegarde effectuée')}
+async function save(show=true){await api('/api/config',{method:'POST',body:JSON.stringify(collect())});if(show)toast(t('save.done'))}
 async function apply(){try{await save(false);let r=await api('/api/apply',{method:'POST',body:'{}'});toast(r.message,!r.applied)}catch(e){toast(e.message,true)}}
 function healthState(value,warnAt,badAt){
   const number=Number(value);
@@ -918,14 +919,14 @@ function formatSystemUptime(seconds){
   const minutes=Math.floor((total%3600)/60);
 
   if(days){
-    return `${days} j ${hours} h ${minutes} min`;
+    return t('sys.uptime.dhm',{days,hours,minutes});
   }
 
   if(hours){
-    return `${hours} h ${minutes} min`;
+    return t('sys.uptime.hm',{hours,minutes});
   }
 
-  return `${minutes} min`;
+  return t('sys.uptime.m',{minutes});
 }
 
 function throttlingHealth(raw,label=''){
@@ -933,8 +934,8 @@ function throttlingHealth(raw,label=''){
 
   if(!value || value==='—' || value==='indisponible'){
     return {
-      value:'Indisponible',
-      sub:label||'vcgencmd indisponible',
+      value:t('sys.unavailable'),
+      sub:label||t('sys.vcgencmd_unavailable'),
       state:''
     };
   }
@@ -944,14 +945,14 @@ function throttlingHealth(raw,label=''){
   if(!Number.isFinite(bits)){
     return {
       value,
-      sub:label||'Valeur non reconnue',
+      sub:label||t('sys.value_not_recognized'),
       state:'warn'
     };
   }
 
   if((bits&0x000f)!==0){
     return {
-      value:'Actif',
+      value:t('sys.throttling_active'),
       sub:value,
       state:'bad'
     };
@@ -959,14 +960,14 @@ function throttlingHealth(raw,label=''){
 
   if((bits&0xf0000)!==0){
     return {
-      value:'Historique',
+      value:t('sys.throttling_past'),
       sub:value,
       state:'warn'
     };
   }
 
   return {
-    value:'Aucun',
+    value:t('sys.throttling_none'),
     sub:value,
     state:'good'
   };
@@ -994,14 +995,14 @@ function renderSystemHealth(system={}){
     || (
       system.memory_used_mb!=null
       && system.memory_total_mb!=null
-        ? `${system.memory_used_mb} / ${system.memory_total_mb} Mo`
+        ? t('sys.card.memory_units',{used:system.memory_used_mb,total:system.memory_total_mb})
         : ''
     );
 
   const cards=[
     [
-      'Température CPU',
-      temperature!=null?`${temperature} °C`:'Indisponible',
+      t('sys.card.temperature'),
+      temperature!=null?`${temperature} °C`:t('sys.unavailable'),
       '',
       healthState(temperature,75,80)
     ],
@@ -1020,7 +1021,7 @@ function renderSystemHealth(system={}){
     [
       'Load',
       load,
-      system.cpu_count?`${system.cpu_count} cœur(s)`:'',
+      system.cpu_count?t('sys.card.cores',{count:system.cpu_count}):'',
       ''
     ],
     [
@@ -1081,13 +1082,13 @@ function validatePasswordChange(){
 
   if(!current){
     passwordStatus.className='password-status-error';
-    passwordStatus.textContent='Le mot de passe actuel est obligatoire.';
+    passwordStatus.textContent=t('password.current_required');
     return false;
   }
 
   if(!first || !second){
     passwordStatus.className='password-status-error';
-    passwordStatus.textContent='Le nouveau mot de passe doit être saisi deux fois.';
+    passwordStatus.textContent=t('password.twice_required');
     return false;
   }
 
@@ -1095,7 +1096,7 @@ function validatePasswordChange(){
     newp.classList.add('password-invalid');
     confirmp.classList.add('password-invalid');
     passwordStatus.className='password-status-error';
-    passwordStatus.textContent='Le nouveau mot de passe doit contenir au moins 8 caractères.';
+    passwordStatus.textContent=t('password.min_length');
     return false;
   }
 
@@ -1103,14 +1104,14 @@ function validatePasswordChange(){
     newp.classList.add('password-invalid');
     confirmp.classList.add('password-invalid');
     passwordStatus.className='password-status-error';
-    passwordStatus.textContent='Les mots de passe ne correspondent pas.';
+    passwordStatus.textContent=t('password.mismatch_client');
     return false;
   }
 
   newp.classList.add('password-valid');
   confirmp.classList.add('password-valid');
   passwordStatus.className='password-status-ok';
-  passwordStatus.textContent='✔ Les mots de passe correspondent.';
+  passwordStatus.textContent=t('password.match_ok');
   changePwdButton.disabled=false;
   return true;
 }
@@ -1122,7 +1123,7 @@ async function changePwd(){
 
   const button=changePwdButton;
   button.disabled=true;
-  button.innerHTML='<span class="spinner"></span>Modification…';
+  button.innerHTML=`<span class="spinner"></span>${esc(t('password.changing'))}`;
 
   try{
     await api('/api/change-password',{
@@ -1138,14 +1139,14 @@ async function changePwd(){
     newp.value='';
     confirmp.value='';
     validatePasswordChange();
-    toast('✔ Mot de passe modifié');
+    toast(t('password.changed_toast'));
     setTimeout(showLogin,1200);
 
   }catch(error){
     toast(error.message,true);
 
   }finally{
-    button.textContent='Modifier le mot de passe';
+    button.textContent=t('sec.change_button');
     validatePasswordChange();
   }
 }
@@ -1155,40 +1156,40 @@ async function serviceStatus(){
   try{
     let s=await api('/api/service-status');
     engine.className='engine '+(s.active?'running':'stopped');
-    engineText.textContent=s.active?'PiDecoder en cours':'PiDecoder arrêté';
+    engineText.textContent=s.active?t('engine.running'):t('engine.stopped');
   }catch{}
 }
 async function exportConfig(){
   try{
     let r=await fetch('/api/export');
-    if(r.status===401){showLogin();throw Error('Session expirée')}
-    if(!r.ok)throw Error('Export impossible');
+    if(r.status===401){showLogin();throw Error(t('session.expired'))}
+    if(!r.ok)throw Error(t('export.failed'));
     let blob=await r.blob(),a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
     a.download='pidecoder-config-'+new Date().toISOString().slice(0,10)+'.json';
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
-    toast('✓ Configuration exportée');
+    toast(t('export.done'));
   }catch(e){toast(e.message,true)}
 }
 async function importConfig(){
   let f=importFile.files[0];
-  if(!f){toast('Sélectionne un fichier JSON',true);return}
+  if(!f){toast(t('import.select_file'),true);return}
   try{
     let data=JSON.parse(await f.text());
     await api('/api/import',{method:'POST',body:JSON.stringify(data)});
-    toast('✓ Configuration importée');
+    toast(t('import.done_toast'));
     await loadCfg();
   }catch(e){toast(e.message,true)}
 }
 
 let onvifDevices=[];
 async function discoverOnvif(){
-  onvifStatus.textContent='Recherche ONVIF en cours…';
+  onvifStatus.textContent=t('onvif.discovering');
   onvifResults.innerHTML='';onvifDiagnostics.style.display='none';onvifDiagnostics.innerHTML='';
   try{
     let r=await api('/api/onvif/discover',{method:'POST',body:JSON.stringify({timeout:5})});
     onvifDevices=r.devices||[];let d=r.diagnostics||{};
-    onvifStatus.textContent=onvifDevices.length+' équipement(s) ONVIF trouvé(s).';
+    onvifStatus.textContent=t('onvif.devices_found',{count:onvifDevices.length});
     renderOnvifDiscovery();renderOnvifDiagnostics(d);
   }catch(e){onvifStatus.textContent='';toast(e.message,true)}
 }
@@ -1290,12 +1291,12 @@ async function identifyManualOnvif(){
   const button=manualOnvifButton;
 
   if(!validIpv4(ip)){
-    toast('Adresse IPv4 invalide',true);
+    toast(t('onvif.invalid_ipv4'),true);
     return;
   }
 
   if(!Number.isInteger(port)||port<1||port>65535){
-    toast('Port ONVIF invalide',true);
+    toast(t('onvif.invalid_port'),true);
     return;
   }
 
@@ -1314,7 +1315,7 @@ async function identifyManualOnvif(){
       ip,
       xaddr,
       xaddrs:[xaddr],
-      name:`Caméra ${ip}`,
+      name:t('onvif.manual_camera_name',{ip}),
       hardware:'',
       location:'',
       scopes:'',
@@ -1334,20 +1335,20 @@ async function identifyManualOnvif(){
   const box=boxes[index];
 
   if(!box){
-    toast('Carte ONVIF introuvable',true);
+    toast(t('onvif.card_not_found'),true);
     return;
   }
 
   rememberManualOnvif();
 
   button.disabled=true;
-  button.innerHTML='<span class="spinner"></span>Identification…';
+  button.innerHTML=`<span class="spinner"></span>${esc(t('onvif.identifying'))}`;
 
   try{
     await identifyOnvif(index,box);
   }finally{
     button.disabled=false;
-    button.textContent='Identifier';
+    button.textContent=t('onvif.identify_button');
   }
 }
 
@@ -1363,13 +1364,13 @@ function usableProfiles(profiles){
 }
 
 function profileOption(profile){
-  const codec=profile.encoding||'Codec ?';
+  const codec=profile.encoding||t('onvif.codec_unknown');
   const resolution=profile.width&&profile.height
     ? `${profile.width} × ${profile.height}`
-    : 'résolution ?';
-  const fps=profile.fps ? `${profile.fps} fps` : 'fps ?';
+    : t('onvif.resolution_unknown');
+  const fps=profile.fps ? `${profile.fps} fps` : t('onvif.fps_unknown');
 
-  return `<option value="${esc(profile.token||'')}">${esc(profile.name||profile.token||'Profil')} · ${esc(codec)} · ${esc(resolution)} · ${esc(fps)}</option>`;
+  return `<option value="${esc(profile.token||'')}">${esc(profile.name||profile.token||t('onvif.profile_fallback'))} · ${esc(codec)} · ${esc(resolution)} · ${esc(fps)}</option>`;
 }
 
 let activePtzStop=null;
@@ -1518,14 +1519,14 @@ function bindPtzControls(index,box,profile,presets){
       const presetToken=presetSelect.value;
 
       if(!presetToken){
-        toast('Aucun preset sélectionné',true);
+        toast(t('ptz.no_preset_selected'),true);
         return;
       }
 
       stopActivePtz();
       presetButton.disabled=true;
       presetButton.innerHTML=
-        '<span class="spinner"></span>Déplacement…';
+        `<span class="spinner"></span>${esc(t('ptz.moving'))}`;
 
       try{
         const device=onvifDevices[index];
@@ -1542,14 +1543,14 @@ function bindPtzControls(index,box,profile,presets){
           })
         });
 
-        toast('✔ Preset PTZ appelé');
+        toast(t('ptz.preset_called'));
 
       }catch(error){
         toast(error.message,true);
 
       }finally{
         presetButton.disabled=!(presets||[]).length;
-        presetButton.textContent='Aller au preset';
+        presetButton.textContent=t('ptz.goto_preset');
       }
     };
   }
@@ -1559,7 +1560,7 @@ function renderOnvifDiscovery(){
   onvifResults.innerHTML='';
 
   if(!onvifDevices.length){
-    onvifResults.innerHTML='<div class="onvif-card"><div class="muted">Aucun équipement découvert. Consulte les diagnostics ci-dessus.</div></div>';
+    onvifResults.innerHTML=`<div class="onvif-card"><div class="muted">${esc(t('onvif.no_device_found'))}</div></div>`;
     return;
   }
 
@@ -1592,7 +1593,7 @@ function renderOnvifDiscovery(){
 
     const defaultName=existing?.name ||
       [info.Manufacturer,info.Model].filter(Boolean).join(' ') ||
-      device.name || device.hardware || `Caméra ${device.ip||''}`;
+      device.name || device.hardware || t('onvif.manual_camera_name',{ip:device.ip||''});
 
     const options=profiles.map(profileOption).join('');
     const existingGrid=existing?.onvif?.grid_profile_token||existing?.onvif?.profile_token||'';
@@ -1606,50 +1607,50 @@ function renderOnvifDiscovery(){
     const ptzPresetOptions=ptzPresets
       .map(preset=>
         `<option value="${esc(preset.token||'')}">`+
-        `${esc(preset.name||preset.token||'Preset')}</option>`
+        `${esc(preset.name||preset.token||t('ptz.preset_label'))}</option>`
       )
       .join('');
 
     const ptzPanel=ptzAvailable?`
       <div class="backupbox ptz-panel">
         <div class="ptz-panel-title">
-          <strong>Commande PTZ</strong>
+          <strong>${esc(t('ptz.command_title'))}</strong>
           <span class="badge ptz">${esc(ptzProfile.name||ptzProfile.token)}</span>
         </div>
 
-        <div class="ptzpad" aria-label="Commandes directionnelles PTZ">
+        <div class="ptzpad" aria-label="${esc(t('ptz.pad_aria'))}">
           <div class="ptz-empty"></div>
-          <button type="button" class="secondary" data-ptz-action="up" title="Monter">▲</button>
+          <button type="button" class="secondary" data-ptz-action="up" title="${esc(t('ptz.up'))}">▲</button>
           <div class="ptz-empty"></div>
 
-          <button type="button" class="secondary" data-ptz-action="left" title="Gauche">◀</button>
-          <button type="button" class="secondary" data-ptz-action="stop" title="Arrêter">■</button>
-          <button type="button" class="secondary" data-ptz-action="right" title="Droite">▶</button>
+          <button type="button" class="secondary" data-ptz-action="left" title="${esc(t('ptz.left'))}">◀</button>
+          <button type="button" class="secondary" data-ptz-action="stop" title="${esc(t('ptz.stop'))}">■</button>
+          <button type="button" class="secondary" data-ptz-action="right" title="${esc(t('ptz.right'))}">▶</button>
 
           <div class="ptz-empty"></div>
-          <button type="button" class="secondary" data-ptz-action="down" title="Descendre">▼</button>
+          <button type="button" class="secondary" data-ptz-action="down" title="${esc(t('ptz.down'))}">▼</button>
           <div class="ptz-empty"></div>
         </div>
 
         <div class="ptz-zoom">
-          <button type="button" class="secondary" data-ptz-action="zoomin">Zoom +</button>
-          <button type="button" class="secondary" data-ptz-action="zoomout">Zoom −</button>
+          <button type="button" class="secondary" data-ptz-action="zoomin">${esc(t('ptz.zoom_in'))}</button>
+          <button type="button" class="secondary" data-ptz-action="zoomout">${esc(t('ptz.zoom_out'))}</button>
         </div>
 
         ${ptzPresets.length?`
           <div class="ptz-presets">
             <div>
-              <label>Preset</label>
+              <label>${esc(t('ptz.preset_label'))}</label>
               <select class="ptz-preset">${ptzPresetOptions}</select>
             </div>
-            <button type="button" class="secondary ptz-goto">Aller au preset</button>
+            <button type="button" class="secondary ptz-goto">${esc(t('ptz.goto_preset'))}</button>
           </div>
         `:`
-          <div class="muted ptz-help">Aucun preset ONVIF détecté pour ce profil.</div>
+          <div class="muted ptz-help">${esc(t('ptz.no_preset'))}</div>
         `}
 
         <div class="muted ptz-help">
-          Maintiens une commande pour déplacer la caméra. Le relâchement envoie immédiatement Stop.
+          ${esc(t('ptz.hold_hint'))}
         </div>
       </div>
     `:'';
@@ -1657,48 +1658,48 @@ function renderOnvifDiscovery(){
     box.innerHTML=`
       <div class="row" style="justify-content:space-between">
         <div>
-          <div class="onvif-title">${esc([info.Manufacturer,info.Model].filter(Boolean).join(' ')||device.name||device.hardware||'Équipement ONVIF')}</div>
+          <div class="onvif-title">${esc([info.Manufacturer,info.Model].filter(Boolean).join(' ')||device.name||device.hardware||t('onvif.device_fallback'))}</div>
           <div style="margin-top:7px">
             <span class="badge">ONVIF</span>
-            <span class="badge">${esc(device.ip||'IP inconnue')}</span>
-            ${identification?'<span class="badge ptz">Identifiée</span>':''}
+            <span class="badge">${esc(device.ip||t('onvif.ip_unknown'))}</span>
+            ${identification?`<span class="badge ptz">${esc(t('onvif.identified_badge'))}</span>`:''}
             ${ptzAvailable?'<span class="badge ptz">PTZ</span>':''}
-            ${existing?'<span class="badge badge-configured">Déjà configurée</span>':'<span class="badge">Nouvelle</span>'}
+            ${existing?`<span class="badge badge-configured">${esc(t('onvif.already_configured'))}</span>`:`<span class="badge">${esc(t('onvif.new_badge'))}</span>`}
           </div>
         </div>
-        <button class="primary identify-onvif btn-fixed">${identification?'Réidentifier':'Identifier'}</button>
+        <button class="primary identify-onvif btn-fixed">${identification?esc(t('onvif.reidentify_button')):esc(t('onvif.identify_button'))}</button>
       </div>
 
       <div class="onvif-identification" style="margin-top:12px">
         ${identification?`
           <div class="grid">
-            <div class="s4"><label>Fabricant</label><div>${esc(info.Manufacturer||'—')}</div></div>
-            <div class="s4"><label>Modèle</label><div>${esc(info.Model||'—')}</div></div>
+            <div class="s4"><label>${esc(t('onvif.manufacturer'))}</label><div>${esc(info.Manufacturer||'—')}</div></div>
+            <div class="s4"><label>${esc(t('onvif.model'))}</label><div>${esc(info.Model||'—')}</div></div>
             <div class="s4"><label>Firmware</label><div>${esc(info.FirmwareVersion||'—')}</div></div>
-            <div class="s6"><label>Numéro de série</label><div>${esc(info.SerialNumber||'—')}</div></div>
+            <div class="s6"><label>${esc(t('onvif.serial_number'))}</label><div>${esc(info.SerialNumber||'—')}</div></div>
             <div class="s6"><label>Hardware ID</label><div>${esc(info.HardwareId||'—')}</div></div>
           </div>
 
           <div class="backupbox" style="margin-top:12px">
             <div class="grid">
               <div class="s12">
-                <label>Nom dans PiDecoder</label>
+                <label>${esc(t('onvif.name_in_pidecoder'))}</label>
                 <input class="manager-name" value="${esc(defaultName)}">
               </div>
               <div class="s6">
-                <label>Profil mosaïque</label>
+                <label>${esc(t('onvif.grid_profile'))}</label>
                 <select class="manager-grid-profile">${options}</select>
               </div>
               <div class="s6">
-                <label>Profil plein écran</label>
+                <label>${esc(t('onvif.focus_profile'))}</label>
                 <select class="manager-focus-profile">${options}</select>
               </div>
             </div>
 
             <div class="row" style="margin-top:12px;justify-content:space-between">
-              <div class="muted">${profiles.length?`${profiles.length} profil(s) H264/RTSP utilisable(s)`:'Aucun profil RTSP utilisable'}</div>
+              <div class="muted">${profiles.length?esc(t('onvif.usable_profiles_count',{count:profiles.length})):esc(t('onvif.no_usable_profile'))}</div>
               <button class="${existing?'primary':'success'} manager-save btn-fixed" ${profiles.length?'':'disabled'}>
-                ${existing?'Mettre à jour':'Ajouter à PiDecoder'}
+                ${existing?esc(t('onvif.update_button')):esc(t('onvif.add_button'))}
               </button>
             </div>
           </div>
@@ -1706,22 +1707,22 @@ function renderOnvifDiscovery(){
           ${ptzPanel}
 
           <details style="margin-top:12px">
-            <summary>Tous les profils détectés</summary>
+            <summary>${esc(t('onvif.all_profiles_summary'))}</summary>
             ${(identification.profiles||[]).map(profile=>`
               <div class="backupbox" style="padding:10px;margin-top:8px">
-                <strong>${esc(profile.name||profile.token||'Profil')}</strong>
-                <div class="muted">${esc(profile.encoding||'Codec ?')} · ${profile.width&&profile.height?esc(profile.width+' × '+profile.height):'résolution ?'} · ${profile.fps?esc(profile.fps)+' fps':'fps ?'}</div>
-                <div class="muted">Token : ${esc(profile.token||'—')}</div>
+                <strong>${esc(profile.name||profile.token||t('onvif.profile_fallback'))}</strong>
+                <div class="muted">${esc(profile.encoding||t('onvif.codec_unknown'))} · ${profile.width&&profile.height?esc(profile.width+' × '+profile.height):esc(t('onvif.resolution_unknown'))} · ${profile.fps?esc(profile.fps)+' fps':esc(t('onvif.fps_unknown'))}</div>
+                <div class="muted">${esc(t('onvif.token_label'))}${esc(profile.token||'—')}</div>
               </div>`).join('')}
           </details>
         `:`
-          <div class="muted">Matériel annoncé : ${esc(device.hardware||'—')}</div>
-          <div class="muted">Emplacement : ${esc(device.location||'—')}</div>
+          <div class="muted">${esc(t('onvif.hardware_announced'))}${esc(device.hardware||'—')}</div>
+          <div class="muted">${esc(t('onvif.location_label'))}${esc(device.location||'—')}</div>
         `}
       </div>
 
       <details style="margin-top:12px">
-        <summary>Adresses ONVIF découvertes</summary>
+        <summary>${esc(t('onvif.discovered_addresses'))}</summary>
         <ul style="word-break:break-all">${xaddrs||'<li>—</li>'}</ul>
       </details>`;
 
@@ -1760,7 +1761,7 @@ async function saveManagedCamera(index,box){
   const identification=device.identification;
 
   if(!identification){
-    toast('Identifie d’abord la caméra',true);
+    toast(t('onvif.identify_first'),true);
     return;
   }
 
@@ -1778,7 +1779,7 @@ async function saveManagedCamera(index,box){
     null;
 
   button.disabled=true;
-  button.textContent='Enregistrement…';
+  button.textContent=t('onvif.saving');
 
   try{
     const result=await api('/api/onvif/manage-camera',{
@@ -1803,11 +1804,11 @@ async function saveManagedCamera(index,box){
 
     await loadCfg();
     renderOnvifDiscovery();
-    toast('✔ '+(result.message||'Caméra enregistrée'));
+    toast('✔ '+(result.message||t('onvif.camera_saved_fallback')));
 
   }catch(error){
     button.disabled=false;
-    button.textContent=existingCameraFor(device)?'Mettre à jour':'Ajouter à PiDecoder';
+    button.textContent=existingCameraFor(device)?t('onvif.update_button'):t('onvif.add_button');
     toast(error.message,true);
   }
 }
@@ -1818,8 +1819,8 @@ async function identifyOnvif(index,box){
   let area=box.querySelector('.onvif-identification');
 
   button.disabled=true;
-  button.innerHTML='<span class="spinner"></span>Identification…';
-  area.innerHTML='<div class="muted">Connexion ONVIF en cours…</div>';
+  button.innerHTML=`<span class="spinner"></span>${esc(t('onvif.identifying'))}`;
+  area.innerHTML=`<div class="muted">${esc(t('onvif.connecting'))}</div>`;
 
   try{
     let result=await api('/api/onvif/identify',{
@@ -1833,17 +1834,17 @@ async function identifyOnvif(index,box){
 
     device.identification=result.device;
     renderOnvifDiscovery();
-    toast('✔ Caméra identifiée');
+    toast(t('onvif.identified_toast'));
 
   }catch(error){
     button.disabled=false;
-    button.textContent='Identifier';
+    button.textContent=t('onvif.identify_button');
     area.innerHTML=
       '<div style="color:#ff7f89">'+
       esc(error.message)+
       '</div>'+
       '<div class="backupbox" style="margin-top:10px">'+
-      '<strong>Log à transmettre :</strong>'+
+      `<strong>${esc(t('onvif.log_to_send'))}</strong>`+
       '<pre style="white-space:pre-wrap">sudo cat /tmp/pidecoder-onvif.log</pre>'+
       '</div>';
   }
@@ -1851,12 +1852,12 @@ async function identifyOnvif(index,box){
 
 function renderOnvifDiagnostics(d){
   onvifDiagnostics.style.display='block';
-  let interfaces=(d.interfaces||[]).map(x=>`${esc(x.name)} (${esc(x.address)})`).join(', ')||'Aucune';
+  let interfaces=(d.interfaces||[]).map(x=>`${esc(x.name)} (${esc(x.address)})`).join(', ')||t('common.none_f');
   let errors=(d.socket_errors||[]).map(x=>`<li>${esc(x)}</li>`).join('');
   let events=(d.events||[]).map(x=>`<li>${esc(x)}</li>`).join('');
-  let types=Object.entries(d.message_types||{}).map(([n,c])=>`${esc(n)}: ${c}`).join(' · ')||'Aucun';
-  let samples=(d.unknown_xml_samples||[]).map(s=>`<details style="margin-top:8px"><summary>${esc(s.message_type||'Unknown')} depuis ${esc(s.source_ip||'?')}</summary><pre style="white-space:pre-wrap;word-break:break-word">${esc((s.lines||[]).join('\n'))}</pre></details>`).join('');
-  onvifDiagnostics.innerHTML=`<h3 style="margin-top:0">Diagnostics de découverte</h3><div><strong>Interfaces :</strong> ${interfaces}</div><div><strong>Probes envoyés :</strong> ${d.probes_sent||0}</div><div><strong>Paquets reçus :</strong> ${d.packets_received||0}</div><div><strong>Paquets XML :</strong> ${d.xml_packets||0}</div><div><strong>Types de messages :</strong> ${types}</div><div><strong>ProbeMatch trouvés :</strong> ${d.probe_matches||0}</div><div><strong>Erreurs XML :</strong> ${d.parse_errors||0}</div>${errors?`<h4>Erreurs socket</h4><ul>${errors}</ul>`:''}${samples?`<h4>Extraits XML inconnus</h4>${samples}`:''}<details style="margin-top:12px"><summary>Journal détaillé</summary><ul style="padding-left:20px">${events}</ul></details>`;
+  let types=Object.entries(d.message_types||{}).map(([n,c])=>`${esc(n)}: ${c}`).join(' · ')||t('common.none');
+  let samples=(d.unknown_xml_samples||[]).map(s=>`<details style="margin-top:8px"><summary>${t('diag.sample_from',{type:esc(s.message_type||'Unknown'),ip:esc(s.source_ip||'?')})}</summary><pre style="white-space:pre-wrap;word-break:break-word">${esc((s.lines||[]).join('\n'))}</pre></details>`).join('');
+  onvifDiagnostics.innerHTML=`<h3 style="margin-top:0">${esc(t('diag.discovery_title'))}</h3><div><strong>${esc(t('diag.interfaces'))}</strong> ${interfaces}</div><div><strong>${esc(t('diag.probes_sent'))}</strong> ${d.probes_sent||0}</div><div><strong>${esc(t('diag.packets_received'))}</strong> ${d.packets_received||0}</div><div><strong>${esc(t('diag.xml_packets'))}</strong> ${d.xml_packets||0}</div><div><strong>${esc(t('diag.message_types'))}</strong> ${types}</div><div><strong>${esc(t('diag.probe_matches'))}</strong> ${d.probe_matches||0}</div><div><strong>${esc(t('diag.xml_errors'))}</strong> ${d.parse_errors||0}</div>${errors?`<h4>${esc(t('diag.socket_errors'))}</h4><ul>${errors}</ul>`:''}${samples?`<h4>${esc(t('diag.unknown_xml_samples'))}</h4>${samples}`:''}<details style="margin-top:12px"><summary>${esc(t('diag.detailed_log'))}</summary><ul style="padding-left:20px">${events}</ul></details>`;
 }
 document.addEventListener('keydown',event=>{
   const target=event.target;
@@ -1970,20 +1971,20 @@ function renderDiagnostics(data){
     diagRow('Architecture',system.architecture||'—')+
     diagRow('Kernel',system.kernel||'—')+
     diagRow('PID',process.pid??'—')+
-    diagRow('FD ouverts',process.fd_count??'—')+
-    diagRow('Décodage matériel',system.hardware_decode||'—');
+    diagRow(t('diag.fd_open'),process.fd_count??'—')+
+    diagRow(t('diag.hardware_decode'),system.hardware_decode||'—');
 
   cameraInfo.innerHTML=
-    diagRow('Configurées',cameras.total??0)+
-    diagRow('Actives',cameras.enabled??0)+
-    diagRow('Désactivées',cameras.disabled??0)+
-    diagRow('Caméras ONVIF',cameras.onvif??0)+
-    diagRow('Flux RTSP',cameras.configured_streams??0);
+    diagRow(t('diag.configured'),cameras.total??0)+
+    diagRow(t('diag.active'),cameras.enabled??0)+
+    diagRow(t('diag.disabled'),cameras.disabled??0)+
+    diagRow(t('diag.onvif_cameras'),cameras.onvif??0)+
+    diagRow(t('diag.rtsp_streams'),cameras.configured_streams??0);
 
   const serviceItems=[
     ['PiDecoder',services.pidecoder||'inconnu'],
-    ['Administration Web',services.web||'inconnu'],
-    ['Décodage matériel',system.hardware_decode||'inconnu'],
+    [t('diag.web_admin'),services.web||'inconnu'],
+    [t('diag.hardware_decode'),system.hardware_decode||'inconnu'],
   ];
 
   serviceBadges.innerHTML='';
@@ -1999,7 +2000,7 @@ function renderDiagnostics(data){
     serviceBadges.appendChild(badge);
   });
 
-  diagnosticsLogs.textContent=data.logs||'Aucun journal disponible.';
+  diagnosticsLogs.textContent=data.logs||t('diag.no_logs');
   diagnosticsLastReport=data.report||'';
   updateGlobalHealth(data);
 }
@@ -2009,18 +2010,18 @@ function updateGlobalHealth(data){
   const services=data.services||{};
   const cameras=data.cameras||{};
 
-  let state='Stable';
+  let state=t('diag.state_stable');
   let className='ok';
 
   if(services.pidecoder!=='active'||services.web!=='active'){
-    state='Erreur';
+    state=t('diag.state_error');
     className='error';
   }else if(
     system.throttled_hex!=='0x0' ||
     (system.temperature_c!=null && system.temperature_c>=80) ||
     (cameras.enabled??0)<(cameras.total??0)
   ){
-    state='Attention';
+    state=t('diag.state_warning');
     className='warn';
   }
 
@@ -2029,12 +2030,12 @@ function updateGlobalHealth(data){
 }
 
 async function refreshDiagnostics(){
-  diagnosticsLogs.textContent='Chargement…';
+  diagnosticsLogs.textContent=t('diag.loading');
 
   try{
     const lines=Number(diagnosticLogLines?.value||50);const data=await api(`/api/diagnostics?lines=${lines}`);
     renderDiagnostics(data);
-    toast('✔ Diagnostics actualisés');
+    toast(t('diag.refreshed_toast'));
   }catch(error){
     diagnosticsLogs.textContent=error.message;
     toast(error.message,true);
@@ -2048,14 +2049,14 @@ async function copyDiagnostics(){
 
   try{
     await navigator.clipboard.writeText(diagnosticsLastReport);
-    toast('✔ Rapport copié');
+    toast(t('diag.report_copied'));
   }catch(_){
     diagnosticsCopyBuffer.classList.remove('hidden');
     diagnosticsCopyBuffer.value=diagnosticsLastReport;
     diagnosticsCopyBuffer.select();
     document.execCommand('copy');
     diagnosticsCopyBuffer.classList.add('hidden');
-    toast('✔ Rapport copié');
+    toast(t('diag.report_copied'));
   }
 }
 
@@ -2074,3 +2075,27 @@ restoreManualOnvif();
 
 setInterval(serviceStatus,3000);serviceStatus();
 setInterval(sysInfo,3000);boot().catch(e=>{toast(e.message,true);showLogin()});
+
+// Ré-applique les traductions statiques (index.html) au chargement, et
+// ré-exécute les rendus dynamiques concernés quand la langue change (le
+// contenu de ces fonctions est généré en JS, donc data-i18n seul ne suffit
+// pas à les traduire).
+window.I18N.applyTranslations();
+
+window.onLanguageChange=function(){
+  window.I18N.applyTranslations();
+
+  if(!app.classList.contains('hidden')){
+    render();
+    renderMosaic();
+
+    if(!document.getElementById('onvif').classList.contains('hidden')){
+      renderOnvifDiscovery();
+    }
+
+    sysInfo();
+    serviceStatus();
+  }
+
+  renderNotificationHistory();
+};

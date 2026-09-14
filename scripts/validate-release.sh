@@ -15,7 +15,8 @@ python3 -m py_compile \
     "$ROOT/scripts/config-web.py" \
     "$ROOT/scripts/onvif_client.py" \
     "$ROOT/scripts/check-camera-config.py" \
-    "$ROOT/scripts/ptz-bridge.py"
+    "$ROOT/scripts/ptz-bridge.py" \
+    "$ROOT/scripts/i18n.py"
 
 # py_compile creates caches by design; remove them before package checks.
 cleanup_python_cache
@@ -23,6 +24,7 @@ cleanup_python_cache
 echo "[2/8] Vérification JavaScript"
 if command -v node >/dev/null 2>&1; then
     node --check "$ROOT/scripts/web/app.js"
+    node --check "$ROOT/scripts/web/i18n.js"
 else
     echo "  Node.js absent : contrôle JavaScript ignoré"
 fi
@@ -44,7 +46,9 @@ required=(
     "scripts/web/index.html"
     "scripts/web/app.css"
     "scripts/web/app.js"
+    "scripts/web/i18n.js"
     "scripts/onvif_client.py"
+    "scripts/i18n.py"
     "scripts/install.sh"
     "scripts/check-camera-config.py"
     "scripts/ptz-bridge.py"
