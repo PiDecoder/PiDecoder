@@ -118,7 +118,8 @@ see "Merge and release checklist" below.
 
 The "Check for committed runtime secrets" job in
 `.github/workflows/validate.yml` started failing on the `1.0.0` release
-commit: its `rtsp://user:pass@`-style regex matched the deliberately fake
+commit: its regex for embedded RTSP credentials (a username and password
+between the `rtsp://` prefix and the `@`) matched the deliberately fake
 credentials in `tests/test_redact_url.cpp` (RC3's redaction unit test)
 and its own literal mention in this file's RC3 field-validation
 paragraph. Fixed by excluding `test_redact_url.cpp` from the scan and

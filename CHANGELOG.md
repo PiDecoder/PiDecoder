@@ -39,8 +39,21 @@
   `include/pidecoder/Version.hpp.in` (native engine's on-screen overlay),
   and `scripts/install.sh` (`INSTALLER_VERSION`); `scripts/validate-release.sh`
   updated to match;
-- the README/CONTRIBUTING/SECURITY public-launch documentation pass is
-  tracked separately and is not required to hold up this release.
+- README/CONTRIBUTING/SECURITY public-launch documentation pass completed,
+  along with `docs/faq.md`, `docs/configuration.md`, `docs/installation.md`
+  and `docs/onvif.md`, which had drifted out of date (stale RC1/RC3 version
+  references, an FAQ answer incorrectly claiming PTZ and English were not
+  yet available);
+- deployed and confirmed on the production Raspberry Pi
+  (`olympus-vss-mon1`): all services active, version `1.0.0` consistent
+  across the Web header/login, Diagnostics tab and the native engine's
+  on-screen overlay;
+- fixed a CI false positive: the "Check for committed runtime secrets"
+  job's regex for embedded RTSP credentials matched the deliberately fake
+  ones in `tests/test_redact_url.cpp` (an RC3-era unit test) and its own
+  literal mention in `docs/PROJECT-STATE.md`'s field-validation
+  notes; excluded the test file from the scan and reworded the affected
+  documentation.
 
 ## 0.9.9.5 RC3
 
