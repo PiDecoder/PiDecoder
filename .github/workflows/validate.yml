@@ -35,6 +35,7 @@ jobs:
             'rtsp://[^[:space:]*/]+:[^[:space:]*/]+@' \
             --exclude='cameras.example.json' \
             --exclude='config-web.py' \
+            --exclude='test_redact_url.cpp' \
             --exclude-dir='.git' \
             .
 
