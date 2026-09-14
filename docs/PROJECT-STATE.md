@@ -173,7 +173,8 @@ stream loaded, stalled, disconnected, or reconnected. A shared
 `redact_credentials()` helper (`include/pidecoder/RedactUrl.hpp`,
 `src/RedactUrl.cpp`, covered by `tests/test_redact_url.cpp`) now masks the
 `user:pass@` part of any logged URL. Verified clean after rebuilding: a
-grep for the `rtsp://user:pass@` pattern across `pidecoder`,
+grep for embedded RTSP credentials (a username and password between
+the `rtsp://` prefix and the `@`) across `pidecoder`,
 `pidecoder-ptz` and `pidecoder-config` logs generated since the rebuild
 returns `0` matches.
 
