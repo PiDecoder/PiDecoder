@@ -305,7 +305,7 @@
       'layout.template.free.subtitle':'Keep the current layout',
 
       'sys.title':'System',
-      'sys.hint':'Raspberry Pi and PiDecoder status, plus information useful for support.',
+      'sys.hint':'Status of the Raspberry Pi and PiDecoder, plus information useful for support.',
       'sys.refresh':'Refresh',
       'sys.copy_report':'Copy report',
       'sys.health':'Health',
@@ -343,7 +343,7 @@
       'backup.import_button':'📥 Import configuration',
 
       'onvif.title':'ONVIF — Camera management',
-      'onvif.hint':'Local discovery or manual identification by IPv4 address. Separate choice of mosaic and fullscreen profiles.',
+      'onvif.hint':'Local discovery or manual identification by IPv4 address. Choose the mosaic and fullscreen profiles separately.',
       'onvif.discover_button':'🔎 Search for cameras',
       'onvif.username':'ONVIF username',
       'onvif.password':'ONVIF password',
@@ -430,7 +430,7 @@
       'diag.onvif_cameras':'ONVIF cameras',
       'diag.rtsp_streams':'RTSP streams',
       'diag.web_admin':'Web administration',
-      'diag.no_logs':'No log available.',
+      'diag.no_logs':'No logs available.',
       'diag.state_stable':'Stable',
       'diag.state_error':'Error',
       'diag.state_warning':'Warning',
@@ -443,7 +443,7 @@
       'notifications.title':'Notification history',
       'notifications.recent':'Recent notifications',
       'notifications.clear':'Clear',
-      'notifications.none':'No recent notification',
+      'notifications.none':'No recent notifications',
 
       'api.unavailable':'Feature unavailable on this server version',
       'api.invalid_response':'Invalid server response ({status})',
