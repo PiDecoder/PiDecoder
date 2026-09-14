@@ -12,7 +12,7 @@ The recommended way to manage cameras is through the Web administration interfac
 http://RASPBERRY_PI_IP:8080
 ```
 
-The current Web interface is in French. This guide uses the labels displayed by the application.
+The Web interface is bilingual (French/English), with a language toggle on the login screen and in the application header. This guide uses the French labels displayed by the application by default.
 
 ## Camera fields
 

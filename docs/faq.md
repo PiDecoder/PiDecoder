@@ -293,16 +293,16 @@ Redact private values before publishing.
 
 ## Is HTTPS included?
 
-Not in v0.9.9.4 RC1.
+Not in v1.0.0.
 
 The current Web service uses HTTP. Keep it on a trusted network. HTTPS is listed as a planned roadmap item, not a current feature.
 
 ## Is PTZ fully available?
 
-ONVIF PTZ functions exist in the backend, but the stable public feature set and documentation are not yet claiming complete PTZ support. PTZ remains planned for a later release.
+Yes. Native PTZ control (pan/tilt, optical zoom, forced Stop and preset selection) is available in the Web interface, with an auto-hiding PTZ overlay in the focus view. It has been field-tested and validated on an Axis Q6074. Support for other ONVIF PTZ cameras is expected to work through the same ONVIF profile but is not yet validated in the field the way the Axis Q6074 is.
 
 ## Is English available in the Web interface?
 
-Not yet.
+Yes. The Web administration interface has been bilingual (French/English) since v1.0.0, with a language toggle on the login screen and in the application header. The language choice is remembered in a cookie.
 
-The public README and documentation are in English. The current Web administration interface is in French. English localization is planned before the stable v1.0 release.
+Some low-level ONVIF client error messages (SOAP/HTTP/XML failures) and a few backend-generated system/diagnostic terms still appear in French regardless of the selected language.

@@ -188,7 +188,7 @@ Before changing the camera list, PiDecoder rotates timestamped camera backups an
 
 ## Changing video values safely
 
-In v0.9.9.5 RC3, changing camera resolution or FPS from the **Caméras** tab preserves
+Changing camera resolution or FPS from the **Caméras** tab preserves
 the stored ONVIF and PTZ metadata.
 
 This includes:
@@ -204,7 +204,7 @@ Protection is implemented twice:
 - the browser keeps the existing camera `onvif` object;
 - the server merges stored ONVIF metadata if an older browser tab omits it.
 
-Reload the Web interface with `Ctrl + F5` after upgrading to RC3 so the browser uses
+Reload the Web interface with `Ctrl + F5` after upgrading PiDecoder so the browser uses
 the newest JavaScript.
 
 ## Apply the new camera

@@ -1,11 +1,11 @@
 # Installation and updates
 
-This guide covers the public installer included with PiDecoder v0.9.9.4 RC1.
+This guide covers the public installer included with PiDecoder.
 
 > [!IMPORTANT]
 > PiDecoder is currently validated on a Raspberry Pi 5 running Debian 13, AArch64 and Wayland.
 > Upgrades of an existing installation have been tested on real hardware.
-> A completely fresh installation on a blank system and a forced rollback test are still pending before the stable v1.0 release.
+> A completely fresh installation on a blank system and a forced rollback test have also been validated.
 
 ## Supported target
 

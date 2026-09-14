@@ -5,7 +5,7 @@ Thank you for helping improve PiDecoder.
 ## Before opening a pull request
 
 1. Open or reference an issue for non-trivial changes.
-2. Keep release-candidate changes focused on bugs, regressions and stability.
+2. Keep changes focused and scoped — avoid mixing unrelated fixes or features in one pull request.
 3. Never include real credentials, RTSP URLs, private IP addresses, serial numbers or camera logs.
 4. Run the release validator:
 

@@ -10,7 +10,7 @@
   <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
     <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
   </a>
-  <img src="https://img.shields.io/badge/release-v0.9.9.5%20RC3-7A1F5C" alt="Release v0.9.9.5 RC3">
+  <img src="https://img.shields.io/badge/release-v1.0.0-7A1F5C" alt="Release v1.0.0">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
   <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
@@ -28,24 +28,26 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v0.9.9.5 RC3** is the current release candidate.
+> **PiDecoder v1.0.0** is the first stable public release.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
-> Native PTZ movement, optical zoom, Stop and preset selection have been field-tested with an
-> Axis Q6074.
+> Native PTZ movement, optical zoom, Stop and preset selection are available and have been
+> field-tested with an Axis Q6074.
 >
-> RC3 also protects stored ONVIF and PTZ metadata when camera video settings are changed from the
-> Web interface, including when an older browser tab submits a camera without that metadata.
+> The Web interface also protects stored ONVIF and PTZ metadata when camera video settings are
+> changed, including when an older browser tab submits a camera without that metadata.
 >
 > The upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
-> were validated during the previous release-candidate phase. A fresh installation on a blank
-> Debian 13 system, Web configuration restore and a forced-failure installer rollback were also
+> were validated during the release-candidate phase. A fresh installation on a blank Debian 13
+> system, Web configuration restore and a forced-failure installer rollback were also
 > successfully validated.
 >
 > The blank-system installation test was performed on an x86_64 virtual machine.
 > Raspberry Pi 5 AArch64 remains the official validated hardware target.
 >
-> The Web administration interface is currently available in French.
-> English localization is planned before the stable v1.0 release.
+> The Web administration interface is bilingual (French/English), with a toggle on the login
+> screen and in the application header; the language choice is remembered in a cookie. Some
+> low-level ONVIF client error messages and a few backend-generated diagnostic terms still
+> appear in French regardless of the selected language.
 
 ## Why PiDecoder?
 
@@ -151,7 +153,7 @@ Some cameras limit the number or total frame rate of simultaneous streams. When 
 | [FAQ and troubleshooting](docs/faq.md) | Common startup, RTSP, ONVIF and Wayland issues |
 
 The public documentation is currently written in English.
-The Web administration interface remains in French in v0.9.9.5 RC3; English localization is planned before the stable v1.0 release.
+The Web administration interface is bilingual (French/English) since v1.0.0, with a language toggle on the login screen and in the application header; a few low-level ONVIF and backend diagnostic messages still appear in French regardless of the selected language.
 
 ## Quick start
 
@@ -286,7 +288,7 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 | Native PTZ directions, optical zoom and Stop | Passed on Axis Q6074 |
 | Native PTZ preset selector | Passed on Axis Q6074 |
 | PTZ overlay auto-hide and fixed-camera filtering | Passed |
-| RC3 ONVIF metadata preservation during camera save | Passed in field test |
+| ONVIF metadata preservation during camera save | Passed in field test |
 
 The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.
@@ -295,8 +297,7 @@ Administrator credentials are configured separately and are not included in the 
 
 | Version | Status | Planned focus |
 |---|---|---|
-| v0.9.9.5 RC3 | Current | Native PTZ field testing and final release hardening |
-| v1.0 | Next milestone | First stable public release and English localization |
+| v1.0.0 | Current | First stable public release, native PTZ and bilingual FR/EN Web UI |
 | v1.1 | Planned | Audio support |
 | v1.2 | Planned | HTTPS |
 | v1.3 | Planned | REST API |
