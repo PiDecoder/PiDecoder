@@ -2,12 +2,16 @@
 
 ## Active version
 
-- Current version: **v1.0.0** (merged to `main`, ready to tag and deploy)
+- Current version: **v1.0.0** — tagged, deployed on the production
+  Raspberry Pi (`olympus-vss-mon1`), confirmed running with all services
+  active and the version string consistent everywhere (Web header/login,
+  Diagnostics, native on-screen overlay).
 - Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
-- Active phase: v1.0 shipped — English localization merged to `main`, the
-  `1.0.0-dev` marker finalized to `1.0.0`. Only remaining item: a
-  README/CONTRIBUTING/SECURITY public-launch documentation pass, tracked
-  separately and not blocking this release.
+- Active phase: v1.0 fully shipped — English localization merged to
+  `main`, version finalized from `1.0.0-dev` to `1.0.0`, the
+  README/CONTRIBUTING/SECURITY public-launch documentation pass
+  completed. No open items for this milestone; see "Outside the current
+  scope" below for what's next on the roadmap (audio, HTTPS, REST API).
 
 ## v1.0 — English localization
 
@@ -77,8 +81,8 @@ skipped):
 Version strings were finalized from `1.0.0-dev` to `1.0.0` across
 `Version.hpp.in`, `config-web.py`'s `VERSION`, `install.sh`'s
 `INSTALLER_VERSION` and `validate-release.sh`. The
-README/CONTRIBUTING/SECURITY public-launch documentation pass remains
-outstanding but is tracked separately and does not block this release.
+README/CONTRIBUTING/SECURITY public-launch documentation pass is done —
+see "Merge and release checklist" below.
 
 ## Merge and release checklist — v1.0.0
 
@@ -92,12 +96,34 @@ outstanding but is tracked separately and does not block this release.
    defined, plus the installer and release validator.~~ Done.
 5. ~~Merge `feature/v1.0-i18n-en` into `main`.~~ Done.
 6. ~~Finalize the version strings from `1.0.0-dev` to `1.0.0`.~~ Done.
-7. Tag `main` as `v1.0.0`.
-8. Redeploy `main` on the Raspberry Pi and confirm the app starts
+7. ~~Tag `main` as `v1.0.0`~~ Done — the tag also had to be moved once,
+   to point past a CI-only fix (see the CI note below); it now sits on
+   the same commit as `main`'s tip.
+8. ~~Redeploy `main` on the Raspberry Pi and confirm the app starts
    correctly and shows `1.0.0` everywhere (header, login, Diagnostics,
-   native overlay).
-9. README/CONTRIBUTING/SECURITY public-launch documentation pass (not
-   blocking, can happen after the tag).
+   native overlay).~~ Done and confirmed on `olympus-vss-mon1`.
+9. ~~README/CONTRIBUTING/SECURITY public-launch documentation pass.~~
+   Done — README, CONTRIBUTING, SECURITY, and also
+   `docs/faq.md`/`docs/configuration.md`/`docs/installation.md`/
+   `docs/onvif.md`, which had drifted further out of date than expected
+   (stale RC1/RC3 version mentions, an FAQ answer incorrectly claiming
+   PTZ and English were not yet available). Historical test-checklist
+   files (`docs/ptz-native-test-checklist.md`,
+   `docs/installer-test-checklist.md`) were deliberately left untouched
+   as archives.
+
+**v1.0.0 milestone closed.** No open items remain for this release.
+
+### CI note
+
+The "Check for committed runtime secrets" job in
+`.github/workflows/validate.yml` started failing on the `1.0.0` release
+commit: its `rtsp://user:pass@`-style regex matched the deliberately fake
+credentials in `tests/test_redact_url.cpp` (RC3's redaction unit test)
+and its own literal mention in this file's RC3 field-validation
+paragraph. Fixed by excluding `test_redact_url.cpp` from the scan and
+rewording this file's paragraph to avoid the literal pattern. This check
+had apparently been broken since the RC3 merge without anyone noticing.
 
 ## Operational field state
 
