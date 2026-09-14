@@ -1974,7 +1974,7 @@ function renderDiagnostics(data){
 
   pidecoderInfo.innerHTML=
     diagRow('Version',data.version||'—')+
-    diagRow('Release',data.release||'—')+
+    diagRow('Release',data.release==='Release Candidate'?t('diag.release_candidate'):(data.release==='Stable'?t('diag.release_stable'):(data.release||'—')))+
     diagRow('Architecture',system.architecture||'—')+
     diagRow('Kernel',system.kernel||'—')+
     diagRow('PID',process.pid??'—')+
