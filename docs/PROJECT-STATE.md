@@ -2,70 +2,10 @@
 
 ## Active version
 
-- Development version: **v1.0 (in progress)**
-- Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
-- Active phase: v1.0 roadmap — English localization (bilingual FR/EN Web UI)
-
-## v1.0 — English localization (in progress)
-
-Per the roadmap, v1.0's focus is the first stable public release and English
-localization. The user explicitly chose a real bilingual FR/EN toggle
-(rather than dropping French), implemented as follows:
-
-- language stored in a `pidecoder_lang` cookie (non-HttpOnly, so both the
-  browser JS and the Python backend can read it), default `fr`; a new
-  `POST /api/language` endpoint (no auth required, so it also works on the
-  login screen) sets it;
-- `scripts/web/i18n.js` (new): a small dependency-free translation engine —
-  `STRINGS.fr`/`STRINGS.en` dictionaries (213 keys, full parity verified —
-  see below), `t(key, vars)`, `applyTranslations()` (walks
-  `[data-i18n]`/`[data-i18n-title]` etc.), `setLang()`. Loaded before
-  `app.js` in `index.html`;
-- `scripts/web/index.html`: all static labels/headings/buttons now carry
-  `data-i18n` attributes instead of hardcoded French text; a FR/EN toggle
-  added to the login screen and the app header;
-- `scripts/web/app.js`: every dynamically-generated French string (camera
-  editor, mosaic, ONVIF discovery/PTZ panel, diagnostics, notifications,
-  toasts, error fallbacks) now goes through `t('key')`; language changes
-  re-run the affected render functions (`render()`, `renderMosaic()`,
-  `renderOnvifDiscovery()`, etc.) since their output is JS-generated and
-  `data-i18n` alone can't reach it;
-- `scripts/i18n.py` (new): the backend mirror — a `MESSAGES` dict (25 keys,
-  full FR/EN parity verified) and `t(key, lang, **kwargs)`, used by
-  `scripts/config-web.py` for every HTTP-facing error/message string
-  (login, auth, apply/import/export, password change, camera/ONVIF
-  validation errors) so the API responds in the same language as the UI.
-
-Verified (scripted, not just by hand): every translation key referenced
-from `app.js`/`index.html` exists in both `STRINGS.fr` and `STRINGS.en` (and
-vice versa — no orphaned keys); same cross-check for `i18n_t()` call sites
-in `config-web.py` against `i18n.py`'s `MESSAGES`. `node --check` and
-`python3 -m py_compile` pass on all new/changed files. Not yet validated on
-real hardware — needs a browser pass on the Pi (toggle FR→EN→FR on every
-tab, confirm no leftover French text on the English side and vice versa)
-before this is considered done.
-
-**Known, deliberately deferred scope** (documented rather than silently
-skipped):
-
-- `scripts/onvif_client.py`'s detailed SOAP/HTTP/XML failure messages
-  (`OnvifError`, raised from `_soap()`) stay French. These are diagnostic
-  messages for camera discovery/identification failures, not routine-use
-  strings, and are already duplicated in the ONVIF debug log;
-- the diagnostics/system tab's service-state words that originate in
-  Python (`system_info()`/`diagnostics_payload()` in `config-web.py`:
-  values like `détecté`/`indisponible`/`non déterminé`/`inconnu`) are not
-  yet threaded through `i18n.py` — they'll still show up in French on the
-  English UI. Threading `lang` into those functions is the next chunk of
-  backend work;
-- console-only/operator-facing strings (`ptz-bridge.py`,
-  `check-camera-config.py`) are unchanged — not browser-facing, lowest
-  priority.
-
-Still pending for v1.0 after localization: bump version strings from RC3 to
-a final `1.0.0` (`Version.hpp.in`, `config-web.py`'s `VERSION`,
-`install.sh`'s `INSTALLER_VERSION`, `CHANGELOG.md`), and a public-launch
-pass on README/CONTRIBUTING/SECURITY.
+- Development version: **v0.9.9.5 RC3**
+- Branch: `feature/ptz-native-v0.9.9.5-rc2`
+- Base version: v0.9.9.4 RC1
+- Active phase: field validation complete, ready to merge to `main` and tag
 
 ## Operational field state
 

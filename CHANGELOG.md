@@ -1,22 +1,5 @@
 # Changelog
 
-## 1.0 (in progress)
-
-### English localization
-
-- the Web interface is now bilingual (FR/EN), selectable from a toggle on
-  the login screen and in the app header, instead of French-only;
-- language choice is stored in a `pidecoder_lang` cookie shared between the
-  browser and the server, plus a new `POST /api/language` endpoint;
-- `scripts/web/i18n.js` (new): dependency-free FR/EN translation engine for
-  the frontend (213 keys, full FR/EN parity verified by an automated
-  cross-check against every `t()` call site);
-- `scripts/i18n.py` (new): FR/EN message dictionary for the backend's
-  HTTP-facing error/message strings (25 keys, same parity check);
-- known limitation, deliberately deferred: `onvif_client.py`'s detailed
-  ONVIF failure messages and the System tab's backend-sourced service
-  state words are not yet translated — see `docs/PROJECT-STATE.md`.
-
 ## 0.9.9.5 RC3
 
 ### Native PTZ field hotfix
