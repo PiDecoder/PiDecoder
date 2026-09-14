@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     PiDecoder
-    VERSION 0.9.9.5
+    VERSION 1.0.0
     DESCRIPTION "Low-latency RTSP video decoder for Raspberry Pi"
     LANGUAGES CXX
 )

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly INSTALLER_VERSION="0.9.9.5-rc3"
+readonly INSTALLER_VERSION="1.0.0-dev"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly UNIT_DIR="/etc/systemd/system"
