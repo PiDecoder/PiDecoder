@@ -207,6 +207,14 @@ cmd_disable() {
     restart_service
     printf '\nHTTPS désactivé — le service sert maintenant en HTTP simple.\n'
     printf '"sudo ./scripts/manage-tls.sh enable" pour le réactiver.\n'
+    printf '\nATTENTION : si un navigateur s'"'"'est déjà connecté en HTTPS\n'
+    printf 'auparavant, il a gardé en mémoire un cookie de session marqué\n'
+    printf '« Secure ». Un tel cookie ne peut pas être remplacé par une\n'
+    printf 'connexion HTTP simple (règle de sécurité du navigateur) : la\n'
+    printf 'connexion semblera acceptée (mot de passe validé) mais restera\n'
+    printf 'bloquée juste après, sans message d'"'"'erreur visible. Si ça arrive,\n'
+    printf 'effacer les cookies du site (ou juste "pidecoder_session") pour\n'
+    printf 'ce Pi dans le navigateur concerné, une seule fois.\n'
 }
 
 cmd_enable() {

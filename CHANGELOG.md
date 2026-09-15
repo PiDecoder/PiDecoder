@@ -130,6 +130,40 @@ navigateur.
   redémarrage ne se déclencherait pas ou que le service ne redémarre pas
   correctement.
 
+### Correctif (retour terrain) : login bloqué après un retour en HTTP
+
+Trouvé par l'utilisateur en testant `--no-https` après avoir déjà utilisé
+HTTPS dans le même navigateur : le login semblait accepté (mot de passe
+validé, pas de message d'erreur) mais l'interface restait bloquée sur
+l'écran de connexion. En cause : un cookie `Secure` posé lors d'une
+session HTTPS précédente ne peut pas être remplacé par un cookie non
+`Secure` émis depuis une connexion HTTP simple — le navigateur rejette
+silencieusement la tentative (règle de sécurité standard, indépendante de
+PiDecoder), laissant l'ancien cookie, invalide, bloquer toute nouvelle
+session tant qu'il n'est pas supprimé manuellement.
+
+- `POST /api/tls/disable` expire désormais explicitement les cookies
+  `pidecoder_session` et `pidecoder_lang` (avec l'attribut `Secure`, donc
+  acceptés par le navigateur) dans sa réponse, avant la bascule vers
+  HTTP — c'est le dernier moment où le serveur répond encore en HTTPS,
+  donc le seul où cette suppression est possible. `H.j()` accepte
+  maintenant plusieurs cookies (liste) en plus d'un seul ;
+- `scripts/manage-tls.sh disable` ne peut pas faire ce nettoyage (le
+  service n'est plus en HTTPS au moment de désactiver) : affiche donc un
+  avertissement explicite invitant à vider les cookies du site dans le
+  navigateur si ça arrive. Même avertissement dans `install.sh` sur une
+  mise à jour avec `--no-https` d'une installation qui avait un
+  certificat actif ;
+- validé en local : cycle complet login HTTPS → `/api/tls/disable` →
+  vérification que les deux `Set-Cookie` d'expiration sont bien renvoyés
+  et que le cookie jar les retire effectivement ;
+- reste un point d'attention non corrigible par le code : si HTTPS tombe
+  en HTTP de façon *non contrôlée* (ex. certificat corrompu détecté au
+  démarrage, bascule automatique — voir étape 1 ci-dessus), il n'y a plus
+  de réponse HTTPS disponible pour nettoyer le cookie côté navigateur.
+  Seul le cas du bouton on/off de la Web UI et de `manage-tls.sh disable`
+  (chemins contrôlés) sont couverts ; documenté comme limitation connue.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier

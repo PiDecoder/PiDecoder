@@ -483,6 +483,15 @@ if [[ "$NO_HTTPS" -eq 1 ]]; then
     # délibérément pas repris : --no-https est un choix explicite. Il reste
     # dans la sauvegarde de $TARGET (voir plus haut) si besoin de revenir en
     # arrière.
+    if [[ "$HAD_TARGET" -eq 1 && -f "$TARGET/config/tls/cert.pem" ]]; then
+        warn "Un navigateur déjà connecté en HTTPS auparavant a gardé en" \
+             "mémoire un cookie de session « Secure », que la connexion" \
+             "HTTP simple ne pourra pas remplacer (règle de sécurité du" \
+             "navigateur) : la connexion semblera acceptée mais restera" \
+             "bloquée juste après, sans erreur visible. Si ça arrive," \
+             "effacer les cookies du site pour ce Pi dans le navigateur" \
+             "concerné, une seule fois."
+    fi
 elif [[ -n "$TLS_CERT_PATH" ]]; then
     log "Installation du certificat TLS fourni"
     install -m 0644 "$TLS_CERT_PATH" "$STAGED_ROOT/config/tls/cert.pem"

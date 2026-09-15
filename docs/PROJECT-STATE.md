@@ -206,6 +206,31 @@ running process can't safely do synchronously. The user chose to do both
   open as a fallback in case the toggle leaves the service in a bad
   state.
 
+**Field bug found and fixed: login stuck after falling back to HTTP.**
+The user hit this testing `--no-https` in a browser that had previously
+used HTTPS against the same Pi: login appeared accepted (no error shown)
+but the UI never left the login screen. Root cause: the browser had kept
+a `Secure`-flagged `pidecoder_session` cookie from the earlier HTTPS
+session, and browsers refuse to let a plain-HTTP response overwrite a
+`Secure` cookie of the same name — the new session cookie was silently
+dropped, so every request after login kept coming back 401 "session
+expired" (visible in devtools as `Uncaught (in promise) Error: Session
+expired`, and as "Cookie ... has been rejected because there is an
+existing 'secure' cookie" in the console). Fixed for the controlled
+paths: `POST /api/tls/disable` now explicitly expires both
+`pidecoder_session` and `pidecoder_lang` (as `Secure`, so the browser
+accepts the deletion) in its response, while the server is still
+answering over HTTPS — the only moment that's possible; `H.j()` now
+supports multiple `Set-Cookie` headers to allow this. `manage-tls.sh
+disable` and `install.sh --no-https` (on an upgrade that had an active
+certificate) can't perform this cleanup themselves (the service is no
+longer on HTTPS by the time they run), so both now print an explicit
+warning telling the user to clear that site's cookies in the browser if
+this happens. The *uncontrolled* fallback case (a certificate goes bad
+and `main()` silently drops to HTTP on its own) remains an open,
+undocumented-in-code limitation — there's no HTTPS response left to
+clean up the cookie from at that point.
+
 ### Step 2 — RTSPS between the Pi and the cameras
 
 Not started. Unlike step 1, this isn't a self-contained piece of work:

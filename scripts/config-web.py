@@ -1049,7 +1049,9 @@ class H(BaseHTTPRequestHandler):
             'Cache-Control',
             'no-store',
         )
-        if cookie:self.send_header('Set-Cookie',cookie)
+        if cookie:
+            for c in (cookie if isinstance(cookie,(list,tuple)) else (cookie,)):
+                self.send_header('Set-Cookie',c)
         self.end_headers(); self.wfile.write(raw)
     def static(self,name,content_type):
         try:
@@ -1456,7 +1458,21 @@ class H(BaseHTTPRequestHandler):
                 r=run_manage_tls(['disable'],self.server.root)
                 if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.disable_failed',self.lang()))
                 schedule_self_restart()
-                return self.j({'ok':True,'restarting':True,'redirect_url':self.tls_redirect_url('http')})
+                # Un cookie « Secure » ne peut être écrasé par un cookie non
+                # Secure émis depuis une connexion non chiffrée : le
+                # navigateur rejette silencieusement toute tentative une
+                # fois basculé en HTTP, ce qui bloquerait définitivement la
+                # reconnexion (le nouveau cookie de session ne serait jamais
+                # accepté). C'est le dernier moment où on répond encore en
+                # HTTPS : on expire donc ici, explicitement, les cookies
+                # Secure existants — le navigateur, lui, autorise la
+                # suppression d'un cookie Secure par une réponse HTTPS.
+                with LOCK:SESSIONS.pop(self.token(),None)
+                expire_cookies=[
+                    'pidecoder_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure',
+                    'pidecoder_lang=; SameSite=Lax; Path=/; Max-Age=0; Secure',
+                ]
+                return self.j({'ok':True,'restarting':True,'redirect_url':self.tls_redirect_url('http')},cookie=expire_cookies)
             self.send_error(404)
         except ValueError as e:self.j({'ok':False,'error':str(e)},400)
         except Exception as e:self.j({'ok':False,'error':i18n_t('server.error',self.lang(),error=str(e))},500)
