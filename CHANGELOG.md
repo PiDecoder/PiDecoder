@@ -51,7 +51,21 @@
   camera's tile to fix it, while every other (unchecked) camera keeps
   the exact proven settings, unchanged. Not yet validated on real
   hardware — first attempt at the exact tuning values, likely needs
-  a round of adjustment once tested on the Pi.
+  a round of adjustment once tested on the Pi;
+- fixed the mosaic lag for the Axis camera with its mic on, confirmed
+  on hardware. The Aqara G410 intercom still has some trouble even
+  with the box checked — set aside for now, low priority;
+- the "Audio" checkbox label was shortened (was "a un micro (audio)" /
+  "has a microphone (audio)"), with the fuller explanation moved to
+  its tooltip;
+- new global toggle in the Web config's Disposition/Layout tab,
+  "Micro actif par défaut en plein écran" / "Microphone on by default
+  in fullscreen", next to "Fullscreen on startup". Off by default; when
+  on, Focus opens with sound already on instead of muted, for any
+  camera whose own "Audio" box is checked (no effect on the others);
+- every checkbox in the Web config (camera active/audio, layout
+  fullscreen/audio-default) now renders as an on/off slider toggle
+  instead of a plain checkbox — a visual-only change.
 
 ## 1.0.0
 

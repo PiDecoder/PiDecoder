@@ -225,6 +225,14 @@ def normalize_layout(x,n):
         'fullscreen_on_start':bool(
             x.get('fullscreen_on_start',False)
         ),
+        # Comme fullscreen_on_start : réglage global (pas par caméra), décoché
+        # par défaut. Décide si Player démarre le son actif dès l'ouverture du
+        # focus, pour les caméras qui ont la case "audio_enabled" cochée (voir
+        # CameraConfig::audio_enabled côté moteur natif) — sans effet sur les
+        # autres caméras.
+        'focus_audio_default_on':bool(
+            x.get('focus_audio_default_on',False)
+        ),
         'camera_order':order,
         'placements':placements,
     }
@@ -882,6 +890,12 @@ def diagnostics_payload(root, log_lines=50):
             'fullscreen_on_start':bool(
                 layout.get(
                     'fullscreen_on_start',
+                    False,
+                )
+            ),
+            'focus_audio_default_on':bool(
+                layout.get(
+                    'focus_audio_default_on',
                     False,
                 )
             ),

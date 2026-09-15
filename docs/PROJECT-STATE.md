@@ -148,18 +148,44 @@ fixes** — added after field testing surfaced a serious regression:
   checked, and `has_audio_track()` / `set_muted()` short-circuit the
   same way (audio is never decoded for such a camera, whatever the
   user presses);
-- **not yet validated on hardware** — the exact UDP tuning values above
-  are a reasoned first attempt (chosen with a safety margin, well
-  below FFmpeg defaults) but weren't tunable/testable without real
-  camera hardware; expect at least one more round of adjustment once
-  tested on the Pi with the Axis (mic) and/or Aqara G410 cameras.
+- **validated on hardware, partially**: fixed the mosaic lag for the
+  Axis camera with its mic enabled. The Aqara G410 intercom still
+  shows some trouble even with the box checked — flagged by the user
+  as low priority for now (not investigated further yet).
+
+**Follow-up round after field testing** (checkbox label, a new global
+default, and a UI pass):
+
+- the per-camera checkbox label was shortened from "a un micro
+  (audio)" / "has a microphone (audio)" to a single word, **"Audio"**
+  (same in both languages) — the longer explanation moved to the
+  checkbox's tooltip (`cams.audio_enabled_hint`) instead;
+- new **global** (not per-camera) setting in the Web config's
+  Disposition/Layout tab, right next to "Plein écran au démarrage" /
+  "Fullscreen on startup": **"Micro actif par défaut en plein écran"**
+  / "Microphone on by default in fullscreen". Off by default, like
+  its neighbour. Persisted as `focus_audio_default_on` in
+  `layout.json` (`LayoutConfig::focus_audio_default_on`,
+  `LayoutStore::load`/`save`). When on, `Application::open_focus()`
+  calls `focus_player_->set_muted(false)` right after creating the
+  Focus player instead of leaving it at its muted-by-default state.
+  Has no effect on a camera whose own "Audio" box isn't checked —
+  `Player::set_muted()` already only ever turns decoding on when
+  `audio_capable_` is true, so nothing needed to change there;
+- **all the boolean checkboxes across the Web config** (camera
+  "active", camera "Audio", layout "Plein écran au démarrage", layout
+  "Micro actif par défaut") now render as on/off slider toggles
+  instead of plain checkboxes — a pure visual change (new `.switch`
+  CSS component in `app.css`; same underlying `<input
+  type="checkbox">` elements and `id`/`class` names, so none of the
+  read/write JS logic changed).
 
 **Known, deliberately deferred scope** for this beta:
 
 - no volume level control — only mute/unmute. mpv's own volume stays
   at its default (100%);
-- no per-camera memory of the user's mute choice — every Focus session
-  starts muted, by design (see above).
+- no per-camera memory of the user's mute choice beyond the new global
+  default above (still no *per-camera* override of that default).
 
 Built and field-tested on the Raspberry Pi (`feature/v1.1-audio-focus`):
 the user confirmed the tests passed. Not yet merged to `main`.

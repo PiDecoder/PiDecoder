@@ -657,6 +657,18 @@ void Application::open_focus(
     focus_player_ =
         std::move(focus_player);
 
+    /*
+     * Réglage global "Micro actif par défaut en plein écran" (config
+     * Web, onglet Disposition, à côté de "Plein écran au démarrage") :
+     * si activé, le son démarre allumé au lieu de coupé. Sans effet
+     * réel sur une caméra dont la case "a un micro" n'est pas cochée
+     * (Player::set_muted respecte déjà audio_capable_ dans tous les
+     * cas), donc pas besoin de vérifier camera.audio_enabled ici.
+     */
+    focus_player_->set_muted(
+        !layout_.focus_audio_default_on
+    );
+
     reset_inspection();
 
     focused_camera_index_ =
