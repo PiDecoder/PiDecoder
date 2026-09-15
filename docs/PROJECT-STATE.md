@@ -12,9 +12,12 @@
   decided with the user: (1) HTTPS for the Web administration interface,
   (2) RTSPS between the Pi and the cameras. Step 1 implemented on
   `feature/v1.2-https` and confirmed working by the user on the
-  Raspberry Pi ("https good"); a follow-up round (explicit on/off
-  switch, manual certificate management — see "v1.2 — HTTPS" below) has
-  not been field-tested yet. Step 2 not started.
+  Raspberry Pi ("https good"); two follow-up rounds — SSH-based
+  certificate management (`--no-https`, `manage-tls.sh`) and, per the
+  user's explicit request, the same certificate management plus a full
+  HTTPS on/off toggle exposed directly in the Web UI's Sécurité tab —
+  are implemented and validated in the sandbox but **not yet
+  field-tested** (see "v1.2 — HTTPS" below). Step 2 not started.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 not started)
 
@@ -132,6 +135,76 @@ installation correctly preserving the generated certificate instead of
 regenerating it, a real `--no-https` install, and `manage-tls.sh`
 against the real `pidecoder-config.service` (the sandbox only prints a
 warning and skips the restart, since no such service exists there).
+
+**Second follow-up round — certificate management and full HTTPS on/off
+in the Web UI itself**: the user asked whether adding this as a Web UI
+option (instead of SSH-only) would be complicated. Explained the
+trade-off — swapping/regenerating a certificate while staying on HTTPS is
+simple and hot-reloadable with zero downtime, but a full on/off toggle is
+trickier because switching scheme changes the browser's origin (session/
+cookies don't survive) and the server has to restart itself, which a
+running process can't safely do synchronously. The user chose to do both
+("Le on/off complet aussi, dans la Web UI").
+
+- new `config-web.py` API endpoints: `GET /api/tls/status` (active
+  certificate's subject/expiry/SAN, whether a `.disabled` certificate
+  exists), `POST /api/tls/generate`, `/api/tls/import`, `/api/tls/enable`,
+  `/api/tls/disable`. Each delegates the actual file work to
+  `manage-tls.sh` (new `--no-restart` flag, so `config-web.py` controls
+  exactly when/how the restart happens instead of the script doing it
+  synchronously);
+- `generate` and `import` **hot-reload** the already-running server's live
+  `ssl.SSLContext` by calling `load_cert_chain()` again on it — no
+  restart, no dropped connections, the new certificate applies to the
+  next TLS handshake only. `import` is refused outright when the current
+  connection isn't already HTTPS, to avoid ever sending a private key in
+  cleartext over the LAN (error message points to enabling HTTPS first or
+  using `manage-tls.sh` over SSH);
+- `enable`/`disable` **do** restart the service, since changing scheme is
+  an origin change the running process can't paper over. A process can't
+  synchronously `systemctl restart` its own unit (systemd kills it mid-
+  transaction) and a naive delayed `subprocess.Popen` would also be
+  killed (same cgroup). Fixed with `systemd-run --collect
+  --on-active=2 systemctl restart pidecoder-config.service`: creates an
+  independent transient unit outside the calling service's cgroup, so it
+  survives the service stopping and fires the restart 2 seconds later —
+  enough time for the JSON response (which includes the correct
+  `redirect_url` for the frontend to follow) to reach the browser first;
+- `manage-tls.sh`'s `cmd_enable` had an idempotency bug relative to the
+  new `--no-restart` flag: it used to infer "HTTPS already active" purely
+  from `cert.pem` existing on disk, which becomes wrong once a certificate
+  can be staged via `--no-restart` without the running process having
+  picked it up yet. Fixed to always restart when a valid certificate is
+  present, whether just restored from `.disabled` or already there;
+- new "Certificat HTTPS" panel in the Web UI's Sécurité tab: status
+  display, generate button, on/off toggle, and an import sub-form (cert +
+  key file inputs). A plain warning line precedes the on/off toggle
+  rather than a confirmation dialog — this codebase doesn't use
+  `window.confirm()` anywhere, consistent with e.g. the existing "Apply"
+  button that already restarts the video engine with no confirmation
+  popup;
+- 22 new frontend `sec.tls_*` keys (`web/i18n.js`) and 7 new backend
+  `tls.*` keys (`i18n.py`), FR/EN parity checked (241 keys each side, no
+  mismatch);
+- **validated in the sandbox end-to-end** against a real running
+  `config-web.py` instance (fake root, self-signed cert, real HTTP
+  requests via `curl`): login, `GET /api/tls/status`, `POST
+  /api/tls/generate --force` (certificate changed, session survived,
+  hot-reload confirmed live), `POST /api/tls/import` (certificate
+  replaced, hot-reload confirmed), `POST /api/tls/import` correctly
+  refused over plain HTTP, `POST /api/tls/disable` (cert files correctly
+  renamed to `.disabled`, restarting a fresh instance against the same
+  root confirmed it comes back up in plain HTTP), `POST /api/tls/enable`
+  over HTTP (correctly restored `cert.pem`/`key.pem` from `.disabled`,
+  correct `https://` `redirect_url` returned). **The `systemd-run` self-
+  restart mechanism itself could not be exercised** — no functional
+  systemd in this environment — so the file-level state changes and API
+  contracts are confirmed correct, but the actual restart-and-redirect
+  user experience on a real `pidecoder-config.service` is unverified and
+  is the single highest-risk part of this round. Needs real-hardware
+  validation before being considered done, ideally with an SSH session
+  open as a fallback in case the toggle leaves the service in a bad
+  state.
 
 ### Step 2 — RTSPS between the Pi and the cameras
 

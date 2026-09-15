@@ -69,6 +69,67 @@ chaque caméra et n'a pas de rapport avec le protocole HTTP.
   à jour d'une installation existante en conservant le certificat, et
   `manage-tls.sh` contre le vrai `pidecoder-config.service`.
 
+### Gestion du certificat et bascule HTTPS/HTTP directement dans la Web UI
+
+Confirmé sur le Pi : la partie précédente (HTTPS + `manage-tls.sh` en SSH)
+fonctionne. Suite logique demandée : plutôt que de passer par SSH pour
+chaque changement, un nouveau panneau « Certificat HTTPS » dans l'onglet
+Sécurité de l'interface Web permet de tout faire sans quitter le
+navigateur.
+
+- nouveaux points d'API sur `config-web.py` : `GET /api/tls/status`
+  (sujet, expiration, SAN du certificat actif, présence d'un certificat mis
+  de côté) et `POST /api/tls/generate`, `/api/tls/import`, `/api/tls/enable`,
+  `/api/tls/disable`. Chacun délègue le travail de fichiers à
+  `scripts/manage-tls.sh` (nouveau drapeau `--no-restart`, pour laisser
+  `config-web.py` décider seul du moment du redémarrage) ;
+- **génération et import de certificat sans coupure** : `generate` et
+  `import` rechargent le certificat à chaud sur le processus déjà actif via
+  un second appel à `ssl.SSLContext.load_cert_chain()` sur le contexte TLS
+  en cours d'utilisation — les connexions en cours ne sont pas coupées, et
+  aucun redémarrage n'est nécessaire. Testé de bout en bout en local
+  (génération puis import, statut mis à jour immédiatement, session
+  toujours active après coup) ;
+- **import bloqué tant que la connexion n'est pas déjà en HTTPS** : envoyer
+  une clé privée en clair sur un réseau local reste un risque inutile,
+  donc `POST /api/tls/import` refuse la requête si la connexion active
+  n'est pas déjà chiffrée, avec un message renvoyant vers l'activation de
+  HTTPS ou vers `manage-tls.sh` en SSH ;
+- **bascule HTTPS on/off complète, aussi depuis la Web UI** : contrairement
+  au changement de certificat, activer/désactiver HTTPS change l'origine
+  du navigateur (`http://` et `https://` sur le même hôte:port sont deux
+  origines distinctes — cookies et session ne survivent pas au
+  changement), donc `enable`/`disable` redémarrent réellement le service.
+  Un processus ne peut pas se redemander son propre redémarrage
+  `systemctl` de façon synchrone (systemd le tue avant/pendant la
+  transaction), et un simple `subprocess.Popen` différé serait lui aussi
+  tué (même cgroup). Solution retenue : `systemd-run --collect
+  --on-active=2 systemctl restart pidecoder-config.service`, qui crée une
+  unité transitoire indépendante hors du cgroup du service appelant,
+  survit à son arrêt, et déclenche le redémarrage 2 secondes plus tard —
+  le temps que la réponse JSON atteigne le navigateur. La réponse indique
+  `redirect_url` (nouveau schéma déjà calculé) pour que le frontend
+  redirige au bon moment ;
+- **aucune boîte de dialogue de confirmation native** (`window.confirm`) —
+  cohérent avec le reste de l'interface : un texte d'avertissement clair
+  avant le bouton on/off, plus le retour visuel habituel (toast) ;
+- traductions FR/EN complètes (22 nouvelles clés `sec.tls_*` côté
+  frontend, 7 nouvelles clés `tls.*` côté backend), parité FR/EN vérifiée ;
+- validé en local : `GET /api/tls/status`, `POST /api/tls/generate`,
+  `POST /api/tls/import` (y compris le rejet en HTTP simple) testés de
+  bout en bout contre une instance réelle de `config-web.py` (connexion,
+  authentification, appels API, vérification que le certificat change
+  effectivement et que la session survit). `POST /api/tls/enable` et
+  `/disable` validés pour la partie fichiers (`cert.pem` ↔
+  `cert.pem.disabled`, redémarrage simulé confirmant la bascule HTTP↔HTTPS
+  au redémarrage suivant, `redirect_url` correct dans les deux sens) —
+  **le mécanisme `systemd-run` lui-même n'a pas pu être testé** (pas de
+  systemd fonctionnel dans l'environnement de développement) et reste le
+  point le plus risqué de cette étape : **à valider en priorité sur le Pi
+  réel**, avec une session SSH ouverte en secours au cas où le
+  redémarrage ne se déclencherait pas ou que le service ne redémarre pas
+  correctement.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier

@@ -10,6 +10,7 @@ ACTION=""
 CERT_PATH=""
 KEY_PATH=""
 FORCE=0
+NO_RESTART=0
 
 log() {
     printf '\n==> %s\n' "$*"
@@ -55,10 +56,14 @@ Options:
   --cert PATH     Certificat PEM à importer (avec "import")
   --key PATH      Clé privée PEM à importer (avec "import")
   --force         Avec "generate" : écrase un certificat existant
+  --no-restart    Ne redémarre pas pidecoder-config.service (l'appelant s'en
+                  charge lui-même — utilisé par l'interface Web, qui a besoin
+                  de contrôler précisément quand la coupure de connexion a
+                  lieu plutôt que de la subir pendant cet appel)
   -h, --help      Affiche cette aide
 
 Chaque sous-commande (sauf "status") redémarre pidecoder-config.service pour
-appliquer le changement immédiatement.
+appliquer le changement immédiatement, sauf avec --no-restart.
 EOF
 }
 
@@ -81,6 +86,10 @@ set_tls_permissions() {
 }
 
 restart_service() {
+    if [[ "$NO_RESTART" -eq 1 ]]; then
+        log "Redémarrage ignoré (--no-restart) — à la charge de l'appelant"
+        return 0
+    fi
     if ! systemctl cat pidecoder-config.service >/dev/null 2>&1; then
         warn "pidecoder-config.service introuvable — redémarre-le manuellement si besoin."
         return 0
@@ -203,10 +212,6 @@ cmd_disable() {
 cmd_enable() {
     require_root; require_install
     local dir; dir="$(tls_dir)"
-    if [[ -f "$dir/cert.pem" && -f "$dir/key.pem" ]]; then
-        warn "HTTPS est déjà actif."
-        return 0
-    fi
     if [[ -f "$dir/cert.pem.disabled" && -f "$dir/key.pem.disabled" ]]; then
         log "Restauration du certificat désactivé"
         mv "$dir/cert.pem.disabled" "$dir/cert.pem"
@@ -214,6 +219,19 @@ cmd_enable() {
         set_tls_permissions
         restart_service
         printf '\nHTTPS réactivé avec le certificat précédent.\n'
+    elif [[ -f "$dir/cert.pem" && -f "$dir/key.pem" ]]; then
+        # Un certificat est déjà sur le disque, mais ça ne veut pas dire que
+        # le service qui tourne l'utilise déjà : avec --no-restart, un appel
+        # précédent à "generate"/"import" a pu simplement le préparer sans
+        # jamais redémarrer le service (cas de l'interface Web, qui recharge
+        # le certificat à chaud tant que HTTPS est déjà actif, mais laisse le
+        # fichier "en attente" tant qu'il ne l'est pas). Redémarrer ici, sans
+        # condition, garantit que le service reflète toujours ce qu'il y a
+        # sur le disque plutôt que de supposer un état qu'on ne peut pas
+        # vérifier depuis ce script.
+        log "Certificat déjà présent — redémarrage du service pour le prendre en compte"
+        restart_service
+        printf '\nHTTPS actif.\n'
     else
         cmd_generate
     fi
@@ -235,6 +253,8 @@ while [[ $# -gt 0 ]]; do
             KEY_PATH="$2"; shift 2 ;;
         --force)
             FORCE=1; shift ;;
+        --no-restart)
+            NO_RESTART=1; shift ;;
         -h|--help)
             usage; exit 0 ;;
         *)
