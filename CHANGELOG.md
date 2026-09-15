@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1 (beta, not yet field-tested)
+## 1.1 (beta, field-tested on the Raspberry Pi, not yet merged to main)
 
 ### Native audio support
 

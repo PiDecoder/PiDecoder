@@ -8,11 +8,11 @@
   Diagnostics, native on-screen overlay).
 - Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
 - Active phase: v1.1 roadmap — native audio support in the Focus view,
-  implemented on `main` and awaiting a build + field test on the
-  Raspberry Pi before it is considered a beta (see "v1.1 — audio support"
-  below). No git branch or tag decision made yet for this milestone.
+  implemented on `feature/v1.1-audio-focus`, built and field-tested on
+  the Raspberry Pi with a passing result (see "v1.1 — audio support"
+  below). Not yet merged to `main`.
 
-## v1.1 — audio support (beta, awaiting hardware validation)
+## v1.1 — audio support (beta, validated on hardware)
 
 Per the roadmap, v1.1 adds audio playback. Scope decided with the user
 before implementation:
@@ -63,13 +63,10 @@ output does):
   microphone/audio profile — `has_audio_track()` only becomes accurate
   once mpv has started decoding the stream (i.e. once Focus is already
   open), so there's no "this camera has audio" hint in the camera list
-  or the Web UI;
-- not yet validated on real hardware — needs a build (`cmake --build`)
-  and a field test on the Pi: opening Focus on a camera that has an
-  audio stream (if any of the test cameras expose one), confirming M
-  toggles sound audibly and the indicator matches, and confirming a
-  camera without audio shows `PAS DE SON` and does nothing harmful when
-  M is pressed.
+  or the Web UI.
+
+Built and field-tested on the Raspberry Pi (`feature/v1.1-audio-focus`):
+the user confirmed the tests passed. Not yet merged to `main`.
 
 ## v1.0 — English localization
 
