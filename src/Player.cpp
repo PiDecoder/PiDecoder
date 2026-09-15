@@ -13,13 +13,11 @@ Player::Player(
     const Uint32 mpv_event_type,
     const Uint32 render_event_type,
     const PlayerRole role,
-    const bool audio_capable,
-    const bool rtsps_enabled
+    const bool audio_capable
 )
     : url_(std::move(url)),
       role_(role),
       audio_capable_(audio_capable),
-      rtsps_enabled_(rtsps_enabled),
       mpv_event_type_(mpv_event_type),
       render_event_type_(render_event_type)
 {
@@ -1018,22 +1016,6 @@ void Player::configure()
     check(mpv_set_option_string(mpv_, "cache-pause", "no"), "Désactivation cache-pause");
     check(mpv_set_option_string(mpv_, "demuxer-readahead-secs", "0"), "Désactivation readahead");
 
-    /*
-     * Option ffmpeg pour le protocole "tls" sous-jacent à un flux RTSPS
-     * (voir CameraConfig::rtsps_enabled) : tls_verify=0 (déjà la valeur
-     * par défaut de ffmpeg, mise ici explicitement pour ne jamais
-     * dépendre de ce défaut) accepte le certificat de la caméra sans
-     * chercher à le faire valider par une autorité de confiance. Les
-     * caméras RTSPS présentent presque toujours un certificat
-     * auto-signé, sans lien avec celui de l'interface Web PiDecoder —
-     * le flux est chiffré (protégé d'une écoute passive sur le réseau
-     * local) mais l'identité de la caméra n'est pas authentifiée
-     * cryptographiquement. Compromis équivalent à celui déjà fait pour
-     * le certificat auto-signé de l'interface Web (voir config-web.py).
-     */
-    const std::string tls_suffix =
-        rtsps_enabled_ ? ",tls_verify=0" : "";
-
     if (role_ == PlayerRole::Grid) {
         /*
          * Mosaïque = priorité absolue au direct.
@@ -1043,16 +1025,6 @@ void Player::configure()
          * de libavformat : une perte peut donc produire un artefact
          * ou une frame jetée, mais ne doit pas créer une file
          * d'attente de plusieurs secondes.
-         *
-         * Transport laissé en UDP même quand RTSPS est activé : en
-         * RTSPS, le chiffrement TLS s'applique à la connexion de
-         * contrôle (identifiants, négociation SETUP/PLAY) — le
-         * transport du flux RTP lui-même reste celui négocié via
-         * rtsp-transport, indépendamment du schéma rtsp/rtsps. Pas
-         * encore validé sur caméra RTSPS réelle : si une caméra
-         * particulière n'accepte le RTP qu'en TCP une fois passée en
-         * RTSPS, il faudra forcer rtsp-transport=tcp pour elle
-         * spécifiquement (voir docs/PROJECT-STATE.md).
          */
         check(
             mpv_set_option_string(
@@ -1095,15 +1067,12 @@ void Player::configure()
                 mpv_set_option_string(
                     mpv_,
                     "demuxer-lavf-o",
-                    (
-                        "fflags=nobuffer,"
-                        "max_delay=200000,"
-                        "reorder_queue_size=8,"
-                        "use_wallclock_as_timestamps=1,"
-                        "analyzeduration=500000,"
-                        "probesize=32768" +
-                        tls_suffix
-                    ).c_str()
+                    "fflags=nobuffer,"
+                    "max_delay=200000,"
+                    "reorder_queue_size=8,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=500000,"
+                    "probesize=32768"
                 ),
                 "Configuration RTSP UDP grille (avec audio)"
             );
@@ -1112,15 +1081,12 @@ void Player::configure()
                 mpv_set_option_string(
                     mpv_,
                     "demuxer-lavf-o",
-                    (
-                        "fflags=nobuffer,"
-                        "max_delay=0,"
-                        "reorder_queue_size=0,"
-                        "use_wallclock_as_timestamps=1,"
-                        "analyzeduration=0,"
-                        "probesize=32" +
-                        tls_suffix
-                    ).c_str()
+                    "fflags=nobuffer,"
+                    "max_delay=0,"
+                    "reorder_queue_size=0,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=0,"
+                    "probesize=32"
                 ),
                 "Configuration RTSP UDP grille"
             );
@@ -1143,14 +1109,11 @@ void Player::configure()
             mpv_set_option_string(
                 mpv_,
                 "demuxer-lavf-o",
-                (
-                    "fflags=nobuffer,"
-                    "use_wallclock_as_timestamps=1,"
-                    "analyzeduration=0,"
-                    "probesize=32,"
-                    "stimeout=5000000" +
-                    tls_suffix
-                ).c_str()
+                "fflags=nobuffer,"
+                "use_wallclock_as_timestamps=1,"
+                "analyzeduration=0,"
+                "probesize=32,"
+                "stimeout=5000000"
             ),
             "Configuration RTSP TCP focus"
         );

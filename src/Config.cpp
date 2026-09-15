@@ -8,28 +8,6 @@
 
 namespace pidecoder {
 
-namespace {
-
-/*
- * Réécrit le schéma "rtsp://" en "rtsps://" quand l'utilisateur a coché
- * l'option RTSPS pour cette caméra (menu avancé de la config Web, voir
- * CameraConfig::rtsps_enabled). Ne touche pas une URL qui n'utilise pas
- * exactement ce schéma — pas de double réécriture si l'utilisateur a déjà
- * tapé une URL "rtsps://" à la main dans le champ avancé.
- */
-std::string with_rtsps_scheme(const std::string& url)
-{
-    static const std::string prefix = "rtsp://";
-
-    if (url.rfind(prefix, 0) != 0) {
-        return url;
-    }
-
-    return "rtsps://" + url.substr(prefix.size());
-}
-
-} // namespace
-
 std::vector<CameraConfig> Config::load(
     const std::string& path
 )
@@ -93,12 +71,6 @@ std::vector<CameraConfig> Config::load(
                 false
             );
 
-        camera.rtsps_enabled =
-            item.value(
-                "rtsps_enabled",
-                false
-            );
-
         if (camera.grid_url.empty()) {
             throw std::runtime_error(
                 "URL mosaïque absente pour : " +
@@ -109,11 +81,6 @@ std::vector<CameraConfig> Config::load(
         if (camera.focus_url.empty()) {
             camera.focus_url =
                 camera.grid_url;
-        }
-
-        if (camera.rtsps_enabled) {
-            camera.grid_url = with_rtsps_scheme(camera.grid_url);
-            camera.focus_url = with_rtsps_scheme(camera.focus_url);
         }
 
         if (

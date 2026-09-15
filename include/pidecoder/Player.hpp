@@ -30,8 +30,7 @@ public:
         Uint32 mpv_event_type,
         Uint32 render_event_type,
         PlayerRole role,
-        bool audio_capable = false,
-        bool rtsps_enabled = false
+        bool audio_capable = false
     );
     ~Player();
 
@@ -129,15 +128,6 @@ private:
      * peut être activé du tout en Focus.
      */
     bool audio_capable_{false};
-
-    /*
-     * Reflète CameraConfig::rtsps_enabled. L'URL fournie à ce Player a déjà
-     * été réécrite en "rtsps://" par Config::load() quand c'est le cas —
-     * ce drapeau sert uniquement à ajuster les options ffmpeg côté TLS
-     * dans configure() (voir ce fichier), pas à décider du schéma de
-     * l'URL elle-même.
-     */
-    bool rtsps_enabled_{false};
 
     Uint32 mpv_event_type_;
     Uint32 render_event_type_;
