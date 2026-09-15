@@ -167,7 +167,7 @@ function updateVersionLabel(){
 async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();s.authenticated?showApp():showLogin()}
 async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
-function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}}
+function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;audioDefault.checked=!!cfg.layout.focus_audio_default_on;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
@@ -1155,6 +1155,90 @@ async function changePwd(){
   }finally{
     button.textContent=t('sec.change_button');
     validatePasswordChange();
+  }
+}
+
+function renderTlsStatus(r){
+  const active=!!r.https_active;
+  tlsToggleButton.textContent=active?t('sec.tls_disable_button'):t('sec.tls_enable_button');
+  tlsToggleButton.dataset.action=active?'disable':'enable';
+  tlsImportButton.disabled=!active;
+  tlsImportHint.classList.toggle('hidden',active);
+  tlsToggleWarning.classList.remove('hidden');
+  let html=`<strong>${esc(active?t('sec.tls_status_active'):t('sec.tls_status_inactive'))}</strong>`;
+  if(active && r.cert){
+    html+=`<br>${esc(t('sec.tls_subject'))} : ${esc(r.cert.subject||'?')}`;
+    html+=`<br>${esc(t('sec.tls_expires'))} : ${esc(r.cert.not_after||'?')}`;
+    html+=`<br>${esc(t('sec.tls_san'))} : ${esc((r.cert.san||[]).join(', ')||'—')}`;
+  }else if(!active && r.disabled_present){
+    html+=`<br>${esc(t('sec.tls_disabled_present'))}`;
+  }
+  tlsStatus.innerHTML=html;
+}
+
+async function tlsRefreshStatus(){
+  try{
+    renderTlsStatus(await api('/api/tls/status'));
+  }catch(e){
+    tlsStatus.textContent=e.message;
+  }
+}
+
+async function tlsToggle(){
+  const action=tlsToggleButton.dataset.action;
+  tlsToggleButton.disabled=true;
+  try{
+    const r=await api(`/api/tls/${action}`,{method:'POST',body:'{}'});
+    if(r.restarting){
+      tlsStatus.innerHTML=`<strong>${esc(t('sec.tls_restarting'))}</strong>`;
+      toast(t('sec.tls_restarting'));
+      setTimeout(()=>{if(r.redirect_url)window.location.href=r.redirect_url},2500);
+    }else{
+      tlsRefreshStatus();
+      tlsToggleButton.disabled=false;
+    }
+  }catch(e){
+    toast(e.message,true);
+    tlsToggleButton.disabled=false;
+  }
+}
+
+async function tlsGenerate(){
+  tlsGenerateButton.disabled=true;
+  try{
+    const r=await api('/api/tls/generate',{method:'POST',body:JSON.stringify({force:true})});
+    toast(r.reloaded?t('sec.tls_generated_active'):t('sec.tls_generated_staged'));
+    tlsRefreshStatus();
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    tlsGenerateButton.disabled=false;
+  }
+}
+
+function readFileAsText(input){
+  return new Promise((resolve,reject)=>{
+    const file=input.files && input.files[0];
+    if(!file){reject(new Error(t('sec.tls_import_missing_file')));return}
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||''));
+    reader.onerror=()=>reject(new Error(t('sec.tls_import_missing_file')));
+    reader.readAsText(file);
+  });
+}
+
+async function tlsImport(){
+  tlsImportButton.disabled=true;
+  try{
+    const [cert,key]=await Promise.all([readFileAsText(tlsCertFile),readFileAsText(tlsKeyFile)]);
+    const r=await api('/api/tls/import',{method:'POST',body:JSON.stringify({cert,key})});
+    toast(r.reloaded?t('sec.tls_imported_active'):t('sec.tls_generated_staged'));
+    tlsCertFile.value='';
+    tlsKeyFile.value='';
+    await tlsRefreshStatus();
+  }catch(e){
+    toast(e.message,true);
+    tlsImportButton.disabled=false;
   }
 }
 

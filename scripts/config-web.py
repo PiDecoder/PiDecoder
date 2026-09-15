@@ -942,7 +942,57 @@ def diagnostics_payload(root, log_lines=50):
     return payload
 
 
-class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False
+def manage_tls_script():
+    return Path(__file__).resolve().parent/'manage-tls.sh'
+
+
+def run_manage_tls(args,root):
+    # --no-restart : ce process est lui-même pidecoder-config.service, donc
+    # c'est à l'appelant (les handlers /api/tls/* plus bas) de décider quand
+    # et comment redémarrer — jamais à manage-tls.sh, qui bloquerait sur son
+    # propre redémarrage en pleine requête HTTP (voir schedule_self_restart).
+    return subprocess.run(
+        ['bash',str(manage_tls_script()),*args,'--target',str(root),'--no-restart'],
+        capture_output=True,text=True,timeout=30,
+    )
+
+
+def cert_summary(certfile):
+    try:
+        def field(args):
+            r=subprocess.run(['openssl',*args],capture_output=True,text=True,timeout=5)
+            return r.stdout.strip() if r.returncode==0 else ''
+        subject=field(['x509','-in',str(certfile),'-noout','-subject']).split('=',1)[-1].strip()
+        enddate=field(['x509','-in',str(certfile),'-noout','-enddate']).split('=',1)[-1].strip()
+        san_raw=field(['x509','-in',str(certfile),'-noout','-ext','subjectAltName'])
+        san=[]
+        for line in san_raw.splitlines()[1:]:
+            san.extend(part.strip() for part in line.split(',') if part.strip())
+        return {'subject':subject or None,'not_after':enddate or None,'san':san}
+    except Exception:
+        return None
+
+
+def schedule_self_restart(delay_seconds=2):
+    # pidecoder-config.service est le process qui exécute ce code : lui
+    # demander de se redémarrer directement (subprocess bloquant) le ferait
+    # tuer par systemd avant que la requête HTTP en cours ait pu répondre.
+    # systemd-run --on-active crée une unité transitoire indépendante (hors
+    # du cgroup de ce service), qui survit à son arrêt et déclenche le
+    # redémarrage quelques secondes plus tard — le temps que la réponse JSON
+    # atteigne le navigateur.
+    try:
+        subprocess.Popen(
+            ['systemd-run','--collect',f'--on-active={delay_seconds}',
+             'systemctl','restart','pidecoder-config.service'],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+        )
+        return True
+    except OSError:
+        return False
+
+
+class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False; tls_cert_path:Path; tls_key_path:Path; tls_context:object=None
 class H(BaseHTTPRequestHandler):
     def secure_flag(self):
         # Le drapeau de cookie « Secure » n'a de sens que sur une connexion
@@ -950,6 +1000,36 @@ class H(BaseHTTPRequestHandler):
         # reçu en HTTP simple, ce qui casserait la session si TLS n'est pas
         # actif (ex. secours HTTP quand le certificat est absent).
         return '; Secure' if getattr(self.server,'tls',False) else ''
+    def reload_tls_if_active(self):
+        # Recharge le certificat sur le contexte TLS déjà en écoute, sans
+        # rien redémarrer : ssl.SSLContext.load_cert_chain() peut être
+        # rappelé sur un contexte déjà utilisé, les connexions déjà ouvertes
+        # ne sont pas affectées et les nouvelles utilisent le nouveau
+        # certificat immédiatement. Ne fait rien si le service ne sert pas
+        # actuellement en HTTPS (le fichier reste « en attente » jusqu'à la
+        # prochaine activation — voir /api/tls/enable).
+        if not getattr(self.server,'tls',False):
+            return False
+        ctx=getattr(self.server,'tls_context',None)
+        if ctx is None:
+            return False
+        # Toujours le chemin standard <root>/config/tls/ — c'est celui que
+        # manage-tls.sh écrit, indépendamment d'un éventuel --tls-cert/
+        # --tls-key personnalisé passé au démarrage de ce process (non
+        # utilisé par le service systemd en production, qui ne passe jamais
+        # ces options : voir pidecoder-config.service.in).
+        tls_dir=self.server.root/'config/tls'
+        try:
+            ctx.load_cert_chain(
+                certfile=str(tls_dir/'cert.pem'),
+                keyfile=str(tls_dir/'key.pem'),
+            )
+        except (ssl.SSLError,OSError) as exc:
+            raise RuntimeError(i18n_t('tls.reload_failed',self.lang(),error=str(exc)))
+        return True
+    def tls_redirect_url(self,scheme):
+        host=(self.headers.get('Host') or '').strip()
+        return f'{scheme}://{host}/' if host else ''
     def j(self,data,status=200,cookie=None):
         raw=json.dumps(
             data,
@@ -1038,6 +1118,15 @@ class H(BaseHTTPRequestHandler):
                     500,
                 )
         if p=='/api/system':return self.j(system_info())
+        if p=='/api/tls/status':
+            tls_dir=self.server.root/'config/tls'
+            cert_file=tls_dir/'cert.pem'
+            disabled_file=tls_dir/'cert.pem.disabled'
+            return self.j({
+                'https_active':getattr(self.server,'tls',False),
+                'cert':cert_summary(cert_file) if cert_file.is_file() else None,
+                'disabled_present':disabled_file.is_file() and (tls_dir/'key.pem.disabled').is_file(),
+            })
         if p=='/api/service-status':
             active=subprocess.run(['systemctl','is-active','--quiet','pidecoder.service'],check=False).returncode==0
             enabled=subprocess.run(['systemctl','is-enabled','--quiet','pidecoder.service'],check=False).returncode==0
@@ -1329,6 +1418,45 @@ class H(BaseHTTPRequestHandler):
                     'ok':True,
                     'message':i18n_t('password.changed',lang)
                 })
+            if p=='/api/tls/generate':
+                d=self.body();force=bool(d.get('force',False))
+                args=['generate']
+                if force:args.append('--force')
+                r=run_manage_tls(args,self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.generate_failed',self.lang()))
+                reloaded=self.reload_tls_if_active()
+                return self.j({'ok':True,'reloaded':reloaded})
+            if p=='/api/tls/import':
+                if not getattr(self.server,'tls',False):
+                    raise ValueError(i18n_t('tls.import_requires_https',self.lang()))
+                d=self.body()
+                cert_pem=str(d.get('cert','')).strip()
+                key_pem=str(d.get('key','')).strip()
+                if not cert_pem or not key_pem:
+                    raise ValueError(i18n_t('tls.cert_and_key_required',self.lang()))
+                with tempfile.TemporaryDirectory() as tmp:
+                    cert_tmp=Path(tmp)/'import-cert.pem'
+                    key_tmp=Path(tmp)/'import-key.pem'
+                    cert_tmp.write_text(cert_pem,encoding='utf-8')
+                    key_tmp.write_text(key_pem,encoding='utf-8')
+                    r=run_manage_tls(['import','--cert',str(cert_tmp),'--key',str(key_tmp)],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.import_failed',self.lang()))
+                reloaded=self.reload_tls_if_active()
+                return self.j({'ok':True,'reloaded':reloaded})
+            if p=='/api/tls/enable':
+                if getattr(self.server,'tls',False):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                r=run_manage_tls(['enable'],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.enable_failed',self.lang()))
+                schedule_self_restart()
+                return self.j({'ok':True,'restarting':True,'redirect_url':self.tls_redirect_url('https')})
+            if p=='/api/tls/disable':
+                if not getattr(self.server,'tls',False):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                r=run_manage_tls(['disable'],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.disable_failed',self.lang()))
+                schedule_self_restart()
+                return self.j({'ok':True,'restarting':True,'redirect_url':self.tls_redirect_url('http')})
             self.send_error(404)
         except ValueError as e:self.j({'ok':False,'error':str(e)},400)
         except Exception as e:self.j({'ok':False,'error':i18n_t('server.error',self.lang(),error=str(e))},500)
@@ -1345,6 +1473,7 @@ def main():
     tls_key=Path(a.tls_key) if a.tls_key else root/'config/tls/key.pem'
     use_tls=(not a.no_https) and tls_cert.is_file() and tls_key.is_file()
     s=Server((a.bind,a.port),H);s.root=root;s.auth=auth
+    s.tls_cert_path=tls_cert;s.tls_key_path=tls_key;s.tls_context=None
     if use_tls:
         ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version=ssl.TLSVersion.TLSv1_2
@@ -1355,6 +1484,7 @@ def main():
             use_tls=False
         else:
             s.socket=ctx.wrap_socket(s.socket,server_side=True)
+            s.tls_context=ctx
     s.tls=use_tls
     scheme='https' if use_tls else 'http'
     print(f'PiDecoder Config v{VERSION} : {scheme}://{a.bind}:{a.port}')

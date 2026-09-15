@@ -88,6 +88,42 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Configuration appliquée. PiDecoder a redémarré.',
         'en': 'Configuration applied. PiDecoder restarted.',
     },
+    'tls.generate_failed': {
+        'fr': 'Échec de la génération du certificat',
+        'en': 'Certificate generation failed',
+    },
+    'tls.import_failed': {
+        'fr': 'Échec de l\'import du certificat',
+        'en': 'Certificate import failed',
+    },
+    'tls.import_requires_https': {
+        'fr': (
+            'Import possible uniquement en HTTPS : la clé privée transiterait '
+            'en clair en HTTP. Active d\'abord HTTPS, ou utilise '
+            'scripts/manage-tls.sh en SSH.'
+        ),
+        'en': (
+            'Import only available over HTTPS: the private key would '
+            'otherwise be sent in the clear over HTTP. Enable HTTPS first, '
+            'or use scripts/manage-tls.sh over SSH.'
+        ),
+    },
+    'tls.cert_and_key_required': {
+        'fr': 'Certificat et clé requis',
+        'en': 'Certificate and key are required',
+    },
+    'tls.enable_failed': {
+        'fr': 'Échec de l\'activation de HTTPS',
+        'en': 'Failed to enable HTTPS',
+    },
+    'tls.disable_failed': {
+        'fr': 'Échec de la désactivation de HTTPS',
+        'en': 'Failed to disable HTTPS',
+    },
+    'tls.reload_failed': {
+        'fr': 'Certificat installé mais rechargement TLS échoué : {error}',
+        'en': 'Certificate installed but the TLS reload failed: {error}',
+    },
     'import.invalid_file': {
         'fr': 'Fichier PiDecoder invalide',
         'en': 'Invalid PiDecoder file',
