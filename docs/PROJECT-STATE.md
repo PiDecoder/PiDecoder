@@ -11,10 +11,12 @@
 - Active phase: v1.2 roadmap — end-to-end HTTPS, split into two steps
   decided with the user: (1) HTTPS for the Web administration interface,
   (2) RTSPS between the Pi and the cameras. Step 1 implemented on
-  `feature/v1.2-https`, not yet field-tested (see "v1.2 — HTTPS" below).
-  Step 2 not started.
+  `feature/v1.2-https` and confirmed working by the user on the
+  Raspberry Pi ("https good"); a follow-up round (explicit on/off
+  switch, manual certificate management — see "v1.2 — HTTPS" below) has
+  not been field-tested yet. Step 2 not started.
 
-## v1.2 — HTTPS (step 1/2 implemented, not yet field-tested; step 2 not started)
+## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 not started)
 
 Per the roadmap, v1.2 adds HTTPS. The user asked to secure "the stream"
 too; since PiDecoder's video is decoded natively on the Pi's own screen
@@ -72,8 +74,41 @@ Implementation (native Python stdlib only, no new dependency):
 - `install.sh`'s printed URLs (preflight summary and final install
   message) switched from `http://` to `https://`; a one-line reminder
   about the self-signed browser warning is printed after a fresh
-  install (skipped when `--tls-cert` was used, since a trusted
-  certificate shouldn't trigger that warning).
+  install, but only when a certificate was actually generated this run
+  (`TLS_GENERATED`) — not when one was preserved from a previous install
+  (the browser already trusts it) or imported via `--tls-cert`.
+
+**Follow-up round after the user tried it**: confirmed working, then
+asked for an explicit on/off switch and a lighter way to add a
+certificate manually after the fact, without going through the full
+installer (which rebuilds the native engine and stops every service):
+
+- new `install.sh` `--no-https` flag: skips certificate generation/
+  import entirely at install time, so the service starts in plain HTTP
+  from the first deployment. Mutually exclusive with
+  `--tls-cert`/`--tls-key`. On an upgrade, passing `--no-https`
+  deliberately does not carry over a certificate that was active
+  before — that's an explicit "stop using HTTPS" request; the old
+  certificate still exists in the installer's automatic backup if the
+  user changes their mind;
+- **new `scripts/manage-tls.sh`**: a standalone script to flip
+  HTTPS on/off or swap the certificate on an already-installed Pi,
+  without the heavy install/rebuild path. Subcommands: `status` (prints
+  whether HTTPS is active and the current certificate's subject/
+  expiry/SAN), `generate [--force]` (fresh self-signed certificate,
+  same SAN logic as the installer, refuses to clobber an existing one
+  without `--force`), `import --cert PATH --key PATH` (installs a
+  user-supplied certificate, reusing the exact same PEM/pair-matching
+  validation as `install.sh`), `disable` (moves the active certificate
+  aside to `cert.pem.disabled`/`key.pem.disabled` — nothing is deleted
+  — and the service falls back to HTTP), and `enable` (restores a
+  disabled certificate, or generates a fresh one if none exists).
+  Every subcommand except `status` restarts `pidecoder-config.service`
+  at the end so the change is live immediately; permissions match the
+  installer's (`root:root`, `key.pem` 0600, `cert.pem` 0644). Added to
+  `install.sh`'s `chmod 0755` list and to `validate-release.sh`'s
+  shell-syntax and required-files checks, same as every other shipped
+  script.
 
 **Validated locally, not yet on hardware**: built a throwaway root
 directory in the sandbox, generated a self-signed certificate with the
@@ -83,11 +118,20 @@ HTTP request to the HTTPS port is refused, not silently accepted), that
 `/api/login` returns a `Secure` cookie over HTTPS and a non-`Secure`
 one when no certificate is present (HTTP fallback), and that a
 corrupted certificate degrades to a working HTTP server with a clear
-stderr warning instead of crashing. **Not yet tested on the Raspberry
-Pi itself** — still to validate: the actual browser warning UX on first
-connect, login/PTZ/audio all working normally over HTTPS, and an
-upgrade of an existing installation correctly preserving the generated
-certificate instead of regenerating it.
+stderr warning instead of crashing. Also exercised every
+`manage-tls.sh` subcommand end to end against a fake install directory:
+`generate` then `status`, `generate` again without `--force` (correctly
+refused), `disable`/`enable` round-trip (certificate restored exactly),
+`import` with a matching pair (replaces the active certificate) and
+with a mismatched pair (correctly refused before touching any file),
+`generate --force` (overwrites), and the usage/unknown-subcommand
+paths. **Not yet tested on the Raspberry Pi itself** — still to
+validate: the actual browser warning UX on first connect, login/PTZ/
+audio all working normally over HTTPS, an upgrade of an existing
+installation correctly preserving the generated certificate instead of
+regenerating it, a real `--no-https` install, and `manage-tls.sh`
+against the real `pidecoder-config.service` (the sandbox only prints a
+warning and skips the restart, since no such service exists there).
 
 ### Step 2 — RTSPS between the Pi and the cameras
 

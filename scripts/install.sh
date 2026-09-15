@@ -14,6 +14,8 @@ WEB_BIND="0.0.0.0"
 WEB_PORT="8080"
 TLS_CERT_PATH=""
 TLS_KEY_PATH=""
+NO_HTTPS=0
+TLS_GENERATED=0
 INSTALL_DEPENDENCIES=1
 START_SERVICES=1
 CHECK_ONLY=0
@@ -55,6 +57,9 @@ Options:
                             self-signed one. Requires --tls-key.
   --tls-key PATH           Import the matching TLS private key (PEM). Requires
                             --tls-cert.
+  --no-https               Do not install a certificate; serve the Web
+                            administration interface over plain HTTP instead.
+                            Mutually exclusive with --tls-cert/--tls-key.
   --skip-deps              Do not run apt-get
   --no-start               Install and enable units without starting them
   --check                  Validate the host and source without changing anything
@@ -155,6 +160,10 @@ while [[ $# -gt 0 ]]; do
             TLS_KEY_PATH="$2"
             shift 2
             ;;
+        --no-https)
+            NO_HTTPS=1
+            shift
+            ;;
         --skip-deps)
             INSTALL_DEPENDENCIES=0
             shift
@@ -211,6 +220,10 @@ esac
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || fail "Port Web invalide : $WEB_PORT"
 (( WEB_PORT >= 1 && WEB_PORT <= 65535 )) || fail "Port Web hors plage : $WEB_PORT"
 [[ "$WAYLAND_DISPLAY_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail "Nom de socket Wayland invalide"
+
+if [[ "$NO_HTTPS" -eq 1 && ( -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ) ]]; then
+    fail "--no-https est incompatible avec --tls-cert/--tls-key"
+fi
 
 if [[ -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ]]; then
     [[ -n "$TLS_CERT_PATH" && -n "$TLS_KEY_PATH" ]] || fail "--tls-cert et --tls-key doivent être fournis ensemble"
@@ -346,7 +359,11 @@ check_host() {
     printf 'Utilisateur   : %s (uid %s, groupe %s)\n' "$SERVICE_USER" "$SERVICE_UID" "$SERVICE_GROUP"
     printf 'Cible         : %s\n' "$TARGET"
     printf 'Wayland       : /run/user/%s/%s\n' "$SERVICE_UID" "$WAYLAND_DISPLAY_NAME"
-    printf 'Administration: https://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
+    if [[ "$NO_HTTPS" -eq 1 ]]; then
+        printf 'Administration: http://%s:%s (--no-https)\n' "$WEB_BIND" "$WEB_PORT"
+    else
+        printf 'Administration: https://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
+    fi
 
     if [[ -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
         printf 'Session vidéo : détectée\n'
@@ -458,7 +475,15 @@ fi
 
 mkdir -p "$STAGED_ROOT/config/backups" "$STAGED_ROOT/config/tls"
 
-if [[ -n "$TLS_CERT_PATH" ]]; then
+if [[ "$NO_HTTPS" -eq 1 ]]; then
+    log "HTTPS désactivé (--no-https) : aucun certificat ne sera installé"
+    # config-web.py sert automatiquement en HTTP simple dès qu'aucun
+    # certificat n'est présent sous config/tls/ — rien d'autre à faire ici.
+    # Un certificat conservé d'une précédente installation n'est
+    # délibérément pas repris : --no-https est un choix explicite. Il reste
+    # dans la sauvegarde de $TARGET (voir plus haut) si besoin de revenir en
+    # arrière.
+elif [[ -n "$TLS_CERT_PATH" ]]; then
     log "Installation du certificat TLS fourni"
     install -m 0644 "$TLS_CERT_PATH" "$STAGED_ROOT/config/tls/cert.pem"
     install -m 0600 "$TLS_KEY_PATH" "$STAGED_ROOT/config/tls/key.pem"
@@ -492,6 +517,8 @@ else
         -addext "subjectAltName=$san_list" \
         >/dev/null 2>&1 \
         || fail "Échec de la génération du certificat TLS auto-signé"
+
+    TLS_GENERATED=1
 fi
 
 if [[ ! -f "$STAGED_ROOT/config/cameras.json" ]]; then
@@ -549,7 +576,8 @@ chmod 0755 \
     "$TARGET/scripts/onvif_client.py" \
     "$TARGET/scripts/ptz-bridge.py" \
     "$TARGET/scripts/check-camera-config.py" \
-    "$TARGET/scripts/validate-release.sh"
+    "$TARGET/scripts/validate-release.sh" \
+    "$TARGET/scripts/manage-tls.sh"
 
 if [[ -f "$TARGET/config/web-auth.json" ]]; then
     chown root:root "$TARGET/config/web-auth.json"
@@ -688,15 +716,24 @@ HOST_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$HOST_ADDRESS" ]] || HOST_ADDRESS="ADRESSE_DU_RASPBERRY_PI"
 
 printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
-printf 'Administration Web : https://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
+if [[ "$NO_HTTPS" -eq 1 ]]; then
+    printf 'Administration Web : http://%s:%s (HTTPS désactivé, --no-https)\n' "$HOST_ADDRESS" "$WEB_PORT"
+else
+    printf 'Administration Web : https://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
+fi
 printf 'Utilisateur Web     : admin\n'
 printf 'Utilisateur vidéo   : %s\n' "$SERVICE_USER"
 printf 'Installation        : %s\n' "$TARGET"
 printf 'Sauvegarde          : %s\n' "$BACKUP_DIR"
 
-if [[ -z "$TLS_CERT_PATH" ]]; then
+if [[ "$TLS_GENERATED" -eq 1 ]]; then
     printf '\nLe certificat TLS est auto-signé : le navigateur affichera un avertissement\n'
     printf 'la première fois — valider/accepter le certificat pour continuer.\n'
+fi
+
+if [[ "$NO_HTTPS" -eq 0 ]]; then
+    printf '\nPour changer de certificat ou désactiver HTTPS sans réinstaller :\n'
+    printf '  sudo ./scripts/manage-tls.sh --help\n'
 fi
 
 if [[ ! -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2 (en cours, non validé sur le Pi)
+## 1.2 (en cours — étape 1 confirmée sur le Pi par l'utilisateur)
 
 ### HTTPS pour l'interface d'administration (étape 1/2)
 
@@ -17,8 +17,8 @@ chaque caméra et n'a pas de rapport avec le protocole HTTP.
   très ancienne, fichier corrompu — le service journalise un avertissement
   clair et bascule en HTTP simple plutôt que de planter, pour ne jamais
   bloquer l'accès à l'administration ;
-- nouveau drapeau `--no-https` pour forcer explicitement le HTTP (usage
-  développement uniquement) ;
+- nouveau drapeau `--no-https` (`config-web.py`) pour forcer explicitement
+  le HTTP ;
 - le cookie de session (`pidecoder_session`) et le cookie de langue
   (`pidecoder_lang`) reçoivent l'attribut `Secure` uniquement quand la
   connexion est effectivement chiffrée — un cookie `Secure` envoyé en HTTP
@@ -38,15 +38,36 @@ chaque caméra et n'a pas de rapport avec le protocole HTTP.
   certificat est un PEM valide et que la clé correspond bien au certificat
   (comparaison par clé publique, compatible RSA et EC) avant de les
   installer, pour éviter un déploiement avec une paire invalide ;
+- nouvelle option `--no-https` (`install.sh`) pour installer sans aucun
+  certificat, dès le premier déploiement : le service démarre directement
+  en HTTP simple. Incompatible avec `--tls-cert`/`--tls-key` ; sur une
+  mise à jour, un certificat précédemment installé n'est délibérément pas
+  repris (il reste dans la sauvegarde automatique de l'installeur si besoin
+  de revenir en arrière) ;
 - permissions alignées sur celles de `web-auth.json` : `config/tls/`
   en 0750, `key.pem` en 0600, `cert.pem` en 0644, propriétaire
   `root:root` (le service `pidecoder-config` tourne déjà en root) ;
+- **nouveau** `scripts/manage-tls.sh` : bascule HTTPS/HTTP ou change de
+  certificat après coup, sans repasser par l'installeur complet (qui
+  recompile le moteur natif et coupe tous les services). Sous-commandes
+  `status` (état courant, sujet/expiration/SAN du certificat actif),
+  `generate [--force]` (nouveau certificat auto-signé, mêmes réglages que
+  l'installeur), `import --cert PATH --key PATH` (certificat personnalisé,
+  avec la même vérification de correspondance certificat/clé que
+  l'installeur), `disable` (met le certificat actif de côté —
+  `cert.pem.disabled`/`key.pem.disabled` — et repasse en HTTP, sans rien
+  supprimer) et `enable` (restaure le certificat mis de côté, ou en génère
+  un nouveau s'il n'y en a aucun). Redémarre automatiquement
+  `pidecoder-config.service` à la fin de chaque changement ;
 - validé en local (génération de certificat, bascule HTTP↔HTTPS, cookie
   `Secure` présent/absent selon le mode, dégradation propre sur un
-  certificat corrompu) mais **pas encore testé sur le Raspberry Pi réel** —
-  reste à valider : avertissement du navigateur au premier accès, login,
-  PTZ et audio par-dessus HTTPS, mise à jour d'une installation existante
-  en conservant le certificat.
+  certificat corrompu, et chaque sous-commande de `manage-tls.sh` —
+  `generate`/`import`/`disable`/`enable`/`status`, y compris le rejet
+  d'une paire certificat/clé non correspondante) mais **pas encore testé
+  sur le Raspberry Pi réel** — reste à valider : avertissement du
+  navigateur au premier accès, login, PTZ et audio par-dessus HTTPS, mise
+  à jour d'une installation existante en conservant le certificat, et
+  `manage-tls.sh` contre le vrai `pidecoder-config.service`.
 
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 

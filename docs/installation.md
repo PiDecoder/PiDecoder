@@ -152,6 +152,13 @@ See [Backup and restore](backup.md) for details.
 --wayland-display NAME   Wayland socket name (default: wayland-0)
 --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
 --port PORT              Web administration port (default: 8080)
+--tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
+                          self-signed one. Requires --tls-key.
+--tls-key PATH           Import the matching TLS private key (PEM). Requires
+                          --tls-cert.
+--no-https               Do not install a certificate; serve the Web
+                          administration interface over plain HTTP instead.
+                          Mutually exclusive with --tls-cert/--tls-key.
 --skip-deps              Do not run apt-get
 --no-start               Install and enable units without starting them
 --check                  Validate the host and source without changing anything
@@ -175,6 +182,64 @@ The environment variable below allows installation on a non-Debian host, but tha
 ```bash
 sudo PIDECODER_ALLOW_UNSUPPORTED=1 ./scripts/install.sh
 ```
+
+## HTTPS and TLS certificates
+
+The Web administration interface is served over HTTPS by default.
+
+On a fresh install, if no certificate is imported, `install.sh` generates a
+self-signed one covering the Pi's hostname and its detected local IPv4
+addresses:
+
+```bash
+sudo ./scripts/install.sh
+```
+
+The browser shows a certificate warning the first time — this is expected
+for a self-signed certificate on a device with no public domain/DNS, similar
+to most LAN admin interfaces (router, NAS...). Accept it once to continue.
+
+On an upgrade, an existing certificate is preserved as-is; it is not
+regenerated.
+
+### Installing without HTTPS
+
+```bash
+sudo ./scripts/install.sh --no-https
+```
+
+No certificate is installed and the service starts in plain HTTP. This
+cannot be combined with `--tls-cert`/`--tls-key`.
+
+### Importing your own certificate
+
+```bash
+sudo ./scripts/install.sh \
+  --tls-cert /path/to/cert.pem \
+  --tls-key /path/to/key.pem
+```
+
+Both files must be PEM-encoded and form a matching pair — the installer
+verifies this (certificate validity and a public-key comparison against the
+key) before installing them, and refuses a mismatched pair.
+
+### Changing the certificate later, without reinstalling
+
+`install.sh` rebuilds the native engine and stops every service — not
+practical just to switch a certificate. Use `scripts/manage-tls.sh` instead,
+which only touches `config/tls/` and restarts `pidecoder-config.service`:
+
+```bash
+sudo ./scripts/manage-tls.sh status              # current state
+sudo ./scripts/manage-tls.sh generate [--force]  # new self-signed certificate
+sudo ./scripts/manage-tls.sh import --cert PATH --key PATH
+sudo ./scripts/manage-tls.sh disable             # switch to plain HTTP
+sudo ./scripts/manage-tls.sh enable              # restore/regenerate
+```
+
+`disable` moves the active certificate aside (`cert.pem.disabled` /
+`key.pem.disabled`) instead of deleting it, so `enable` can restore the exact
+same certificate later.
 
 ## Startup architecture
 

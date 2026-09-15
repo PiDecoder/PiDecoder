@@ -32,6 +32,7 @@ fi
 echo "[3/8] Vérification des scripts Shell"
 bash -n \
     "$ROOT/scripts/install.sh" \
+    "$ROOT/scripts/manage-tls.sh" \
     "$ROOT/scripts/validate-release.sh"
 
 echo "[4/8] Vérification de la version CMake"
@@ -50,6 +51,7 @@ required=(
     "scripts/onvif_client.py"
     "scripts/i18n.py"
     "scripts/install.sh"
+    "scripts/manage-tls.sh"
     "scripts/check-camera-config.py"
     "scripts/ptz-bridge.py"
     "systemd/pidecoder.service.in"
