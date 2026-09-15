@@ -1493,6 +1493,24 @@ def main():
     if use_tls:
         ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version=ssl.TLSVersion.TLSv1_2
+        # Désactive les tickets de session TLS : sans ça, une connexion peut
+        # reprendre une session existante (« resumption ») sans refaire de
+        # poignée de main complète, donc sans jamais représenter le
+        # certificat — un navigateur déjà connecté continuerait de voir
+        # l'ancien certificat après un generate/import à chaud (rechargé
+        # avec load_cert_chain(), voir reload_tls_if_active()), jusqu'à ce
+        # qu'une poignée de main complète se produise par hasard. Ça garantit
+        # à la place qu'une nouvelle connexion présente toujours le
+        # certificat réellement chargé au moment de la connexion.
+        # OP_NO_TICKET seul ne suffit pas : il ne couvre que le mécanisme de
+        # tickets « historique » (TLS ≤ 1.2). En TLS 1.3 — négocié par défaut
+        # avec un navigateur récent — c'est num_tickets qui contrôle l'émission
+        # des tickets de session ; testé dans le bac à sable avec openssl
+        # s_client (-sess_out/-sess_in) : sans num_tickets=0, une reprise de
+        # session en TLS 1.3 réussissait malgré OP_NO_TICKET et continuait de
+        # présenter l'ancien certificat.
+        ctx.options|=ssl.OP_NO_TICKET
+        ctx.num_tickets=0
         try:
             ctx.load_cert_chain(certfile=str(tls_cert),keyfile=str(tls_key))
         except (ssl.SSLError,OSError) as exc:

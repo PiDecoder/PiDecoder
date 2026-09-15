@@ -259,6 +259,29 @@ installation"). Going forward, every delivered round that touches
 (or `sudo ./scripts/install.sh` when C++ sources changed), never a bare
 service restart.
 
+**Bug found and fixed: the self-signed certificate appeared to never
+regenerate.** Once `sync-dev.sh` was actually in place (so real code was
+finally being tested), clicking "Generate" repeatedly always showed the
+same certificate dates in the browser's own certificate viewer. The
+server-side data was always correct (verified: `not_after` changes on
+every `POST /api/tls/generate` call, and PiDecoder's own status panel
+reflects it immediately) — the culprit was TLS session resumption: a
+browser reusing an existing TLS 1.3 session performs an abbreviated
+handshake that never re-presents the certificate, so its certificate
+viewer kept showing whatever was live at the time the session was first
+established. `ssl.SSLContext.options |= ssl.OP_NO_TICKET` alone didn't
+fix it (that only covers pre-1.3 ticket resumption); `ctx.num_tickets = 0`
+(Python's TLS 1.3-specific control) was also needed. Reproduced and
+confirmed with `openssl s_client -sess_out`/`-sess_in`: before the fix, a
+captured session could be resumed after a regenerate and would still
+present the old certificate; after adding `num_tickets = 0`, no session
+ticket is issued at all and every new connection gets a full handshake
+with whatever certificate is currently loaded. Minor tradeoff: every
+HTTPS connection now does a full handshake instead of a cheaper resumed
+one — negligible for a low-traffic LAN admin interface, and consistent
+with `config-web.py` already using HTTP/1.0 (a new TCP connection per
+request regardless).
+
 ### Step 2 — RTSPS between the Pi and the cameras
 
 Not started. Unlike step 1, this isn't a self-contained piece of work:

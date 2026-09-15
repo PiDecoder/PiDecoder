@@ -272,6 +272,52 @@ dans `~/PiDecoder`.
   celle-ci, malgré les confirmations de test — à revalider entièrement
   une fois `sync-dev.sh` utilisé pour la première fois.
 
+### Correctif : le certificat auto-signé semblait ne jamais se renouveler
+
+Signalé une fois `sync-dev.sh` en place (donc en testant vraiment le
+nouveau code cette fois) : cliquer sur « Générer un nouveau certificat »
+plusieurs fois de suite affichait toujours le même certificat (mêmes
+dates de validité) dans le visualiseur de certificat du navigateur.
+
+Le serveur régénérait pourtant bien un nouveau certificat à chaque clic
+(vérifié en local : la date d'expiration change à chaque appel de
+`POST /api/tls/generate`, et le panneau « Certificat HTTPS » de
+PiDecoder lui-même l'affiche correctement, immédiatement). En cause : la
+**reprise de session TLS** (« session resumption », TLS 1.3 en
+particulier, négocié par défaut avec un navigateur récent). Un navigateur
+qui a déjà une session ouverte avec le serveur peut reprendre cette
+session lors d'une nouvelle connexion — poignée de main abrégée — sans
+jamais représenter de certificat ; le visualiseur de certificat du
+navigateur continue alors d'afficher celui de la session d'origine tant
+qu'une poignée de main *complète* ne se reproduit pas par hasard.
+
+- `ssl.SSLContext.options |= ssl.OP_NO_TICKET` seul ne suffisait pas — ce
+  drapeau ne couvre que le mécanisme de tickets « historique »
+  (TLS ≤ 1.2). En TLS 1.3, c'est l'attribut `SSLContext.num_tickets`
+  (Python ≥ 3.8) qui contrôle l'émission des tickets de session ; ajout de
+  `ctx.num_tickets = 0` en plus de `OP_NO_TICKET`, pour couvrir les deux
+  mécanismes et garantir qu'aucune connexion ne peut être reprise sans
+  poignée de main complète — donc sans présenter le certificat réellement
+  actif au moment de la connexion ;
+- reproduit et confirmé en local avec `openssl s_client`
+  (`-sess_out`/`-sess_in`) : avant le correctif, une session capturée
+  avant une régénération de certificat pouvait être reprise ensuite
+  (`Reused, TLSv1.3` dans la sortie d'`s_client`), présentant l'ancien
+  certificat malgré `OP_NO_TICKET` seul ; après l'ajout de
+  `num_tickets = 0`, plus aucun ticket n'est émis (le fichier de session
+  `-sess_out` n'est même plus créé), et une connexion fraîche présente
+  systématiquement le certificat tout juste régénéré ;
+- léger compromis assumé : chaque nouvelle connexion HTTPS refait une
+  poignée de main complète (légèrement plus coûteuse qu'une reprise de
+  session) — sans impact perceptible pour une interface d'administration
+  à faible trafic, et cohérent avec HTTP/1.0 déjà utilisé par
+  `config-web.py` (chaque requête ouvre de toute façon une nouvelle
+  connexion TCP, avec ou sans TLS) ;
+- **remarque** : ce correctif rend aussi plus fiable la bascule
+  HTTPS→HTTP→HTTPS et l'import de certificat — dans tous ces cas, une
+  session TLS reprise aurait pu masquer un changement réel côté serveur
+  de la même manière.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier
