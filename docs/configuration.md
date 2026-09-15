@@ -33,6 +33,7 @@ Each camera contains:
 | `Résolution plein écran` | Higher-resolution stream used for a focused camera |
 | `FPS plein écran` | Frame-rate target for full-screen display |
 | `active` | Enables or disables the camera |
+| `Audio` | Marks the camera as having a microphone on its RTSP stream (see [Audio](#audio)) |
 
 The **Valeurs PiDecoder** button fills the current default values:
 
@@ -143,6 +144,33 @@ In the **Caméras** tab, cameras can be reordered using the `☰` handle.
 Only the handle starts the drag operation, so text fields remain selectable.
 
 The active camera order is also reflected in the mosaic layout.
+
+## Audio
+
+Since v1.1.0, PiDecoder can play the audio track of a camera in the full-screen (focus) view, when the camera's RTSP stream carries one (for example an intercom with a microphone).
+
+This is opt-in per camera:
+
+1. Open the **Caméras** tab and edit the camera.
+2. Enable the **Audio** toggle only if this camera's RTSP stream actually includes an audio track.
+3. Click **Sauvegarder**, then **Appliquer**.
+
+When **Audio** is enabled for a camera:
+
+- A speaker button appears in the bottom-right corner of the focus view for that camera (repositioned automatically to avoid the PTZ pad when PTZ is also available). Only one camera can be heard at a time, and audio is never played in the mosaic.
+- The mosaic decoding settings for that camera are automatically relaxed to tolerate the extra audio stream. Cameras with **Audio** left disabled keep the original, unchanged low-latency mosaic settings.
+
+Leave **Audio** disabled for a camera whose stream has no audio track, or whose audio you don't need — this keeps the mosaic at its lowest possible latency for that camera.
+
+### Audio on by default in focus view
+
+In the **Disposition** tab, the **Micro actif par défaut en plein écran** toggle mirrors the existing **Plein écran au démarrage** toggle: when enabled, opening the focus view starts with sound already on instead of muted, for cameras that have **Audio** enabled. This is a global setting (not per camera) and has no effect on cameras whose **Audio** toggle is off — those always stay muted.
+
+### Hardware compatibility
+
+Audio has been field-tested and validated with an **Axis** camera (RTSP stream with an enabled microphone). Support for other ONVIF/RTSP cameras with audio is expected to work the same way but is not yet validated to the same degree.
+
+The **Aqara G410** intercom is known to have residual audio-related issues even with **Audio** enabled. This is being tracked but is not currently blocking; video-only use of the G410 (with **Audio** left disabled) is unaffected.
 
 ## Enable or disable a camera
 

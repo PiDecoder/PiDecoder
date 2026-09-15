@@ -1,14 +1,20 @@
 # Changelog
 
-## 1.1 (beta, field-tested on the Raspberry Pi, not yet merged to main)
+## 1.1.0
+
+Field-tested and validated on the Raspberry Pi with an Axis camera (RTSP
+stream with an enabled microphone) — see `docs/faq.md` and
+`docs/configuration.md` for the hardware-compatibility details, including
+the known Aqara G410 exception below.
 
 ### Native audio support
 
 - the native engine can now play audio in the Focus view (one enlarged
   camera at a time); the mosaic/grid view stays silent, since playing
   every visible tile's audio at once would be unusable;
-- sound starts muted every time Focus opens, on any camera; press **M**
-  or click the new audio button to unmute;
+- sound starts muted every time Focus opens, on any camera, unless the
+  new "Micro actif par défaut en plein écran" layout toggle (see below)
+  is enabled; press **M** or click the new audio button to unmute;
 - the audio button is a small speaker icon, bottom-right of the Focus
   view (shifted left of the PTZ pad instead, on cameras that have
   one, so the two never overlap). It follows the same show/hide
@@ -49,12 +55,11 @@
   audio RTP stream interleaved with the video one. Checking this box
   for a camera relaxes just enough of those settings for that
   camera's tile to fix it, while every other (unchecked) camera keeps
-  the exact proven settings, unchanged. Not yet validated on real
-  hardware — first attempt at the exact tuning values, likely needs
-  a round of adjustment once tested on the Pi;
+  the exact proven settings, unchanged;
 - fixed the mosaic lag for the Axis camera with its mic on, confirmed
-  on hardware. The Aqara G410 intercom still has some trouble even
-  with the box checked — set aside for now, low priority;
+  on hardware. The Aqara G410 intercom still has some residual audio
+  trouble even with the box checked — set aside for now, low priority,
+  and does not affect video-only use of the G410;
 - the "Audio" checkbox label was shortened (was "a un micro (audio)" /
   "has a microphone (audio)"), with the fuller explanation moved to
   its tooltip;

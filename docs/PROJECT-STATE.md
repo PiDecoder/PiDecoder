@@ -2,17 +2,16 @@
 
 ## Active version
 
-- Stable version: **v1.0.0** — tagged, deployed on the production
-  Raspberry Pi (`olympus-vss-mon1`), confirmed running with all services
-  active and the version string consistent everywhere (Web header/login,
-  Diagnostics, native on-screen overlay).
-- Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
-- Active phase: v1.1 roadmap — native audio support in the Focus view,
-  implemented on `feature/v1.1-audio-focus`, built and field-tested on
-  the Raspberry Pi with a passing result (see "v1.1 — audio support"
-  below). Not yet merged to `main`.
+- Stable version: **v1.1.0** — native audio support in the Focus view
+  (see "v1.1 — audio support" below), field-tested and validated on the
+  Raspberry Pi with an Axis camera. Merged from
+  `feature/v1.1-audio-focus` into `main`, tagged, to be deployed on the
+  production Raspberry Pi (`olympus-vss-mon1`).
+- Base version: v1.0.0 (merged to `main`, tagged, deployed)
+- Active phase: none currently open — v1.1.0 closes the audio-support
+  roadmap item. Next roadmap item to be defined with the user.
 
-## v1.1 — audio support (beta, validated on hardware)
+## v1.1 — audio support (validated on hardware, merged to `main`)
 
 Per the roadmap, v1.1 adds audio playback. Scope decided with the user
 before implementation:
@@ -149,9 +148,12 @@ fixes** — added after field testing surfaced a serious regression:
   same way (audio is never decoded for such a camera, whatever the
   user presses);
 - **validated on hardware, partially**: fixed the mosaic lag for the
-  Axis camera with its mic enabled. The Aqara G410 intercom still
-  shows some trouble even with the box checked — flagged by the user
-  as low priority for now (not investigated further yet).
+  Axis camera with its mic enabled — this is the validated hardware
+  configuration for v1.1.0 (see `docs/faq.md` and
+  `docs/configuration.md`). The Aqara G410 intercom still shows some
+  trouble even with the box checked — flagged by the user as low
+  priority for now (not investigated further yet), and does not block
+  video-only use of the G410.
 
 **Follow-up round after field testing** (checkbox label, a new global
 default, and a UI pass):
@@ -188,7 +190,11 @@ default, and a UI pass):
   default above (still no *per-camera* override of that default).
 
 Built and field-tested on the Raspberry Pi (`feature/v1.1-audio-focus`):
-the user confirmed the tests passed. Not yet merged to `main`.
+the user confirmed the tests passed and approved the release. Version
+bumped to **1.1.0** in `CMakeLists.txt`, `scripts/config-web.py`,
+`scripts/install.sh` and `scripts/validate-release.sh`; hardware
+compatibility documented in `docs/configuration.md` and `docs/faq.md`.
+Merged into `main` and tagged `v1.1.0`.
 
 ## v1.0 — English localization
 

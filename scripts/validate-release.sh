@@ -107,4 +107,4 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
 fi
 
 echo "[8/8] Validation terminée"
-echo "PiDecoder v1.0.0 : paquet cohérent."
+echo "PiDecoder v1.1.0 : paquet cohérent."
