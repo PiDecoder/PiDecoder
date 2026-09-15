@@ -53,6 +53,11 @@ public:
         int logical_y
     ) const noexcept;
 
+    [[nodiscard]] bool audio_button_hit_at(
+        int logical_x,
+        int logical_y
+    ) const noexcept;
+
     [[nodiscard]] std::optional<PtzPresetHit>
     ptz_preset_hit_at(
         int logical_x,
@@ -88,6 +93,15 @@ private:
         bool available,
         int canvas_height
     );
+
+    /*
+     * Zone cliquable du bouton son (haut-gauche de la vue Focus),
+     * taille fixe pour rester stable quel que soit le texte affiché
+     * ("SON ACTIF" / "SON COUPE" / "PAS DE SON"). Partagée entre le
+     * dessin (draw_audio_indicator) et le test de clic
+     * (audio_button_hit_at).
+     */
+    [[nodiscard]] Rect audio_button() const noexcept;
 
     void draw_ptz_overlay(
         int canvas_width,

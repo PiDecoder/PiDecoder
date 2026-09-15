@@ -44,14 +44,32 @@ output does):
   stream has no audio track at all);
 - `Application`: **M** toggles `focus_player_`'s mute state while a
   camera is in Focus (`SDLK_m`, alongside the existing `SDLK_ESCAPE`/
-  `SDLK_f` handling). A short-lived on-screen indicator (2 seconds,
-  same pattern as the existing zoom-percentage indicator) confirms the
-  new state, including pressing M on a camera with no audio track at
-  all;
-- `Renderer`: new `draw_audio_indicator()`, top-left of the Focus view
-  (the zoom indicator already owns the top-right corner), showing
-  `SON ACTIF` / `SON COUPE` / `PAS DE SON` in the same pixel-font style
-  used for the PTZ preset labels.
+  `SDLK_f` handling). The mute state can also be toggled with the
+  **mouse**, by clicking the audio button described below — same
+  outcome as pressing M;
+- the audio button follows the exact same show/hide principle as the
+  existing PTZ overlay: it appears on any mouse movement inside the
+  Focus view (regardless of whether the current camera has PTZ), is
+  shown immediately when Focus opens (so it's discoverable without
+  having to move the mouse first), and auto-hides after 5 seconds of
+  inactivity (`audio_indicator_duration_`, now matching
+  `ptz_overlay_timeout_` — it was 2 seconds in the keyboard-only
+  version of this beta);
+- `Renderer`: `draw_audio_indicator()`, top-left of the Focus view (the
+  zoom indicator already owns the top-right corner), now draws a
+  clickable bordered button — fixed size (140×34px) so the click
+  target never moves regardless of the text shown, filled/bordered in
+  the same active/inactive colors as the PTZ buttons — showing
+  `SON ACTIF` / `SON COUPE` / `PAS DE SON` in the usual pixel-font
+  style. New `audio_button_hit_at(logical_x, logical_y)` mirrors
+  `ptz_command_at`'s coordinate conversion to hit-test a click against
+  that button; `Application::process_sdl_event` checks it (while the
+  button is visible) right before the generic single-left-click
+  pan handler, so a click on the button toggles mute instead of
+  starting a pan;
+- clicking the button when the current camera has no audio track at
+  all (`PAS DE SON`) still shows the indicator but does nothing
+  audible, same as pressing M in that situation.
 
 **Known, deliberately deferred scope** for this beta:
 

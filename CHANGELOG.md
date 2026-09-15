@@ -8,9 +8,12 @@
   camera at a time); the mosaic/grid view stays silent, since playing
   every visible tile's audio at once would be unusable;
 - sound starts muted every time Focus opens, on any camera; press **M**
-  to unmute. A short on-screen indicator (`SON ACTIF` / `SON COUPE` /
-  `PAS DE SON`) confirms the state for 2 seconds, top-left of the Focus
-  view;
+  or click the new audio button to unmute;
+- the audio button (top-left of the Focus view, showing `SON ACTIF` /
+  `SON COUPE` / `PAS DE SON`) follows the same show/hide principle as
+  the existing PTZ overlay: shown immediately when Focus opens, then
+  reappears on any mouse movement and auto-hides after 5 seconds of
+  inactivity;
 - `PAS DE SON` means the camera's RTSP stream has no audio track at
   all — pressing M does nothing audible in that case;
 - audio output uses whatever device ALSA/mpv picks as the system

@@ -172,8 +172,12 @@ private:
     static constexpr std::chrono::seconds
         zoom_indicator_duration_{2};
 
+    /*
+     * Même durée que ptz_overlay_timeout_ : le bouton son suit le
+     * même principe d'apparition/disparition que l'overlay PTZ.
+     */
     static constexpr std::chrono::seconds
-        audio_indicator_duration_{2};
+        audio_indicator_duration_{5};
 
     static constexpr std::chrono::seconds
         ptz_overlay_timeout_{5};

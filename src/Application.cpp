@@ -248,6 +248,21 @@ void Application::process_sdl_event(
         show_ptz_overlay();
     }
 
+    if (
+        event.type == SDL_MOUSEMOTION &&
+        focus_player_ != nullptr
+    ) {
+        /*
+         * Contrairement à l'overlay PTZ, le bouton son n'est pas
+         * réservé aux caméras avec PTZ : il apparaît au moindre
+         * mouvement de souris en vue Focus, quelle que soit la
+         * caméra, et se cache après audio_indicator_duration_ sans
+         * mouvement — même principe que l'overlay PTZ.
+         */
+        show_audio_indicator();
+        redraw_requested_ = true;
+    }
+
     if (event.type == SDL_KEYDOWN) {
         if (
             event.key.keysym.sym ==
@@ -406,6 +421,22 @@ void Application::process_sdl_event(
 
             return;
         }
+    }
+
+    if (
+        event.type ==
+            SDL_MOUSEBUTTONDOWN &&
+        focus_player_ != nullptr &&
+        event.button.button ==
+            SDL_BUTTON_LEFT &&
+        audio_indicator_visible() &&
+        renderer_->audio_button_hit_at(
+            event.button.x,
+            event.button.y
+        )
+    ) {
+        toggle_focus_audio();
+        return;
     }
 
     if (
@@ -635,6 +666,14 @@ void Application::open_focus(
     } else {
         ptz_overlay_visible_ = false;
     }
+
+    /*
+     * Le bouton son apparaît aussi dès l'ouverture du focus, comme
+     * l'overlay PTZ, même si has_audio_track() n'est pas encore
+     * connu à cet instant (le flux vient d'être chargé) : ça permet
+     * de découvrir le contrôle sans avoir à bouger la souris.
+     */
+    show_audio_indicator();
 
     redraw_requested_ = true;
 

@@ -1496,6 +1496,17 @@ void Renderer::draw_zoom_indicator(
     }
 }
 
+Rect Renderer::audio_button() const noexcept
+{
+    /*
+     * Taille fixe, indépendante du texte affiché ("SON ACTIF" /
+     * "SON COUPE" / "PAS DE SON"), pour que la zone cliquable ne
+     * bouge jamais sous le pointeur — même principe que les boutons
+     * PTZ (ptz_buttons), qui ont eux aussi une taille stable.
+     */
+    return Rect{18, 18, 140, 34};
+}
+
 void Renderer::draw_audio_indicator(
     const bool muted,
     const bool available,
@@ -1503,13 +1514,15 @@ void Renderer::draw_audio_indicator(
 )
 {
     /*
-     * Petit indicateur texte en haut à gauche de la vue Focus, sur le
-     * même principe que draw_zoom_indicator (haut à droite) : visible
-     * brièvement après un appui sur M, puis disparaît tout seul.
+     * Petit bouton cliquable en haut à gauche de la vue Focus, sur le
+     * même principe que draw_ptz_overlay : visible après un
+     * mouvement de souris, puis disparaît tout seul après quelques
+     * secondes (voir audio_indicator_duration_ côté Application).
      *
      * "PAS DE SON" signifie que le flux de cette caméra n'a pas de
-     * piste audio du tout (pas la peine d'appuyer sur M) ; sinon
-     * "SON COUPE" / "SON ACTIF" reflète l'état courant.
+     * piste audio du tout (cliquer ne fait rien) ; sinon "SON COUPE"
+     * / "SON ACTIF" reflète l'état courant et peut être basculé au
+     * clic (ou avec la touche M).
      */
     const std::string text =
         !available
@@ -1520,53 +1533,138 @@ void Renderer::draw_audio_indicator(
                     : "SON ACTIF"
               );
 
-    const int scale = 2;
-    const int glyph_width = 5 * scale;
-    const int glyph_height = 7 * scale;
-    const int spacing = scale;
-    const int character_width = glyph_width + spacing;
-    const int padding = 10;
+    const Rect button = audio_button();
 
-    const int content_width =
-        static_cast<int>(
-            text.size()
-        ) *
-        character_width;
-
-    const int box_width =
-        content_width +
-        padding * 2;
-
-    const int box_height =
-        glyph_height +
-        padding * 2;
-
-    const int box_x = 18;
-    const int box_y = 18;
+    /*
+     * "Actif" = son réellement audible (piste disponible et pas
+     * coupé) ; mêmes teintes que les boutons PTZ actifs/inactifs
+     * pour rester cohérent visuellement.
+     */
+    const bool active = available && !muted;
 
     fill_ui_rect(
-        box_x,
-        box_y,
-        box_width,
-        box_height,
+        button.x,
+        button.y,
+        button.width,
+        button.height,
         canvas_height,
-        0.08F,
-        0.08F,
-        0.08F,
+        active ? 0.18F : 0.08F,
+        active ? 0.38F : 0.10F,
+        active ? 0.72F : 0.13F,
         1.0F
     );
 
-    const Rect label{
-        box_x,
-        box_y,
-        box_width,
-        box_height
-    };
+    const int border =
+        std::max(
+            2,
+            button.width / 24
+        );
+
+    const float border_red = active ? 0.35F : 0.28F;
+    const float border_green = active ? 0.62F : 0.33F;
+    const float border_blue = active ? 1.0F : 0.40F;
+
+    fill_ui_rect(
+        button.x,
+        button.y,
+        button.width,
+        border,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x,
+        button.y + button.height - border,
+        button.width,
+        border,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x,
+        button.y,
+        border,
+        button.height,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x + button.width - border,
+        button.y,
+        border,
+        button.height,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
 
     draw_text(
         text,
-        label,
+        button,
         canvas_height
+    );
+}
+
+bool Renderer::audio_button_hit_at(
+    const int logical_x,
+    const int logical_y
+) const noexcept
+{
+    int logical_width = 0;
+    int logical_height = 0;
+
+    SDL_GetWindowSize(
+        window_.native_handle(),
+        &logical_width,
+        &logical_height
+    );
+
+    const int drawable_width =
+        window_.drawable_width();
+
+    const int drawable_height =
+        window_.drawable_height();
+
+    if (
+        logical_width <= 0 ||
+        logical_height <= 0 ||
+        drawable_width <= 0 ||
+        drawable_height <= 0
+    ) {
+        return false;
+    }
+
+    const int x =
+        logical_x *
+        drawable_width /
+        logical_width;
+
+    const int y =
+        logical_y *
+        drawable_height /
+        logical_height;
+
+    const Rect button = audio_button();
+
+    return (
+        x >= button.x &&
+        x < button.x + button.width &&
+        y >= button.y &&
+        y < button.y + button.height
     );
 }
 
