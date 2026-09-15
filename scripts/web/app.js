@@ -1212,13 +1212,17 @@ function tlsRestartCountdown(url){
   // quelques secondes (arrêt de l'ancien processus, rechargement du
   // certificat, nouvelle écoute), pendant lesquelles la nouvelle URL ne
   // répond pas encore. On affiche donc un compte à rebours généreux (30s,
-  // largement suffisant en pratique) avec le message d'avertissement sur
-  // les cookies déjà visible au-dessus, puis on redirige une seule fois à
-  // la fin plutôt que de laisser le navigateur afficher une erreur de
+  // largement suffisant en pratique) en plein écran — impossible à
+  // manquer ou à fermer par erreur — avec le message d'avertissement sur
+  // les cookies déjà visible dedans, puis on redirige une seule fois à la
+  // fin plutôt que de laisser le navigateur afficher une erreur de
   // connexion pendant l'attente.
   let remaining=30;
 
+  tlsRestartOverlay.classList.remove('hidden');
+
   const render=()=>{
+    tlsRestartCountdownValue.textContent=remaining;
     tlsStatus.innerHTML=
       `<strong>${esc(t('sec.tls_restarting'))}</strong>`+
       `<br>${esc(t('sec.tls_restart_countdown',{seconds:remaining}))}`;

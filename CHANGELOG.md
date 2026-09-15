@@ -196,6 +196,41 @@ nouvelle écoute).
   développement** (pas de service `pidecoder-config` ni de navigateur
   réel disponibles ici) — à confirmer sur le Pi.
 
+### Confort (retour terrain, suite) : message plus visible + garde-fou navigateur
+
+Deuxième retour après test du compte à rebours : le message dans le
+panneau restait trop discret pour être vu à temps, et sur la
+désactivation, la page a rechargé en HTTPS (pas HTTP) après ~2 secondes
+seulement plutôt que d'attendre les 30 secondes prévues.
+
+- nouvelle superposition plein écran (`#tlsRestartOverlay`) affichée
+  pendant tout le compte à rebours : fond sombre semi-opaque, gros
+  chiffre du décompte (64px), message et avertissement cookies inclus —
+  impossible à manquer ou à fermer par erreur, contrairement au texte
+  discret dans le panneau (conservé en parallèle) ;
+- **cause probable du rechargement à 2s en HTTPS plutôt qu'en HTTP** :
+  aucune piste ne pointe vers un bug côté PiDecoder — `tls_redirect_url()`
+  reçoit le schéma explicitement (`'http'` côté `disable`, jamais
+  recalculé) et le compte à rebours ne redirige qu'à la toute fin (30
+  intervalles d'1s, pas 2s). Deux explications restent probables et sont
+  hors du contrôle du code serveur : (1) `app.js` mis en cache par le
+  navigateur — il a encore changé cette manche, un rechargement forcé
+  (Ctrl+Maj+R) est nécessaire après chaque mise à jour de ce fichier ;
+  (2) un réglage du navigateur du type « HTTPS-Only Mode » (présent
+  nativement dans Firefox et Chrome récents) qui force silencieusement
+  toute navigation `http://` vers `https://` pour un site déjà visité en
+  HTTPS — dans ce cas la requête vers le nouveau serveur (qui n'écoute
+  plus qu'en HTTP) échoue immédiatement, ce qui expliquerait un retour
+  rapide à une page (d'erreur) en HTTPS. À vérifier sur le Pi : dans les
+  préférences du navigateur, chercher un mode « HTTPS uniquement » et
+  désactiver l'application automatique pour l'IP du Pi, ou ajouter une
+  exception ;
+- validé : `node --check`, parité FR/EN (244 clés de chaque côté),
+  vérification qu'aucun `id` HTML n'est dupliqué. **Comme pour le point
+  précédent, le comportement réel en conditions de restart n'a pas pu
+  être rejoué ici** — à reconfirmer sur le Pi après un rechargement forcé
+  du navigateur.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier
