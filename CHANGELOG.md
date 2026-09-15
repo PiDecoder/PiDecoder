@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.2 (en cours, non validé sur le Pi)
+
+### HTTPS pour l'interface d'administration (étape 1/2)
+
+Premier volet du chantier HTTPS de bout en bout : la page Web
+d'administration. Le chiffrement du flux RTSP entre le Pi et les caméras
+(RTSPS) est traité séparément dans une étape 2, car il dépend du support de
+chaque caméra et n'a pas de rapport avec le protocole HTTP.
+
+- `scripts/config-web.py` sert désormais en HTTPS par défaut : le socket du
+  serveur (`ThreadingHTTPServer`) est enveloppé dans un `ssl.SSLContext`
+  (TLS 1.2 minimum) dès qu'un certificat et une clé sont trouvés sous
+  `<root>/config/tls/{cert.pem,key.pem}` (chemins surchargeables avec
+  `--tls-cert`/`--tls-key`). En l'absence de certificat valide — installation
+  très ancienne, fichier corrompu — le service journalise un avertissement
+  clair et bascule en HTTP simple plutôt que de planter, pour ne jamais
+  bloquer l'accès à l'administration ;
+- nouveau drapeau `--no-https` pour forcer explicitement le HTTP (usage
+  développement uniquement) ;
+- le cookie de session (`pidecoder_session`) et le cookie de langue
+  (`pidecoder_lang`) reçoivent l'attribut `Secure` uniquement quand la
+  connexion est effectivement chiffrée — un cookie `Secure` envoyé en HTTP
+  simple serait silencieusement ignoré par le navigateur et casserait la
+  session ;
+- `scripts/install.sh` génère un certificat auto-signé au premier
+  déploiement (`openssl req -x509`, clé RSA 2048, 10 ans de validité),
+  avec le nom d'hôte du Pi et ses adresses IPv4 locales en Subject
+  Alternative Name, pour que le navigateur accepte l'IP utilisée pour se
+  connecter une fois l'avertissement initial validé manuellement. Un
+  certificat existant est conservé tel quel lors d'une mise à jour (même
+  logique de préservation que `cameras.json`/`layout.json`/
+  `web-auth.json`) ;
+- nouvelles options `--tls-cert`/`--tls-key` pour importer son propre
+  certificat au lieu de celui auto-signé (ex. une CA interne déjà
+  approuvée sur les postes du réseau) ; l'installeur vérifie que le
+  certificat est un PEM valide et que la clé correspond bien au certificat
+  (comparaison par clé publique, compatible RSA et EC) avant de les
+  installer, pour éviter un déploiement avec une paire invalide ;
+- permissions alignées sur celles de `web-auth.json` : `config/tls/`
+  en 0750, `key.pem` en 0600, `cert.pem` en 0644, propriétaire
+  `root:root` (le service `pidecoder-config` tourne déjà en root) ;
+- validé en local (génération de certificat, bascule HTTP↔HTTPS, cookie
+  `Secure` présent/absent selon le mode, dégradation propre sur un
+  certificat corrompu) mais **pas encore testé sur le Raspberry Pi réel** —
+  reste à valider : avertissement du navigateur au premier accès, login,
+  PTZ et audio par-dessus HTTPS, mise à jour d'une installation existante
+  en conservant le certificat.
+
+### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
+
+Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier
+autonome : ça dépend du support RTSPS de chaque caméra (souvent absent ou
+partiel selon la marque/firmware), ça force probablement le transport TCP
+là où la mosaïque utilise de l'UDP pour la latence minimale, et la
+politique de confiance du certificat caméra (le plus souvent auto-signé
+côté caméra aussi) reste à définir. Sera abordé une fois l'étape 1 validée
+sur le Pi.
+
 ## 1.1.0
 
 Field-tested and validated on the Raspberry Pi with an Axis camera (RTSP

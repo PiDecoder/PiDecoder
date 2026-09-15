@@ -8,8 +8,107 @@
   `feature/v1.1-audio-focus` into `main`, tagged, to be deployed on the
   production Raspberry Pi (`olympus-vss-mon1`).
 - Base version: v1.0.0 (merged to `main`, tagged, deployed)
-- Active phase: none currently open — v1.1.0 closes the audio-support
-  roadmap item. Next roadmap item to be defined with the user.
+- Active phase: v1.2 roadmap — end-to-end HTTPS, split into two steps
+  decided with the user: (1) HTTPS for the Web administration interface,
+  (2) RTSPS between the Pi and the cameras. Step 1 implemented on
+  `feature/v1.2-https`, not yet field-tested (see "v1.2 — HTTPS" below).
+  Step 2 not started.
+
+## v1.2 — HTTPS (step 1/2 implemented, not yet field-tested; step 2 not started)
+
+Per the roadmap, v1.2 adds HTTPS. The user asked to secure "the stream"
+too; since PiDecoder's video is decoded natively on the Pi's own screen
+(mpv/SDL2 pulling RTSP directly from each camera) and never transits
+through the browser, that isn't actually an HTTP/HTTPS concern — it's
+RTSP vs. RTSPS between the Pi and each camera, a separate protocol with
+its own (camera-dependent) constraints. Scope agreed with the user: do
+both, Web HTTPS first since it's self-contained, RTSPS second since it
+depends on what each camera supports and interacts with the mosaic's
+transport/latency tuning (see "v1.1" below on the UDP demuxer settings).
+
+### Step 1 — HTTPS for the Web administration interface
+
+Implementation (native Python stdlib only, no new dependency):
+
+- `scripts/config-web.py`: the `ThreadingHTTPServer` socket is wrapped
+  in an `ssl.SSLContext` (`PROTOCOL_TLS_SERVER`, minimum TLS 1.2)
+  whenever a certificate and key are found at `<root>/config/tls/
+  {cert.pem,key.pem}` (overridable with new `--tls-cert`/`--tls-key`
+  arguments). If the certificate is missing or fails to load (corrupt
+  file, mismatched pair on a very old manual setup), the server logs a
+  clear warning to stderr and falls back to plain HTTP instead of
+  crashing — administration must never become totally inaccessible
+  because of a certificate problem. New `--no-https` flag forces plain
+  HTTP explicitly (development use only);
+- the session cookie (`pidecoder_session`) and language cookie
+  (`pidecoder_lang`) gain the `Secure` attribute only when the
+  connection is actually TLS (`Server.tls`, set once in `main()`) — a
+  `Secure` cookie sent over plain HTTP is silently dropped by the
+  browser and would break the session, so this has to track the real
+  transport, not just "HTTPS is the new default";
+- `scripts/install.sh`: generates a self-signed certificate on first
+  install (`openssl req -x509`, RSA 2048, 10-year validity) with the
+  Pi's hostname and detected local IPv4 addresses as Subject
+  Alternative Names, so the browser can trust the IP actually used to
+  connect once the initial warning is accepted manually — the same
+  approach used by most LAN admin interfaces (router, NAS...) since a
+  Raspberry Pi on a home network has no public domain/DNS to get a
+  CA-signed certificate for;
+- new `--tls-cert`/`--tls-key` installer options to import an existing
+  certificate instead (e.g. an internal CA already trusted on the
+  user's devices). The installer validates both are readable, valid
+  PEM, and that the key actually matches the certificate (public-key
+  digest comparison, works for RSA and EC) before installing them —
+  rejects a mismatched pair up front rather than deploying something
+  broken;
+- on upgrade, an existing certificate at `$TARGET/config/tls/` is
+  preserved as-is (same preservation pattern as `cameras.json`/
+  `layout.json`/`web-auth.json`), unless `--tls-cert`/`--tls-key` are
+  passed again, which always overwrite;
+- permissions mirror `web-auth.json`: `config/tls/` at 0750, `key.pem`
+  at 0600, `cert.pem` at 0644, owner `root:root` — the
+  `pidecoder-config` service already runs as root, so no group-read
+  workaround was needed;
+- `install.sh`'s printed URLs (preflight summary and final install
+  message) switched from `http://` to `https://`; a one-line reminder
+  about the self-signed browser warning is printed after a fresh
+  install (skipped when `--tls-cert` was used, since a trusted
+  certificate shouldn't trigger that warning).
+
+**Validated locally, not yet on hardware**: built a throwaway root
+directory in the sandbox, generated a self-signed certificate with the
+exact SAN logic used in `install.sh`, and ran `config-web.py` against
+it directly — confirmed the server actually negotiates TLS (a plain
+HTTP request to the HTTPS port is refused, not silently accepted), that
+`/api/login` returns a `Secure` cookie over HTTPS and a non-`Secure`
+one when no certificate is present (HTTP fallback), and that a
+corrupted certificate degrades to a working HTTP server with a clear
+stderr warning instead of crashing. **Not yet tested on the Raspberry
+Pi itself** — still to validate: the actual browser warning UX on first
+connect, login/PTZ/audio all working normally over HTTPS, and an
+upgrade of an existing installation correctly preserving the generated
+certificate instead of regenerating it.
+
+### Step 2 — RTSPS between the Pi and the cameras
+
+Not started. Unlike step 1, this isn't a self-contained piece of work:
+
+- depends entirely on whether each camera's RTSP server also offers
+  RTSPS — support varies a lot by brand/firmware and some cameras
+  (possibly including the Aqara G410, not checked yet) may not offer it
+  at all;
+- RTSPS runs over TCP (TLS needs a reliable transport), which conflicts
+  with the mosaic's UDP-based low-latency tuning documented under
+  "v1.1" below — a camera switched to RTSPS in the mosaic would need a
+  transport/latency trade-off similar to (but larger than) the one
+  already made for `audio_enabled` cameras;
+- most consumer/prosumer cameras present a self-signed certificate on
+  their own RTSPS listener, so a trust policy has to be decided
+  (accept without verification like most NVRs do, or something more —
+  no per-camera cert pinning exists in PiDecoder today);
+- needs a real camera that actually speaks RTSPS to validate against,
+  which isn't available in the development sandbox — hardware testing
+  drives this step, same as everything else in this project.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

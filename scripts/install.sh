@@ -12,6 +12,8 @@ SERVICE_USER=""
 WAYLAND_DISPLAY_NAME="wayland-0"
 WEB_BIND="0.0.0.0"
 WEB_PORT="8080"
+TLS_CERT_PATH=""
+TLS_KEY_PATH=""
 INSTALL_DEPENDENCIES=1
 START_SERVICES=1
 CHECK_ONLY=0
@@ -49,6 +51,10 @@ Options:
   --wayland-display NAME   Wayland socket name (default: wayland-0)
   --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
   --port PORT              Web administration port (default: 8080)
+  --tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
+                            self-signed one. Requires --tls-key.
+  --tls-key PATH           Import the matching TLS private key (PEM). Requires
+                            --tls-cert.
   --skip-deps              Do not run apt-get
   --no-start               Install and enable units without starting them
   --check                  Validate the host and source without changing anything
@@ -139,6 +145,16 @@ while [[ $# -gt 0 ]]; do
             WEB_PORT="$2"
             shift 2
             ;;
+        --tls-cert)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --tls-cert"
+            TLS_CERT_PATH="$2"
+            shift 2
+            ;;
+        --tls-key)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --tls-key"
+            TLS_KEY_PATH="$2"
+            shift 2
+            ;;
         --skip-deps)
             INSTALL_DEPENDENCIES=0
             shift
@@ -195,6 +211,19 @@ esac
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || fail "Port Web invalide : $WEB_PORT"
 (( WEB_PORT >= 1 && WEB_PORT <= 65535 )) || fail "Port Web hors plage : $WEB_PORT"
 [[ "$WAYLAND_DISPLAY_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail "Nom de socket Wayland invalide"
+
+if [[ -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ]]; then
+    [[ -n "$TLS_CERT_PATH" && -n "$TLS_KEY_PATH" ]] || fail "--tls-cert et --tls-key doivent être fournis ensemble"
+    [[ -r "$TLS_CERT_PATH" ]] || fail "Certificat TLS introuvable ou illisible : $TLS_CERT_PATH"
+    [[ -r "$TLS_KEY_PATH" ]] || fail "Clé TLS introuvable ou illisible : $TLS_KEY_PATH"
+    openssl x509 -in "$TLS_CERT_PATH" -noout >/dev/null 2>&1 || fail "Certificat TLS invalide (PEM attendu) : $TLS_CERT_PATH"
+    # Comparaison par clé publique (fonctionne pour RSA et EC, contrairement à
+    # -modulus qui est spécifique RSA) : évite d'installer un certificat et
+    # une clé qui ne forment pas une paire valide.
+    key_pubkey_digest="$(openssl pkey -in "$TLS_KEY_PATH" -pubout -outform DER 2>/dev/null | openssl dgst -sha256)"
+    cert_pubkey_digest="$(openssl x509 -in "$TLS_CERT_PATH" -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256)"
+    [[ -n "$key_pubkey_digest" && "$cert_pubkey_digest" == "$key_pubkey_digest" ]] || fail "Le certificat et la clé TLS fournis ne correspondent pas"
+fi
 
 [[ -f "$SOURCE_ROOT/CMakeLists.txt" ]] || fail "CMakeLists.txt introuvable dans $SOURCE_ROOT"
 [[ -f "$SOURCE_ROOT/scripts/config-web.py" ]] || fail "Source Web introuvable"
@@ -312,12 +341,12 @@ check_host() {
     printf 'Système       : %s\n' "${PRETTY_NAME:-inconnu}"
     printf 'Architecture  : %s\n' "$(uname -m)"
     if [[ "$(uname -m)" != "aarch64" ]]; then
-        warn "La cible v1.0 validée est Raspberry Pi 5 en aarch64."
+        warn "La cible v1.1 validée est Raspberry Pi 5 en aarch64."
     fi
     printf 'Utilisateur   : %s (uid %s, groupe %s)\n' "$SERVICE_USER" "$SERVICE_UID" "$SERVICE_GROUP"
     printf 'Cible         : %s\n' "$TARGET"
     printf 'Wayland       : /run/user/%s/%s\n' "$SERVICE_UID" "$WAYLAND_DISPLAY_NAME"
-    printf 'Administration: http://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
+    printf 'Administration: https://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
 
     if [[ -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
         printf 'Session vidéo : détectée\n'
@@ -427,7 +456,43 @@ if [[ "$HAD_TARGET" -eq 1 ]]; then
     fi
 fi
 
-mkdir -p "$STAGED_ROOT/config/backups"
+mkdir -p "$STAGED_ROOT/config/backups" "$STAGED_ROOT/config/tls"
+
+if [[ -n "$TLS_CERT_PATH" ]]; then
+    log "Installation du certificat TLS fourni"
+    install -m 0644 "$TLS_CERT_PATH" "$STAGED_ROOT/config/tls/cert.pem"
+    install -m 0600 "$TLS_KEY_PATH" "$STAGED_ROOT/config/tls/key.pem"
+elif [[ "$HAD_TARGET" -eq 1 && -f "$TARGET/config/tls/cert.pem" && -f "$TARGET/config/tls/key.pem" ]]; then
+    log "Conservation du certificat TLS existant"
+    cp -a "$TARGET/config/tls/cert.pem" "$STAGED_ROOT/config/tls/cert.pem"
+    cp -a "$TARGET/config/tls/key.pem" "$STAGED_ROOT/config/tls/key.pem"
+else
+    log "Génération d'un certificat TLS auto-signé"
+
+    # Un Raspberry Pi de ce type n'a en général ni domaine public ni DNS
+    # stable : le certificat est auto-signé (comme la plupart des interfaces
+    # d'administration réseau — routeur, NAS...) et couvre le nom d'hôte
+    # local ainsi que les adresses IPv4 actuellement configurées, pour que le
+    # navigateur accepte de faire confiance à l'IP utilisée pour se connecter,
+    # une fois l'avertissement initial validé manuellement.
+    cert_cn="$(hostname -f 2>/dev/null || hostname)"
+    san_entries=("DNS:$cert_cn" "DNS:localhost" "IP:127.0.0.1")
+
+    while IFS= read -r ip; do
+        [[ -n "$ip" ]] || continue
+        san_entries+=("IP:$ip")
+    done < <(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+
+    san_list="$(IFS=,; echo "${san_entries[*]}")"
+
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -keyout "$STAGED_ROOT/config/tls/key.pem" \
+        -out "$STAGED_ROOT/config/tls/cert.pem" \
+        -subj "/CN=$cert_cn" \
+        -addext "subjectAltName=$san_list" \
+        >/dev/null 2>&1 \
+        || fail "Échec de la génération du certificat TLS auto-signé"
+fi
 
 if [[ ! -f "$STAGED_ROOT/config/cameras.json" ]]; then
     cat > "$STAGED_ROOT/config/cameras.json" <<'JSON'
@@ -470,8 +535,14 @@ test -x "$TARGET/bin/pidecoder" || fail "Le binaire installé est introuvable"
 log "Configuration des droits"
 chown -R root:root "$TARGET"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$TARGET/config"
-chmod 0750 "$TARGET/config" "$TARGET/config/backups"
+chmod 0750 "$TARGET/config" "$TARGET/config/backups" "$TARGET/config/tls"
 chmod 0600 "$TARGET/config/cameras.json" "$TARGET/config/layout.json"
+
+if [[ -f "$TARGET/config/tls/cert.pem" && -f "$TARGET/config/tls/key.pem" ]]; then
+    chown root:root "$TARGET/config/tls/cert.pem" "$TARGET/config/tls/key.pem"
+    chmod 0644 "$TARGET/config/tls/cert.pem"
+    chmod 0600 "$TARGET/config/tls/key.pem"
+fi
 chmod 0755 \
     "$TARGET/scripts/install.sh" \
     "$TARGET/scripts/config-web.py" \
@@ -617,11 +688,16 @@ HOST_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$HOST_ADDRESS" ]] || HOST_ADDRESS="ADRESSE_DU_RASPBERRY_PI"
 
 printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
-printf 'Administration Web : http://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
+printf 'Administration Web : https://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
 printf 'Utilisateur Web     : admin\n'
 printf 'Utilisateur vidéo   : %s\n' "$SERVICE_USER"
 printf 'Installation        : %s\n' "$TARGET"
 printf 'Sauvegarde          : %s\n' "$BACKUP_DIR"
+
+if [[ -z "$TLS_CERT_PATH" ]]; then
+    printf '\nLe certificat TLS est auto-signé : le navigateur affichera un avertissement\n'
+    printf 'la première fois — valider/accepter le certificat pour continuer.\n'
+fi
 
 if [[ ! -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
     printf '\nLe socket Wayland n’est pas présent actuellement. Connecte la session graphique de %s avant de lancer le mur vidéo.\n' "$SERVICE_USER"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, re, secrets, shutil, subprocess, tempfile, threading, time, getpass
+import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, re, secrets, shutil, ssl, subprocess, sys, tempfile, threading, time, getpass
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -942,8 +942,14 @@ def diagnostics_payload(root, log_lines=50):
     return payload
 
 
-class Server(ThreadingHTTPServer): root:Path; auth:Path
+class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False
 class H(BaseHTTPRequestHandler):
+    def secure_flag(self):
+        # Le drapeau de cookie « Secure » n'a de sens que sur une connexion
+        # chiffrée : un navigateur ignore silencieusement un cookie Secure
+        # reçu en HTTP simple, ce qui casserait la session si TLS n'est pas
+        # actif (ex. secours HTTP quand le certificat est absent).
+        return '; Secure' if getattr(self.server,'tls',False) else ''
     def j(self,data,status=200,cookie=None):
         raw=json.dumps(
             data,
@@ -1056,14 +1062,14 @@ class H(BaseHTTPRequestHandler):
                 clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
-                return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/')
+                return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/{self.secure_flag()}')
             if p=='/api/logout':
                 with LOCK:SESSIONS.pop(self.token(),None)
                 return self.j({'ok':True})
             if p=='/api/language':
                 d=self.body();value=str(d.get('lang','')).strip().lower()
                 if value not in SUPPORTED_LANGS:value=DEFAULT_LANG
-                return self.j({'ok':True,'lang':value},cookie=f'pidecoder_lang={value}; SameSite=Lax; Path=/; Max-Age=31536000')
+                return self.j({'ok':True,'lang':value},cookie=f'pidecoder_lang={value}; SameSite=Lax; Path=/; Max-Age=31536000{self.secure_flag()}')
             if not self.need():return
             if p=='/api/onvif/discover':
                 d=self.body();result=discover(float(d.get('timeout',5)))
@@ -1329,13 +1335,31 @@ class H(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args):print('[config-web] '+fmt%args)
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080);ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
+    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080);ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive le TLS et sert en HTTP simple (déconseillé, pour développement uniquement)');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
     if a.set_password:
         p=getpass.getpass('Nouveau mot de passe : ');q=getpass.getpass('Confirmation : ')
         if p!=q:raise SystemExit('Les mots de passe ne correspondent pas')
         set_auth(auth,a.username,p);print('Identifiants Web mis à jour.');return
     if not auth.exists():raise SystemExit('Authentification non initialisée. Utiliser --set-password.')
-    s=Server((a.bind,a.port),H);s.root=root;s.auth=auth;print(f'PiDecoder Config v{VERSION} : http://{a.bind}:{a.port}')
+    tls_cert=Path(a.tls_cert) if a.tls_cert else root/'config/tls/cert.pem'
+    tls_key=Path(a.tls_key) if a.tls_key else root/'config/tls/key.pem'
+    use_tls=(not a.no_https) and tls_cert.is_file() and tls_key.is_file()
+    s=Server((a.bind,a.port),H);s.root=root;s.auth=auth
+    if use_tls:
+        ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version=ssl.TLSVersion.TLSv1_2
+        try:
+            ctx.load_cert_chain(certfile=str(tls_cert),keyfile=str(tls_key))
+        except (ssl.SSLError,OSError) as exc:
+            print(f'ERREUR TLS : certificat/clé illisible ou invalide ({exc}) — bascule en HTTP non chiffré.',file=sys.stderr)
+            use_tls=False
+        else:
+            s.socket=ctx.wrap_socket(s.socket,server_side=True)
+    s.tls=use_tls
+    scheme='https' if use_tls else 'http'
+    print(f'PiDecoder Config v{VERSION} : {scheme}://{a.bind}:{a.port}')
+    if not use_tls:
+        print('AVERTISSEMENT : TLS désactivé ou certificat introuvable — connexion non chiffrée. Relancer scripts/install.sh pour générer un certificat.',file=sys.stderr)
     try:s.serve_forever()
     except KeyboardInterrupt:pass
 
