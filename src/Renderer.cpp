@@ -272,6 +272,8 @@ void Renderer::render_focus(
         draw_audio_indicator(
             audio_muted,
             audio_available,
+            ptz_available,
+            width,
             height
         );
     }
@@ -1496,44 +1498,93 @@ void Renderer::draw_zoom_indicator(
     }
 }
 
-Rect Renderer::audio_button() const noexcept
+Rect Renderer::audio_button(
+    const int canvas_width,
+    const int canvas_height,
+    const bool ptz_available
+) const noexcept
 {
     /*
-     * Taille fixe, indépendante du texte affiché ("SON ACTIF" /
-     * "SON COUPE" / "PAS DE SON"), pour que la zone cliquable ne
-     * bouge jamais sous le pointeur — même principe que les boutons
-     * PTZ (ptz_buttons), qui ont eux aussi une taille stable.
+     * Bouton carré, même gabarit que les boutons PTZ (ptz_buttons)
+     * pour rester cohérent visuellement, ancré en bas à droite de la
+     * vue Focus. Quand la caméra a un pavé PTZ affiché à cet
+     * endroit, on se décale à sa gauche pour ne jamais le recouvrir ;
+     * sinon on prend directement le coin bas-droit.
      */
-    return Rect{18, 18, 140, 34};
+    const int shortest =
+        std::min(
+            canvas_width,
+            canvas_height
+        );
+
+    const int size =
+        std::clamp(
+            shortest / 16,
+            34,
+            46
+        );
+
+    const int margin =
+        std::clamp(
+            size / 3,
+            12,
+            18
+        );
+
+    if (!ptz_available) {
+        return Rect{
+            canvas_width - margin - size,
+            canvas_height - margin - size,
+            size,
+            size
+        };
+    }
+
+    const auto ptz = ptz_buttons(
+        canvas_width,
+        canvas_height
+    );
+
+    const int gap =
+        std::clamp(
+            size / 8,
+            4,
+            7
+        );
+
+    // ptz[1] est le bouton "Left", donc le bord gauche du pavé PTZ.
+    const int ptz_left = ptz[1].rectangle.x;
+
+    return Rect{
+        ptz_left - gap - size,
+        canvas_height - margin - size,
+        size,
+        size
+    };
 }
 
 void Renderer::draw_audio_indicator(
     const bool muted,
     const bool available,
+    const bool ptz_available,
+    const int canvas_width,
     const int canvas_height
 )
 {
     /*
-     * Petit bouton cliquable en haut à gauche de la vue Focus, sur le
+     * Petit bouton cliquable en bas à droite de la vue Focus, sur le
      * même principe que draw_ptz_overlay : visible après un
      * mouvement de souris, puis disparaît tout seul après quelques
      * secondes (voir audio_indicator_duration_ côté Application).
-     *
-     * "PAS DE SON" signifie que le flux de cette caméra n'a pas de
-     * piste audio du tout (cliquer ne fait rien) ; sinon "SON COUPE"
-     * / "SON ACTIF" reflète l'état courant et peut être basculé au
-     * clic (ou avec la touche M).
+     * Juste un logo de haut-parleur, sans texte : bleu = son actif,
+     * gris + barre = coupé, gris terne = pas de piste audio du tout.
      */
-    const std::string text =
-        !available
-            ? "PAS DE SON"
-            : (
-                muted
-                    ? "SON COUPE"
-                    : "SON ACTIF"
-              );
-
-    const Rect button = audio_button();
+    const Rect button =
+        audio_button(
+            canvas_width,
+            canvas_height,
+            ptz_available
+        );
 
     /*
      * "Actif" = son réellement audible (piste disponible et pas
@@ -1612,16 +1663,99 @@ void Renderer::draw_audio_indicator(
         1.0F
     );
 
-    draw_text(
-        text,
-        button,
-        canvas_height
+    /*
+     * Logo haut-parleur en pixel-art, dans le même esprit que
+     * draw_ptz_icon : un boîtier (petit carré) suivi d'un pavillon
+     * qui s'évase vers la droite, dessiné par des barres verticales
+     * de hauteur croissante (comme un escalier).
+     *
+     * Gris terne quand la caméra n'a pas de piste audio du tout
+     * (rien à activer), blanc plein sinon.
+     */
+    const float icon_shade = available ? 1.0F : 0.45F;
+
+    const int center_y =
+        button.y +
+        button.height / 2;
+
+    const int thickness =
+        std::max(
+            2,
+            button.width / 12
+        );
+
+    const int body_width = thickness * 2;
+    const int body_height = thickness * 4;
+
+    const int body_x =
+        button.x +
+        button.width / 2 -
+        thickness * 3;
+
+    fill_ui_rect(
+        body_x,
+        center_y - body_height / 2,
+        body_width,
+        body_height,
+        canvas_height,
+        icon_shade,
+        icon_shade,
+        icon_shade,
+        1.0F
     );
+
+    constexpr int horn_steps = 3;
+
+    for (int step = 0; step < horn_steps; ++step) {
+        const int column_x =
+            body_x +
+            body_width +
+            step * thickness;
+
+        const int column_height =
+            body_height +
+            step * thickness * 2;
+
+        fill_ui_rect(
+            column_x,
+            center_y - column_height / 2,
+            thickness,
+            column_height,
+            canvas_height,
+            icon_shade,
+            icon_shade,
+            icon_shade,
+            1.0F
+        );
+    }
+
+    if (available && muted) {
+        /*
+         * Barre de coupure sur toute la largeur de l'icône : signal
+         * visuel non ambigu du "son coupé", sans avoir à écrire de
+         * texte (seule primitive de dessin disponible : le rectangle
+         * plein, donc pas de croix en diagonale possible).
+         */
+        fill_ui_rect(
+            body_x,
+            center_y - thickness / 2,
+            body_width +
+                horn_steps * thickness +
+                thickness,
+            thickness,
+            canvas_height,
+            0.85F,
+            0.20F,
+            0.20F,
+            1.0F
+        );
+    }
 }
 
 bool Renderer::audio_button_hit_at(
     const int logical_x,
-    const int logical_y
+    const int logical_y,
+    const bool ptz_available
 ) const noexcept
 {
     int logical_width = 0;
@@ -1658,7 +1792,12 @@ bool Renderer::audio_button_hit_at(
         drawable_height /
         logical_height;
 
-    const Rect button = audio_button();
+    const Rect button =
+        audio_button(
+            drawable_width,
+            drawable_height,
+            ptz_available
+        );
 
     return (
         x >= button.x &&

@@ -432,7 +432,8 @@ void Application::process_sdl_event(
         audio_indicator_visible() &&
         renderer_->audio_button_hit_at(
             event.button.x,
-            event.button.y
+            event.button.y,
+            focused_camera_has_ptz()
         )
     ) {
         toggle_focus_audio();

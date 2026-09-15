@@ -55,21 +55,33 @@ output does):
   inactivity (`audio_indicator_duration_`, now matching
   `ptz_overlay_timeout_` — it was 2 seconds in the keyboard-only
   version of this beta);
-- `Renderer`: `draw_audio_indicator()`, top-left of the Focus view (the
-  zoom indicator already owns the top-right corner), now draws a
-  clickable bordered button — fixed size (140×34px) so the click
-  target never moves regardless of the text shown, filled/bordered in
-  the same active/inactive colors as the PTZ buttons — showing
-  `SON ACTIF` / `SON COUPE` / `PAS DE SON` in the usual pixel-font
-  style. New `audio_button_hit_at(logical_x, logical_y)` mirrors
-  `ptz_command_at`'s coordinate conversion to hit-test a click against
-  that button; `Application::process_sdl_event` checks it (while the
-  button is visible) right before the generic single-left-click
-  pan handler, so a click on the button toggles mute instead of
-  starting a pan;
+- `Renderer`: `draw_audio_indicator()` draws a clickable bordered
+  square button, bottom-right of the Focus view, same size as a PTZ
+  button (34–46px, scales with window size) so it looks consistent
+  with the PTZ pad. When the current camera has a PTZ overlay shown
+  in that same corner, the audio button shifts to sit just to its
+  left instead, so the two never overlap; otherwise it sits directly
+  in the bottom-right corner. `audio_button(canvas_width,
+  canvas_height, ptz_available)` computes that position and is shared
+  between drawing and hit-testing;
+- no text label anymore — just a small pixel-art speaker icon
+  (a body + a flared horn drawn as stepped bars, same style as the
+  PTZ arrow icons), colored blue (active/unmuted), grey (muted or no
+  audio track), with a red bar drawn across it specifically when
+  muted (there's no diagonal-line primitive available, so a full-width
+  bar stands in for the usual "muted speaker" cross); a camera with no
+  audio track at all shows a dimmer grey icon with no bar, since
+  there's nothing to mute;
+- new `audio_button_hit_at(logical_x, logical_y, ptz_available)`
+  mirrors `ptz_command_at`'s coordinate conversion to hit-test a click
+  against that button; `Application::process_sdl_event` checks it
+  (while the button is visible), passing `focused_camera_has_ptz()` so
+  the hit-test uses the same position as the draw call, right before
+  the generic single-left-click pan handler, so a click on the button
+  toggles mute instead of starting a pan;
 - clicking the button when the current camera has no audio track at
-  all (`PAS DE SON`) still shows the indicator but does nothing
-  audible, same as pressing M in that situation.
+  all still shows the indicator but does nothing audible, same as
+  pressing M in that situation.
 
 **Known, deliberately deferred scope** for this beta:
 

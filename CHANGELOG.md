@@ -9,13 +9,16 @@
   every visible tile's audio at once would be unusable;
 - sound starts muted every time Focus opens, on any camera; press **M**
   or click the new audio button to unmute;
-- the audio button (top-left of the Focus view, showing `SON ACTIF` /
-  `SON COUPE` / `PAS DE SON`) follows the same show/hide principle as
-  the existing PTZ overlay: shown immediately when Focus opens, then
-  reappears on any mouse movement and auto-hides after 5 seconds of
-  inactivity;
-- `PAS DE SON` means the camera's RTSP stream has no audio track at
-  all — pressing M does nothing audible in that case;
+- the audio button is a small speaker icon, bottom-right of the Focus
+  view (shifted left of the PTZ pad instead, on cameras that have
+  one, so the two never overlap). It follows the same show/hide
+  principle as the existing PTZ overlay: shown immediately when Focus
+  opens, then reappears on any mouse movement and auto-hides after 5
+  seconds of inactivity. Blue = unmuted, grey = muted (with a bar
+  across the icon) or no audio track at all (dimmer, no bar);
+- a camera whose RTSP stream has no audio track at all shows the
+  dimmed speaker icon — pressing M or clicking does nothing audible
+  in that case;
 - audio output uses whatever device ALSA/mpv picks as the system
   default on the Pi; nothing is forced;
 - no volume control (mute/unmute only) and no per-camera memory of the
