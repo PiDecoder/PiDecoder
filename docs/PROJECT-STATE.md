@@ -10,16 +10,20 @@
 - Base version: v1.0.0 (merged to `main`, tagged, deployed)
 - Active phase: v1.2 roadmap — end-to-end HTTPS, split into two steps
   decided with the user: (1) HTTPS for the Web administration interface,
-  (2) RTSPS between the Pi and the cameras. Step 1 implemented on
-  `feature/v1.2-https` and confirmed working by the user on the
-  Raspberry Pi ("https good"); two follow-up rounds — SSH-based
-  certificate management (`--no-https`, `manage-tls.sh`) and, per the
-  user's explicit request, the same certificate management plus a full
-  HTTPS on/off toggle exposed directly in the Web UI's Sécurité tab —
-  are implemented and validated in the sandbox but **not yet
-  field-tested** (see "v1.2 — HTTPS" below). Step 2 not started.
+  (2) RTSPS between the Pi and the cameras. Step 1 fully implemented on
+  `feature/v1.2-https`, confirmed working by the user on the Raspberry Pi
+  across several rounds of real-world bug fixes (Secure-cookie lockout,
+  restart-countdown UX, a deployment-process bug fixed by
+  `scripts/sync-dev.sh`, and a TLS session-resumption bug hiding
+  certificate renewal) — see "v1.2 — HTTPS" below. Step 2 (per-camera
+  RTSPS toggle) implemented but **not yet field-tested at all**: unlike
+  every other change in this project, the native engine could not even
+  be compiled in the sandbox (missing libmpv-dev/libsdl2-dev/
+  nlohmann-json3-dev, blocked by network restrictions), so this round
+  needs `sudo ./scripts/install.sh` on the Pi and careful first-camera
+  validation before being trusted.
 
-## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 not started)
+## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2/2 implemented, not field-tested)
 
 Per the roadmap, v1.2 adds HTTPS. The user asked to secure "the stream"
 too; since PiDecoder's video is decoded natively on the Pi's own screen
@@ -284,24 +288,85 @@ request regardless).
 
 ### Step 2 — RTSPS between the Pi and the cameras
 
-Not started. Unlike step 1, this isn't a self-contained piece of work:
+Implemented, per the user's explicit request to start step 2 with a
+per-camera toggle placed in each camera's existing advanced/collapsible
+menu (not the main row, to save space) — the user is not worried about
+Axis-specific compatibility. **Not yet field-tested at all**, and unlike
+every other change made across this whole project, the native engine
+could not even be compiled in the sandbox: `apt-get install
+libmpv-dev libsdl2-dev nlohmann-json3-dev` fails with 403 (Ubuntu
+archive blocked by the sandbox's network egress allowlist), so
+`src/Config.cpp`, `src/Player.cpp` and `src/Application.cpp` were only
+reviewed by hand plus, for the two trickiest bits of logic, verified in
+isolation with small standalone programs compiled with the sandbox's
+system `g++` (see below) — not a substitute for building and running the
+real `pidecoder-engine` binary.
 
-- depends entirely on whether each camera's RTSP server also offers
-  RTSPS — support varies a lot by brand/firmware and some cameras
-  (possibly including the Aqara G410, not checked yet) may not offer it
-  at all;
-- RTSPS runs over TCP (TLS needs a reliable transport), which conflicts
-  with the mosaic's UDP-based low-latency tuning documented under
-  "v1.1" below — a camera switched to RTSPS in the mosaic would need a
-  transport/latency trade-off similar to (but larger than) the one
-  already made for `audio_enabled` cameras;
-- most consumer/prosumer cameras present a self-signed certificate on
-  their own RTSPS listener, so a trust policy has to be decided
-  (accept without verification like most NVRs do, or something more —
-  no per-camera cert pinning exists in PiDecoder today);
-- needs a real camera that actually speaks RTSPS to validate against,
-  which isn't available in the development sandbox — hardware testing
-  drives this step, same as everything else in this project.
+- `CameraConfig::rtsps_enabled` (`include/pidecoder/CameraConfig.hpp`):
+  new boolean, off by default including for pre-existing cameras (an
+  explicit per-camera opt-in, never an automatic migration, since RTSPS
+  support depends entirely on the camera itself);
+- mechanism: `cameras.json` keeps storing plain `rtsp://` URLs (whatever
+  the camera actually announces over ONVIF); `Config::load()`
+  (`src/Config.cpp`) rewrites the scheme to `rtsps://` right before the
+  engine uses it, only when `rtsps_enabled` is true (new anonymous-
+  namespace helper `with_rtsps_scheme()`) — mirrors the existing
+  `audio_enabled` pattern of being a fully independent flag rather than
+  something encoded into the URL itself, so no change was needed to the
+  existing URL-building logic in `config-web.py`/`app.js`;
+- feasibility check done *before* writing any C++, since the native
+  engine can't be tested here at all: used the sandbox's real `ffmpeg`
+  (6.1.1, built with `--enable-gnutls`) and a small raw-socket Python
+  script to prove that an `rtsps://` URL makes ffmpeg's RTSP demuxer send
+  a genuine TLS ClientHello (`\x16\x03\x03...` observed on the wire) —
+  not just a superficial log-string difference. Also confirmed via
+  `ffmpeg -h protocol=tls` that `tls_verify` already defaults to `0`
+  (verification off), which suits self-signed camera certificates;
+- `src/Player.cpp` (`configure()`): when `rtsps_enabled_` is true,
+  `,tls_verify=0` is appended to the `demuxer-lavf-o` option string in
+  all three branches (Grid+audio, Grid+no-audio, Focus) — the value ffmpeg
+  already defaults to, made explicit so a future ffmpeg default change
+  can't silently break camera trust;
+- **RTP transport (UDP/TCP) deliberately left unchanged**: the mosaic
+  still uses `rtsp-transport=udp` even with RTSPS enabled (Focus keeps
+  TCP as before). Reasoning: in RTSPS the TLS layer wraps the RTSP
+  control connection (credentials, SETUP/PLAY negotiation) while the RTP
+  media transport is negotiated independently via `rtsp-transport`,
+  regardless of the `rtsp`/`rtsps` scheme. **This is not validated
+  against a real RTSPS camera** — if some camera only accepts RTP over
+  TCP once switched to RTSPS, `rtsp-transport` will need to be forced to
+  `tcp` for that camera specifically; field feedback needed;
+- `src/Application.cpp`: both `Player(...)` construction sites (Grid and
+  Focus) now pass `rtsps_enabled` as the new final constructor argument;
+- Web UI (`scripts/web/app.js`): new "Connexion chiffrée (RTSPS)"
+  checkbox added inside each camera's existing advanced `<details>`
+  block, next to the manual grid/focus URL fields — not on the main
+  camera row, per the user's explicit space-saving request. Off by
+  default for new and existing cameras;
+- `scripts/config-web.py`: `rtsps_enabled` added to camera normalization
+  (`sanitize()`), to newly-discovered ONVIF camera defaults, and to the
+  settings-preservation logic on an ONVIF rescan — same three spots as
+  `audio_enabled`;
+- FR/EN translations: `cams.rtsps_enabled` / `cams.rtsps_enabled_hint`
+  (parity re-verified: 246 keys each side);
+- validated in the sandbox: `python3 -m py_compile` on `config-web.py`,
+  `node --check` on `app.js`/`i18n.js`, FR/EN key parity, a unit check of
+  `sanitize()` confirming `rtsps_enabled` round-trips correctly
+  (true/false/absent-defaults-to-false), and two standalone `g++`-compiled
+  programs verifying (1) the ffmpeg-option string concatenation with the
+  conditional `tls_suffix` and (2) `with_rtsps_scheme()`'s scheme-rewrite
+  logic against several inputs (plain `rtsp://`, already-`rtsps://`,
+  non-RTSP scheme, empty string). **Not validated: compiling the actual
+  native engine, real behavior against any camera (Axis or otherwise) in
+  RTSPS mode, or the assumption that RTP transport is unaffected by
+  RTSPS.** This round touches C++ source, so it needs
+  `sudo ./scripts/install.sh` on the Pi (full rebuild), not
+  `sync-dev.sh` — and the first on-hardware test should enable RTSPS for
+  one camera at a time, confirm both Grid and Focus reconnect, and check
+  `journalctl` for the video engine service if it doesn't (including
+  whether the camera's actual RTSPS port differs from the RTSP port
+  already stored in its config — `Config::load()` only rewrites the
+  scheme, never the port).
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

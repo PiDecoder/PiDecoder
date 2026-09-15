@@ -296,7 +296,11 @@ def sanitize(c,lang=DEFAULT_LANG):
     # défaut (False) pour toute caméra nouvellement ajoutée. Voir CameraConfig::audio_enabled
     # côté moteur natif pour ce que ce réglage déclenche (réglages mosaïque assouplis +
     # affichage du bouton son en Focus).
-    result={'name':name,'enabled':bool(c.get('enabled',True)),'audio_enabled':bool(c.get('audio_enabled',False)),'grid_url':g,'focus_url':f}
+    # rtsps_enabled : case "connexion chiffrée (RTSPS)" du menu avancé, décochée par
+    # défaut. Voir CameraConfig::rtsps_enabled côté moteur natif : le schéma de
+    # grid_url/focus_url stocké ici reste "rtsp://" tel qu'annoncé par la caméra en
+    # ONVIF, seule cette case déclenche la réécriture en "rtsps://" au chargement.
+    result={'name':name,'enabled':bool(c.get('enabled',True)),'audio_enabled':bool(c.get('audio_enabled',False)),'rtsps_enabled':bool(c.get('rtsps_enabled',False)),'grid_url':g,'focus_url':f}
     if isinstance(c.get('onvif'),dict):result['onvif']=c['onvif']
     return result
 
@@ -1267,6 +1271,7 @@ class H(BaseHTTPRequestHandler):
                     'name':name,
                     'enabled':True,
                     'audio_enabled':False,
+                    'rtsps_enabled':False,
                     'grid_url':grid_uri,
                     'focus_url':focus_uri,
                     'onvif':{
@@ -1300,6 +1305,7 @@ class H(BaseHTTPRequestHandler):
                     if isinstance(previous,dict):
                         camera['enabled']=bool(previous.get('enabled',True))
                         camera['audio_enabled']=bool(previous.get('audio_enabled',False))
+                        camera['rtsps_enabled']=bool(previous.get('rtsps_enabled',False))
 
                     cameras[existing_index]=sanitize(camera,lang)
 

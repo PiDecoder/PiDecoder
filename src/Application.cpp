@@ -212,7 +212,8 @@ void Application::initialize_players()
                 mpv_event_type_,
                 render_event_type_,
                 PlayerRole::Grid,
-                cameras_[camera_index].audio_enabled
+                cameras_[camera_index].audio_enabled,
+                cameras_[camera_index].rtsps_enabled
             );
 
         player->initialize();
@@ -648,7 +649,8 @@ void Application::open_focus(
             mpv_event_type_,
             render_event_type_,
             PlayerRole::Focus,
-            camera.audio_enabled
+            camera.audio_enabled,
+            camera.rtsps_enabled
         );
 
     focus_player->initialize();

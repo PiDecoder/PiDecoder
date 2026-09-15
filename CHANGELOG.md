@@ -318,15 +318,95 @@ qu'une poignée de main *complète* ne se reproduit pas par hasard.
   session TLS reprise aurait pu masquer un changement réel côté serveur
   de la même manière.
 
-### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
+### RTSPS entre le Pi et les caméras (étape 2/2) — option par caméra, à valider sur le Pi
 
-Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier
-autonome : ça dépend du support RTSPS de chaque caméra (souvent absent ou
-partiel selon la marque/firmware), ça force probablement le transport TCP
-là où la mosaïque utilise de l'UDP pour la latence minimale, et la
-politique de confiance du certificat caméra (le plus souvent auto-signé
-côté caméra aussi) reste à définir. Sera abordé une fois l'étape 1 validée
-sur le Pi.
+Étape 1 (HTTPS pour la Web UI) confirmée sur le Pi par l'utilisateur ;
+demande explicite pour lancer l'étape 2 avec une contrainte précise : une
+case à cocher **par caméra** (RTSPS optionnel selon le support de chaque
+caméra), placée dans le **menu avancé** existant de chaque caméra plutôt
+que sur sa ligne principale, pour ne pas surcharger l'affichage.
+
+Contrairement à l'étape 1, le moteur natif C++ (`pidecoder-engine`) n'a
+pas pu être compilé ni testé dans l'environnement de développement utilisé
+ici — l'installation de `libmpv-dev`/`libsdl2-dev`/`nlohmann-json3-dev`
+via `apt-get` échoue (403 sur les dépôts Ubuntu, restriction réseau de
+l'environnement), donc aucun binaire réel n'a pu être produit ni exécuté
+contre une caméra. Chaque fonction modifiée a été relue attentivement et
+la logique la plus délicate (concaténation des options ffmpeg, réécriture
+du schéma d'URL) a été vérifiée séparément avec un petit programme C++
+autonome compilé avec `g++`, mais **ce n'est pas un remplacement d'un
+test réel sur le Pi** : ce correctif reste donc, exceptionnellement,
+non testé de bout en bout avant livraison.
+
+- nouveau champ `CameraConfig::rtsps_enabled` (`include/pidecoder/CameraConfig.hpp`),
+  décoché par défaut y compris pour une caméra déjà existante — choix
+  explicite par caméra, jamais de migration automatique, puisque ça
+  dépend entièrement du support RTSPS de la caméra elle-même ;
+- **mécanisme retenu : réécriture de schéma, pas une URL RTSPS stockée** —
+  `cameras.json` continue de stocker `grid_url`/`focus_url` en
+  `rtsp://` classique (celle que la caméra annonce réellement en ONVIF) ;
+  `Config::load()` (`src/Config.cpp`) réécrit le schéma en `rtsps://`
+  juste avant que le moteur ne s'en serve, uniquement quand
+  `rtsps_enabled` est coché. Ça évite de toucher à la logique de
+  construction d'URL déjà en place côté config-web.py/app.js (même
+  approche que `audio_enabled`, qui est aussi un booléen séparé plutôt
+  qu'encodé dans l'URL) ;
+- **vérification de faisabilité RTSPS réalisée avant d'écrire le moindre
+  code C++** (impossible de tester le moteur natif ici, donc il fallait
+  d'abord s'assurer que le principe tient) : le `ffmpeg` du système
+  (6.1.1, compilé avec `--enable-gnutls`) a servi à confirmer que
+  `rtsps://` déclenche bien un vrai `ClientHello` TLS — vérifié avec un
+  petit script Python qui capture les octets bruts reçus sur un port TCP
+  local ouvert exprès (`\x16\x03\x03...` en tête de connexion), pas
+  seulement une différence de log superficielle. `ffmpeg -h
+  protocol=tls` confirme aussi que `tls_verify` vaut `0` par défaut
+  (vérification désactivée), ce qui convient bien à des caméras avec
+  certificat auto-signé ;
+- côté moteur natif (`src/Player.cpp`, méthode `configure()`) : quand
+  `rtsps_enabled_` est vrai, `tls_verify=0` est ajouté explicitement à
+  l'option `demuxer-lavf-o` (les trois variantes : mosaïque avec/sans
+  audio, et Focus) — valeur déjà celle par défaut de ffmpeg, mais rendue
+  explicite pour ne jamais dépendre de ce défaut si une future version de
+  ffmpeg le changeait ;
+- **transport RTP (UDP/TCP) volontairement inchangé** : la mosaïque
+  continue d'utiliser `rtsp-transport=udp` (latence minimale) même quand
+  RTSPS est activé, la vue Focus continue en TCP comme avant. Le
+  raisonnement : en RTSPS, le chiffrement TLS s'applique à la connexion
+  de contrôle RTSP (identifiants, négociation SETUP/PLAY) — le transport
+  du flux RTP lui-même reste celui négocié via `rtsp-transport`,
+  indépendamment du schéma `rtsp`/`rtsps`. **Ce point précis n'est pas
+  validé contre une caméra RTSPS réelle** : si une caméra n'accepte le
+  RTP qu'en TCP une fois passée en RTSPS, il faudra forcer
+  `rtsp-transport=tcp` pour elle spécifiquement (retour terrain
+  nécessaire) ;
+- interface Web : nouvelle case « Connexion chiffrée (RTSPS) » ajoutée
+  **dans le menu avancé** de chaque caméra (`scripts/web/app.js`), à côté
+  des champs URL mosaïque/focus manuels — pas sur la ligne principale de
+  la caméra, comme demandé. Décochée par défaut pour toute caméra,
+  nouvelle ou existante ;
+- `scripts/config-web.py` : `rtsps_enabled` ajouté à la normalisation de
+  chaque caméra (`sanitize()`), aux valeurs par défaut d'une caméra
+  découverte par scan ONVIF, et à la préservation des réglages existants
+  lors d'un nouveau scan ONVIF (mêmes trois emplacements que
+  `audio_enabled`) ;
+- traductions FR/EN : `cams.rtsps_enabled` et `cams.rtsps_enabled_hint`
+  (parité FR/EN vérifiée : 246 clés de chaque côté) ;
+- validé dans l'environnement de développement : `python3 -m py_compile`
+  sur `config-web.py`, `node --check` sur `app.js`/`i18n.js`, parité des
+  clés FR/EN, test unitaire de `sanitize()` confirmant que
+  `rtsps_enabled` circule bien (vrai/faux/absent → faux par défaut), et
+  compilation isolée avec `g++` de la fonction `with_rtsps_scheme()` et
+  de la logique de concaténation des options ffmpeg (voir ci-dessus).
+  **Non validé : compilation du moteur natif complet, comportement réel
+  contre une caméra (Axis ou autre) en RTSPS, impact réel sur le
+  transport RTP.** Cette manche nécessite donc `sudo ./scripts/install.sh`
+  (recompilation complète), pas `sync-dev.sh`, et une prudence
+  particulière au premier test sur le Pi : activer RTSPS sur une seule
+  caméra à la fois, vérifier que le flux se reconnecte (mosaïque et
+  Focus), et consulter `journalctl` pour le service du moteur vidéo en
+  cas d'échec — en particulier si le port RTSPS réel de la caméra diffère
+  du port RTSP classique déjà enregistré dans sa configuration (`Config::load()`
+  ne réécrit que le schéma de l'URL, jamais le port).
 
 ## 1.1.0
 

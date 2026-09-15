@@ -95,6 +95,33 @@ Example configuration:
 > `cameras.json` contains camera addresses and may contain usernames and passwords.
 > It must never be committed to Git or attached to a public issue.
 
+## Encrypted connection to a camera (RTSPS)
+
+In the same advanced menu as the manual URL fields above, a "Connexion
+chiffrée (RTSPS)" checkbox lets you switch a single camera from plain
+RTSP to RTSPS (RTSP over TLS), if that camera supports it. It is off by
+default for every camera, new or existing — there is no automatic
+migration, since RTSPS support varies by camera brand and firmware.
+
+- `cameras.json` still stores a plain `rtsp://` URL for the camera (the
+  one it announces over ONVIF); only the `rtsps_enabled` flag changes
+  the actual connection made by the native engine.
+- The RTP transport used for the video itself (UDP for the mosaic, TCP
+  for full screen) does not change when RTSPS is enabled — only the
+  RTSP control connection (credentials, stream negotiation) is
+  encrypted.
+- The camera's certificate is not verified against a trusted authority
+  (most cameras use a self-signed certificate for their RTSPS listener,
+  unrelated to PiDecoder's own Web UI certificate): the connection is
+  encrypted, but the camera's identity is not cryptographically
+  authenticated.
+- Enable it for one camera at a time and confirm both the mosaic and
+  full-screen views reconnect before enabling it elsewhere — a camera
+  that advertises RTSPS on a different port than its RTSP port needs
+  that port entered manually in the advanced URL fields, since PiDecoder
+  only changes the URL's scheme (`rtsp://` → `rtsps://`), never the
+  port.
+
 ## Special characters in credentials
 
 PiDecoder URL-encodes credentials received through ONVIF.
