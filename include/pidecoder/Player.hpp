@@ -68,6 +68,10 @@ public:
     [[nodiscard]] bool frame_ready() const noexcept;
     [[nodiscard]] bool error_marker_visible() const noexcept;
 
+    void set_muted(bool muted);
+    [[nodiscard]] bool muted() const noexcept;
+    [[nodiscard]] bool has_audio_track() const noexcept;
+
 private:
     static void* get_proc_address(void* context, const char* name);
     static void on_mpv_event(void* context);
@@ -121,6 +125,14 @@ private:
     bool has_rendered_frame_{false};
     bool frame_pending_{false};
     bool error_marker_visible_{false};
+
+    /*
+     * Coupé par défaut : l'audio n'est disponible qu'en vue Focus (voir
+     * Player::configure) et démarre volontairement muet à chaque
+     * ouverture, pour éviter un bruit surprise sur un mur de
+     * vidéosurveillance. L'utilisateur l'active lui-même.
+     */
+    bool audio_muted_{true};
 
     PlayerState state_{PlayerState::Connecting};
 

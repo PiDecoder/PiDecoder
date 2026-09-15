@@ -657,6 +657,64 @@ bool Player::error_marker_visible() const noexcept
     return error_marker_visible_;
 }
 
+void Player::set_muted(const bool muted)
+{
+    audio_muted_ = muted;
+
+    if (role_ != PlayerRole::Focus || mpv_ == nullptr) {
+        return;
+    }
+
+    check(
+        mpv_set_property_string(
+            mpv_,
+            "mute",
+            muted ? "yes" : "no"
+        ),
+        "Changement du son focus"
+    );
+}
+
+bool Player::muted() const noexcept
+{
+    return audio_muted_;
+}
+
+bool Player::has_audio_track() const noexcept
+{
+    /*
+     * L'audio n'est décodé qu'en vue Focus (voir configure()) ; en
+     * mosaïque, ou avant qu'une frame ait été reçue, mpv n'a pas
+     * encore déterminé si le flux contient une piste audio.
+     */
+    if (
+        role_ != PlayerRole::Focus ||
+        mpv_ == nullptr ||
+        !loaded_
+    ) {
+        return false;
+    }
+
+    char* codec_name = nullptr;
+
+    const int status =
+        mpv_get_property(
+            mpv_,
+            "audio-codec-name",
+            MPV_FORMAT_STRING,
+            &codec_name
+        );
+
+    if (status < 0 || codec_name == nullptr) {
+        return false;
+    }
+
+    const bool has_audio = codec_name[0] != '\0';
+    mpv_free(codec_name);
+
+    return has_audio;
+}
+
 void* Player::get_proc_address(void*, const char* name)
 {
     return reinterpret_cast<void*>(
@@ -717,7 +775,33 @@ void Player::on_render_update(void* context)
 void Player::configure()
 {
     check(mpv_set_option_string(mpv_, "vo", "libmpv"), "Configuration vo=libmpv");
-    check(mpv_set_option_string(mpv_, "audio", "no"), "Désactivation audio");
+
+    if (role_ == PlayerRole::Focus) {
+        /*
+         * L'audio n'est disponible qu'en vue Focus (une seule caméra
+         * agrandie à la fois) : jouer le son de toutes les vignettes
+         * de la mosaïque en même temps serait inexploitable, donc la
+         * grille garde l'audio désactivé (branche else ci-dessous).
+         *
+         * Le son démarre coupé (audio_muted_ vaut true par défaut à
+         * la création du Player) : l'utilisateur l'active lui-même
+         * avec la touche M, pour éviter un bruit surprise à
+         * l'ouverture du focus sur un mur de vidéosurveillance.
+         * set_muted() met à jour cette même propriété mpv à chaud.
+         */
+        check(mpv_set_option_string(mpv_, "audio", "auto"), "Activation audio focus");
+        check(
+            mpv_set_option_string(
+                mpv_,
+                "mute",
+                audio_muted_ ? "yes" : "no"
+            ),
+            "État initial du son focus"
+        );
+    } else {
+        check(mpv_set_option_string(mpv_, "audio", "no"), "Désactivation audio grille");
+    }
+
     check(mpv_set_option_string(mpv_, "hwdec", "no"), "Désactivation hwdec");
     check(mpv_set_option_string(mpv_, "profile", "low-latency"), "Profil low-latency");
     if (role_ == PlayerRole::Grid) {

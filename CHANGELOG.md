@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1 (beta, not yet field-tested)
+
+### Native audio support
+
+- the native engine can now play audio in the Focus view (one enlarged
+  camera at a time); the mosaic/grid view stays silent, since playing
+  every visible tile's audio at once would be unusable;
+- sound starts muted every time Focus opens, on any camera; press **M**
+  to unmute. A short on-screen indicator (`SON ACTIF` / `SON COUPE` /
+  `PAS DE SON`) confirms the state for 2 seconds, top-left of the Focus
+  view;
+- `PAS DE SON` means the camera's RTSP stream has no audio track at
+  all — pressing M does nothing audible in that case;
+- audio output uses whatever device ALSA/mpv picks as the system
+  default on the Pi; nothing is forced;
+- no volume control (mute/unmute only) and no per-camera memory of the
+  mute choice in this beta — see `docs/PROJECT-STATE.md` for the full
+  list of deferred scope;
+- native engine only; no Web UI or backend change, since this audio
+  plays on the Pi's own local output, not through the browser.
+
 ## 1.0.0
 
 ### English localization

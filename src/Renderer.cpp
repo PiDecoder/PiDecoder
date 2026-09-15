@@ -204,7 +204,10 @@ void Renderer::render_focus(
     const bool show_ptz_overlay,
     const PtzCommand active_ptz_command,
     const std::vector<PtzPreset>& presets,
-    const bool preset_menu_open
+    const bool preset_menu_open,
+    const bool show_audio_indicator,
+    const bool audio_muted,
+    const bool audio_available
 )
 {
     const int width =
@@ -261,6 +264,14 @@ void Renderer::render_focus(
         draw_zoom_indicator(
             percent,
             width,
+            height
+        );
+    }
+
+    if (show_audio_indicator) {
+        draw_audio_indicator(
+            audio_muted,
+            audio_available,
             height
         );
     }
@@ -1483,6 +1494,80 @@ void Renderer::draw_zoom_indicator(
             1.0F
         );
     }
+}
+
+void Renderer::draw_audio_indicator(
+    const bool muted,
+    const bool available,
+    const int canvas_height
+)
+{
+    /*
+     * Petit indicateur texte en haut à gauche de la vue Focus, sur le
+     * même principe que draw_zoom_indicator (haut à droite) : visible
+     * brièvement après un appui sur M, puis disparaît tout seul.
+     *
+     * "PAS DE SON" signifie que le flux de cette caméra n'a pas de
+     * piste audio du tout (pas la peine d'appuyer sur M) ; sinon
+     * "SON COUPE" / "SON ACTIF" reflète l'état courant.
+     */
+    const std::string text =
+        !available
+            ? "PAS DE SON"
+            : (
+                muted
+                    ? "SON COUPE"
+                    : "SON ACTIF"
+              );
+
+    const int scale = 2;
+    const int glyph_width = 5 * scale;
+    const int glyph_height = 7 * scale;
+    const int spacing = scale;
+    const int character_width = glyph_width + spacing;
+    const int padding = 10;
+
+    const int content_width =
+        static_cast<int>(
+            text.size()
+        ) *
+        character_width;
+
+    const int box_width =
+        content_width +
+        padding * 2;
+
+    const int box_height =
+        glyph_height +
+        padding * 2;
+
+    const int box_x = 18;
+    const int box_y = 18;
+
+    fill_ui_rect(
+        box_x,
+        box_y,
+        box_width,
+        box_height,
+        canvas_height,
+        0.08F,
+        0.08F,
+        0.08F,
+        1.0F
+    );
+
+    const Rect label{
+        box_x,
+        box_y,
+        box_width,
+        box_height
+    };
+
+    draw_text(
+        text,
+        label,
+        canvas_height
+    );
 }
 
 void Renderer::draw_error_marker(

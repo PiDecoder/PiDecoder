@@ -2,16 +2,74 @@
 
 ## Active version
 
-- Current version: **v1.0.0** — tagged, deployed on the production
+- Stable version: **v1.0.0** — tagged, deployed on the production
   Raspberry Pi (`olympus-vss-mon1`), confirmed running with all services
   active and the version string consistent everywhere (Web header/login,
   Diagnostics, native on-screen overlay).
 - Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
-- Active phase: v1.0 fully shipped — English localization merged to
-  `main`, version finalized from `1.0.0-dev` to `1.0.0`, the
-  README/CONTRIBUTING/SECURITY public-launch documentation pass
-  completed. No open items for this milestone; see "Outside the current
-  scope" below for what's next on the roadmap (audio, HTTPS, REST API).
+- Active phase: v1.1 roadmap — native audio support in the Focus view,
+  implemented on `main` and awaiting a build + field test on the
+  Raspberry Pi before it is considered a beta (see "v1.1 — audio support"
+  below). No git branch or tag decision made yet for this milestone.
+
+## v1.1 — audio support (beta, awaiting hardware validation)
+
+Per the roadmap, v1.1 adds audio playback. Scope decided with the user
+before implementation:
+
+- audio plays **only in the Focus view** (one enlarged camera at a
+  time). The mosaic/grid view stays silent — playing the audio of every
+  visible tile at once would be unusable. A future version could add
+  audio for a hovered/selected mosaic tile, but that is not in this
+  beta;
+- the audio output device is whatever ALSA/mpv picks as the system
+  default on the Pi (HDMI if that's what's configured, jack otherwise).
+  No device is forced;
+- the sound starts **muted** every time the Focus view is opened, on
+  any camera. The user has to press **M** to unmute — this avoids a
+  surprise sound on what is primarily a surveillance video wall.
+
+Implementation (native C++ engine only — no Web UI or backend changes,
+since the Web browser never receives this audio, only the Pi's own local
+output does):
+
+- `Player` (`role_ == PlayerRole::Focus`): `configure()` now sets
+  `audio=auto` instead of the previous blanket `audio=no`, and applies
+  the current mute state as an mpv `mute` option/property immediately
+  (also re-applied by `configure()` on every reconnect, so a transient
+  RTSP drop does not silently reset the user's choice). Grid-role
+  players are unchanged (`audio=no`, always silent). New methods:
+  `set_muted(bool)`, `muted()`, `has_audio_track()` (queries mpv's
+  `audio-codec-name` property; empty/unavailable means the camera's
+  stream has no audio track at all);
+- `Application`: **M** toggles `focus_player_`'s mute state while a
+  camera is in Focus (`SDLK_m`, alongside the existing `SDLK_ESCAPE`/
+  `SDLK_f` handling). A short-lived on-screen indicator (2 seconds,
+  same pattern as the existing zoom-percentage indicator) confirms the
+  new state, including pressing M on a camera with no audio track at
+  all;
+- `Renderer`: new `draw_audio_indicator()`, top-left of the Focus view
+  (the zoom indicator already owns the top-right corner), showing
+  `SON ACTIF` / `SON COUPE` / `PAS DE SON` in the same pixel-font style
+  used for the PTZ preset labels.
+
+**Known, deliberately deferred scope** for this beta:
+
+- no volume level control — only mute/unmute. mpv's own volume stays
+  at its default (100%);
+- no per-camera memory of the user's mute choice — every Focus session
+  starts muted, by design (see above);
+- no ONVIF-based advance detection of which cameras actually have a
+  microphone/audio profile — `has_audio_track()` only becomes accurate
+  once mpv has started decoding the stream (i.e. once Focus is already
+  open), so there's no "this camera has audio" hint in the camera list
+  or the Web UI;
+- not yet validated on real hardware — needs a build (`cmake --build`)
+  and a field test on the Pi: opening Focus on a camera that has an
+  audio stream (if any of the test cameras expose one), confirming M
+  toggles sound audibly and the indicator matches, and confirming a
+  camera without audio shows `PAS DE SON` and does nothing harmful when
+  M is pressed.
 
 ## v1.0 — English localization
 

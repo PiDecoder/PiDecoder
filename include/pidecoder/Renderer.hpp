@@ -41,7 +41,10 @@ public:
         bool show_ptz_overlay,
         PtzCommand active_ptz_command,
         const std::vector<PtzPreset>& presets,
-        bool preset_menu_open
+        bool preset_menu_open,
+        bool show_audio_indicator,
+        bool audio_muted,
+        bool audio_available
     );
 
     [[nodiscard]] std::optional<PtzCommand>
@@ -77,6 +80,12 @@ private:
     void draw_zoom_indicator(
         int percent,
         int canvas_width,
+        int canvas_height
+    );
+
+    void draw_audio_indicator(
+        bool muted,
+        bool available,
         int canvas_height
     );
 

@@ -268,6 +268,14 @@ void Application::process_sdl_event(
             redraw_requested_ = true;
             return;
         }
+
+        if (
+            event.key.keysym.sym ==
+            SDLK_m
+        ) {
+            toggle_focus_audio();
+            return;
+        }
     }
 
     if (
@@ -659,6 +667,7 @@ void Application::close_focus()
     ptz_overlay_visible_ = false;
     ptz_preset_menu_open_ = false;
     ptz_overlay_until_ = {};
+    audio_indicator_until_ = {};
     reset_inspection();
     redraw_requested_ = true;
 }
@@ -1279,6 +1288,48 @@ bool Application::zoom_indicator_visible() const noexcept
     );
 }
 
+void Application::toggle_focus_audio() noexcept
+{
+    /*
+     * Le son n'existe qu'en vue Focus (une seule caméra agrandie à la
+     * fois) ; voir Player::configure pour le détail. Si aucune caméra
+     * n'est en focus, ou si son flux n'a pas de piste audio, on
+     * affiche quand même brièvement l'indicateur ("PAS DE SON") pour
+     * confirmer que la touche a bien été prise en compte, sans rien
+     * changer d'audible.
+     */
+    if (
+        focus_player_ == nullptr ||
+        !focus_player_->has_audio_track()
+    ) {
+        show_audio_indicator();
+        return;
+    }
+
+    focus_player_->set_muted(
+        !focus_player_->muted()
+    );
+
+    show_audio_indicator();
+    redraw_requested_ = true;
+}
+
+void Application::show_audio_indicator() noexcept
+{
+    audio_indicator_until_ =
+        std::chrono::steady_clock::now() +
+        audio_indicator_duration_;
+}
+
+bool Application::audio_indicator_visible() const noexcept
+{
+    return (
+        focus_player_ != nullptr &&
+        std::chrono::steady_clock::now() <
+            audio_indicator_until_
+    );
+}
+
 void Application::render()
 {
     /*
@@ -1315,7 +1366,10 @@ void Application::render()
             camera != nullptr
                 ? camera->ptz_presets
                 : no_presets,
-            ptz_preset_menu_open_
+            ptz_preset_menu_open_,
+            audio_indicator_visible(),
+            focus_player_->muted(),
+            focus_player_->has_audio_track()
         );
         return;
     }

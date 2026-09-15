@@ -94,6 +94,10 @@ private:
 
     [[nodiscard]] bool zoom_indicator_visible() const noexcept;
 
+    void toggle_focus_audio() noexcept;
+    void show_audio_indicator() noexcept;
+    [[nodiscard]] bool audio_indicator_visible() const noexcept;
+
     [[nodiscard]] std::optional<std::size_t>
     camera_index_at(
         int mouse_x,
@@ -149,6 +153,9 @@ private:
     std::chrono::steady_clock::time_point
         zoom_indicator_until_{};
 
+    std::chrono::steady_clock::time_point
+        audio_indicator_until_{};
+
     bool inspection_animation_active_{false};
     bool inspection_dragging_{false};
 
@@ -164,6 +171,9 @@ private:
 
     static constexpr std::chrono::seconds
         zoom_indicator_duration_{2};
+
+    static constexpr std::chrono::seconds
+        audio_indicator_duration_{2};
 
     static constexpr std::chrono::seconds
         ptz_overlay_timeout_{5};
