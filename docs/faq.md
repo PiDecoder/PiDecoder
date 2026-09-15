@@ -293,13 +293,21 @@ Redact private values before publishing.
 
 ## Is HTTPS included?
 
-Not in v1.0.0.
+Not in v1.1.0.
 
 The current Web service uses HTTP. Keep it on a trusted network. HTTPS is listed as a planned roadmap item, not a current feature.
 
 ## Is PTZ fully available?
 
 Yes. Native PTZ control (pan/tilt, optical zoom, forced Stop and preset selection) is available in the Web interface, with an auto-hiding PTZ overlay in the focus view. It has been field-tested and validated on an Axis Q6074. Support for other ONVIF PTZ cameras is expected to work through the same ONVIF profile but is not yet validated in the field the way the Axis Q6074 is.
+
+## Is audio available?
+
+Yes, since v1.1.0. When a camera's RTSP stream carries an audio track, PiDecoder can play it in the full-screen (focus) view through a speaker button, and only when the camera's **Audio** toggle is enabled in the Web interface (see [Audio](configuration.md#audio)). Audio is never played in the mosaic; enabling **Audio** for a camera does relax that camera's mosaic decoding settings so the extra audio stream doesn't disrupt the grid view.
+
+It has been field-tested and validated with an **Axis** camera (mic enabled on its RTSP stream). Other ONVIF/RTSP cameras with audio are expected to work through the same mechanism but are not yet validated to the same degree.
+
+The **Aqara G410** intercom is a known exception: it still shows residual audio-related trouble even with **Audio** enabled. This is set aside for now and not currently blocking — leave **Audio** disabled for a G410 if you only need video from it.
 
 ## Is English available in the Web interface?
 

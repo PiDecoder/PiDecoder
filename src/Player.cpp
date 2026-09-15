@@ -12,10 +12,12 @@ Player::Player(
     std::string url,
     const Uint32 mpv_event_type,
     const Uint32 render_event_type,
-    const PlayerRole role
+    const PlayerRole role,
+    const bool audio_capable
 )
     : url_(std::move(url)),
       role_(role),
+      audio_capable_(audio_capable),
       mpv_event_type_(mpv_event_type),
       render_event_type_(render_event_type)
 {
@@ -657,6 +659,124 @@ bool Player::error_marker_visible() const noexcept
     return error_marker_visible_;
 }
 
+void Player::set_muted(const bool muted)
+{
+    audio_muted_ = muted;
+
+    if (role_ != PlayerRole::Focus || mpv_ == nullptr) {
+        return;
+    }
+
+    /*
+     * On ne se contente pas de la propriété "mute" (qui ne fait que
+     * rendre le son silencieux) : on active ou désactive le
+     * décodage audio lui-même via "aid" ("no" = piste audio non
+     * décodée du tout, "auto" = piste audio décodée et jouée).
+     *
+     * Pourquoi : dès que mpv décode une piste audio, "video-sync"
+     * (réglé sur "audio" en Focus, cf. configure()) se met à
+     * synchroniser l'image sur l'horloge audio. Sur un flux RTSP de
+     * caméra, cette horloge peut être irrégulière (paquets audio
+     * espacés, jitter réseau) : coupé par défaut avec "mute" seul,
+     * l'image restait donc calée sur un flux audio décodé mais
+     * silencieux, avec un fort risque de décalage et de ralenti —
+     * exactement le problème constaté en test. En laissant "aid" à
+     * "no" tant que l'utilisateur n'a pas explicitement demandé le
+     * son, l'image retrouve son comportement d'origine (aucune
+     * horloge audio à suivre), identique à celui de la mosaïque.
+     */
+    check(
+        mpv_set_property_string(
+            mpv_,
+            "aid",
+            (audio_capable_ && !muted) ? "auto" : "no"
+        ),
+        "Changement du son focus"
+    );
+}
+
+bool Player::muted() const noexcept
+{
+    return audio_muted_;
+}
+
+bool Player::audio_capable() const noexcept
+{
+    return audio_capable_;
+}
+
+bool Player::has_audio_track() const noexcept
+{
+    /*
+     * Piste audio détectée via la liste des pistes du démultiplexeur
+     * (track-list), qui recense toutes les pistes trouvées dans le
+     * flux dès son ouverture — que la piste audio soit ou non
+     * sélectionnée pour le décodage ("aid"). Ça permet de savoir si
+     * une caméra a du son avant même que l'utilisateur ait appuyé
+     * sur M (voir set_muted() : le décodage audio reste coupé par
+     * défaut, donc "audio-codec-name" resterait vide).
+     *
+     * audio_capable_ à faux (case "cette caméra a un micro" décochée
+     * en config Web) coupe court immédiatement : on ne propose pas
+     * le contrôle audio pour une caméra que l'utilisateur n'a pas
+     * signalée comme telle, même si son flux en contient une.
+     */
+    if (
+        role_ != PlayerRole::Focus ||
+        !audio_capable_ ||
+        mpv_ == nullptr ||
+        !loaded_
+    ) {
+        return false;
+    }
+
+    int64_t track_count = 0;
+
+    const int count_status =
+        mpv_get_property(
+            mpv_,
+            "track-list/count",
+            MPV_FORMAT_INT64,
+            &track_count
+        );
+
+    if (count_status < 0 || track_count <= 0) {
+        return false;
+    }
+
+    for (int64_t index = 0; index < track_count; ++index) {
+        const std::string property_name =
+            "track-list/" +
+            std::to_string(index) +
+            "/type";
+
+        char* track_type = nullptr;
+
+        const int status =
+            mpv_get_property(
+                mpv_,
+                property_name.c_str(),
+                MPV_FORMAT_STRING,
+                &track_type
+            );
+
+        if (status < 0 || track_type == nullptr) {
+            continue;
+        }
+
+        const bool is_audio =
+            std::string(track_type) == "audio";
+
+        mpv_free(track_type);
+
+        if (is_audio) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void* Player::get_proc_address(void*, const char* name)
 {
     return reinterpret_cast<void*>(
@@ -717,7 +837,53 @@ void Player::on_render_update(void* context)
 void Player::configure()
 {
     check(mpv_set_option_string(mpv_, "vo", "libmpv"), "Configuration vo=libmpv");
-    check(mpv_set_option_string(mpv_, "audio", "no"), "Désactivation audio");
+
+    if (role_ == PlayerRole::Focus) {
+        /*
+         * L'audio n'est disponible qu'en vue Focus (une seule caméra
+         * agrandie à la fois) : jouer le son de toutes les vignettes
+         * de la mosaïque en même temps serait inexploitable, donc la
+         * grille garde l'audio désactivé (branche else ci-dessous).
+         *
+         * Le son démarre coupé (audio_muted_ vaut true par défaut à
+         * la création du Player) : l'utilisateur l'active lui-même
+         * avec la touche M ou le bouton, pour éviter un bruit
+         * surprise à l'ouverture du focus sur un mur de
+         * vidéosurveillance.
+         *
+         * Important : tant que c'est coupé, on met "aid" à "no",
+         * c'est-à-dire qu'on ne décode PAS la piste audio du tout —
+         * pas juste "mute" (silencieux mais décodé). "video-sync"
+         * est réglé sur "audio" plus bas pour la vue Focus ; si mpv
+         * décode réellement une piste audio, l'image se met à suivre
+         * l'horloge audio au lieu de son propre rythme. Sur un flux
+         * RTSP de caméra, cette horloge audio peut être irrégulière
+         * (paquets espacés, jitter réseau), ce qui provoque un
+         * décalage et un ralenti de l'image très visibles — c'est le
+         * bug remonté en test. En laissant "aid" à "no" par défaut,
+         * l'image se comporte exactement comme avant (aucune horloge
+         * audio à suivre), et le décodage audio n'est activé qu'au
+         * moment où l'utilisateur le demande (voir set_muted(), qui
+         * fait exactement la même bascule à chaud).
+         *
+         * audio_capable_ reflète la case "cette caméra a un micro"
+         * cochée par l'utilisateur dans la config Web : si elle n'est
+         * pas cochée, on ne décode jamais l'audio pour cette caméra,
+         * même si l'utilisateur appuie sur M (set_muted() respecte
+         * aussi cette même règle).
+         */
+        check(
+            mpv_set_option_string(
+                mpv_,
+                "aid",
+                (audio_capable_ && !audio_muted_) ? "auto" : "no"
+            ),
+            "État initial audio focus"
+        );
+    } else {
+        check(mpv_set_option_string(mpv_, "audio", "no"), "Désactivation audio grille");
+    }
+
     check(mpv_set_option_string(mpv_, "hwdec", "no"), "Désactivation hwdec");
     check(mpv_set_option_string(mpv_, "profile", "low-latency"), "Profil low-latency");
     if (role_ == PlayerRole::Grid) {
@@ -869,19 +1035,62 @@ void Player::configure()
             "Transport RTSP UDP grille"
         );
 
-        check(
-            mpv_set_option_string(
-                mpv_,
-                "demuxer-lavf-o",
-                "fflags=nobuffer,"
-                "max_delay=0,"
-                "reorder_queue_size=0,"
-                "use_wallclock_as_timestamps=1,"
-                "analyzeduration=0,"
-                "probesize=32"
-            ),
-            "Configuration RTSP UDP grille"
-        );
+        if (audio_capable_) {
+            /*
+             * Caméra avec micro (case cochée en config Web) :
+             * réglages UDP légèrement assouplis par rapport à la
+             * branche ci-dessous, réservée aux caméras purement
+             * vidéo.
+             *
+             * Constaté sur le terrain : les réglages UDP les plus
+             * extrêmes (aucune tolérance au réordonnancement des
+             * paquets, délai nul) tiennent très bien avec un seul
+             * flux RTP (vidéo), mais provoquent un décalage d'image
+             * qui grandit avec le temps dès qu'un second flux RTP
+             * (audio) arrive entrelacé dessus — reproduit à
+             * l'identique sur plusieurs caméras différentes (Axis
+             * avec micro activé, Aqara G410), donc lié à la présence
+             * d'une piste audio elle-même, pas à une marque ou un
+             * codec précis. La vue Focus, qui gère cette même
+             * caméra sans souci, utilise TCP (donc pas de
+             * réordonnancement RTP à gérer) : ça pointe vers
+             * max_delay/reorder_queue_size comme réglages en cause
+             * ici.
+             *
+             * Valeurs choisies avec une marge prudente (toujours très
+             * en dessous des valeurs par défaut de FFmpeg) plutôt que
+             * strictement minimales : n'ayant pas pu tester sur du
+             * matériel réel, un ajustement fin restera sans doute
+             * nécessaire une fois validé sur le Pi.
+             */
+            check(
+                mpv_set_option_string(
+                    mpv_,
+                    "demuxer-lavf-o",
+                    "fflags=nobuffer,"
+                    "max_delay=200000,"
+                    "reorder_queue_size=8,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=500000,"
+                    "probesize=32768"
+                ),
+                "Configuration RTSP UDP grille (avec audio)"
+            );
+        } else {
+            check(
+                mpv_set_option_string(
+                    mpv_,
+                    "demuxer-lavf-o",
+                    "fflags=nobuffer,"
+                    "max_delay=0,"
+                    "reorder_queue_size=0,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=0,"
+                    "probesize=32"
+                ),
+                "Configuration RTSP UDP grille"
+            );
+        }
     } else {
         /*
          * Focus = priorité à la qualité.

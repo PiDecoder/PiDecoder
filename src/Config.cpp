@@ -65,6 +65,12 @@ std::vector<CameraConfig> Config::load(
             continue;
         }
 
+        camera.audio_enabled =
+            item.value(
+                "audio_enabled",
+                false
+            );
+
         if (camera.grid_url.empty()) {
             throw std::runtime_error(
                 "URL mosaïque absente pour : " +

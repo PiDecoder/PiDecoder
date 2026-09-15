@@ -204,7 +204,10 @@ void Renderer::render_focus(
     const bool show_ptz_overlay,
     const PtzCommand active_ptz_command,
     const std::vector<PtzPreset>& presets,
-    const bool preset_menu_open
+    const bool preset_menu_open,
+    const bool show_audio_indicator,
+    const bool audio_muted,
+    const bool audio_available
 )
 {
     const int width =
@@ -260,6 +263,16 @@ void Renderer::render_focus(
 
         draw_zoom_indicator(
             percent,
+            width,
+            height
+        );
+    }
+
+    if (show_audio_indicator) {
+        draw_audio_indicator(
+            audio_muted,
+            audio_available,
+            ptz_available,
             width,
             height
         );
@@ -1483,6 +1496,315 @@ void Renderer::draw_zoom_indicator(
             1.0F
         );
     }
+}
+
+Rect Renderer::audio_button(
+    const int canvas_width,
+    const int canvas_height,
+    const bool ptz_available
+) const noexcept
+{
+    /*
+     * Bouton carré, même gabarit que les boutons PTZ (ptz_buttons)
+     * pour rester cohérent visuellement, ancré en bas à droite de la
+     * vue Focus. Quand la caméra a un pavé PTZ affiché à cet
+     * endroit, on se décale à sa gauche pour ne jamais le recouvrir ;
+     * sinon on prend directement le coin bas-droit.
+     */
+    const int shortest =
+        std::min(
+            canvas_width,
+            canvas_height
+        );
+
+    const int size =
+        std::clamp(
+            shortest / 16,
+            34,
+            46
+        );
+
+    const int margin =
+        std::clamp(
+            size / 3,
+            12,
+            18
+        );
+
+    if (!ptz_available) {
+        return Rect{
+            canvas_width - margin - size,
+            canvas_height - margin - size,
+            size,
+            size
+        };
+    }
+
+    const auto ptz = ptz_buttons(
+        canvas_width,
+        canvas_height
+    );
+
+    const int gap =
+        std::clamp(
+            size / 8,
+            4,
+            7
+        );
+
+    // ptz[1] est le bouton "Left", donc le bord gauche du pavé PTZ.
+    const int ptz_left = ptz[1].rectangle.x;
+
+    return Rect{
+        ptz_left - gap - size,
+        canvas_height - margin - size,
+        size,
+        size
+    };
+}
+
+void Renderer::draw_audio_indicator(
+    const bool muted,
+    const bool available,
+    const bool ptz_available,
+    const int canvas_width,
+    const int canvas_height
+)
+{
+    /*
+     * Petit bouton cliquable en bas à droite de la vue Focus, sur le
+     * même principe que draw_ptz_overlay : visible après un
+     * mouvement de souris, puis disparaît tout seul après quelques
+     * secondes (voir audio_indicator_duration_ côté Application).
+     * Juste un logo de haut-parleur, sans texte : bleu = son actif,
+     * gris + barre = coupé, gris terne = pas de piste audio du tout.
+     */
+    const Rect button =
+        audio_button(
+            canvas_width,
+            canvas_height,
+            ptz_available
+        );
+
+    /*
+     * "Actif" = son réellement audible (piste disponible et pas
+     * coupé) ; mêmes teintes que les boutons PTZ actifs/inactifs
+     * pour rester cohérent visuellement.
+     */
+    const bool active = available && !muted;
+
+    fill_ui_rect(
+        button.x,
+        button.y,
+        button.width,
+        button.height,
+        canvas_height,
+        active ? 0.18F : 0.08F,
+        active ? 0.38F : 0.10F,
+        active ? 0.72F : 0.13F,
+        1.0F
+    );
+
+    const int border =
+        std::max(
+            2,
+            button.width / 24
+        );
+
+    const float border_red = active ? 0.35F : 0.28F;
+    const float border_green = active ? 0.62F : 0.33F;
+    const float border_blue = active ? 1.0F : 0.40F;
+
+    fill_ui_rect(
+        button.x,
+        button.y,
+        button.width,
+        border,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x,
+        button.y + button.height - border,
+        button.width,
+        border,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x,
+        button.y,
+        border,
+        button.height,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    fill_ui_rect(
+        button.x + button.width - border,
+        button.y,
+        border,
+        button.height,
+        canvas_height,
+        border_red,
+        border_green,
+        border_blue,
+        1.0F
+    );
+
+    /*
+     * Logo haut-parleur en pixel-art, dans le même esprit que
+     * draw_ptz_icon : un boîtier (petit carré) suivi d'un pavillon
+     * qui s'évase vers la droite, dessiné par des barres verticales
+     * de hauteur croissante (comme un escalier).
+     *
+     * Gris terne quand la caméra n'a pas de piste audio du tout
+     * (rien à activer), blanc plein sinon.
+     */
+    const float icon_shade = available ? 1.0F : 0.45F;
+
+    const int center_y =
+        button.y +
+        button.height / 2;
+
+    const int thickness =
+        std::max(
+            2,
+            button.width / 12
+        );
+
+    const int body_width = thickness * 2;
+    const int body_height = thickness * 4;
+
+    const int body_x =
+        button.x +
+        button.width / 2 -
+        thickness * 3;
+
+    fill_ui_rect(
+        body_x,
+        center_y - body_height / 2,
+        body_width,
+        body_height,
+        canvas_height,
+        icon_shade,
+        icon_shade,
+        icon_shade,
+        1.0F
+    );
+
+    constexpr int horn_steps = 3;
+
+    for (int step = 0; step < horn_steps; ++step) {
+        const int column_x =
+            body_x +
+            body_width +
+            step * thickness;
+
+        const int column_height =
+            body_height +
+            step * thickness * 2;
+
+        fill_ui_rect(
+            column_x,
+            center_y - column_height / 2,
+            thickness,
+            column_height,
+            canvas_height,
+            icon_shade,
+            icon_shade,
+            icon_shade,
+            1.0F
+        );
+    }
+
+    if (available && muted) {
+        /*
+         * Barre de coupure sur toute la largeur de l'icône : signal
+         * visuel non ambigu du "son coupé", sans avoir à écrire de
+         * texte (seule primitive de dessin disponible : le rectangle
+         * plein, donc pas de croix en diagonale possible).
+         */
+        fill_ui_rect(
+            body_x,
+            center_y - thickness / 2,
+            body_width +
+                horn_steps * thickness +
+                thickness,
+            thickness,
+            canvas_height,
+            0.85F,
+            0.20F,
+            0.20F,
+            1.0F
+        );
+    }
+}
+
+bool Renderer::audio_button_hit_at(
+    const int logical_x,
+    const int logical_y,
+    const bool ptz_available
+) const noexcept
+{
+    int logical_width = 0;
+    int logical_height = 0;
+
+    SDL_GetWindowSize(
+        window_.native_handle(),
+        &logical_width,
+        &logical_height
+    );
+
+    const int drawable_width =
+        window_.drawable_width();
+
+    const int drawable_height =
+        window_.drawable_height();
+
+    if (
+        logical_width <= 0 ||
+        logical_height <= 0 ||
+        drawable_width <= 0 ||
+        drawable_height <= 0
+    ) {
+        return false;
+    }
+
+    const int x =
+        logical_x *
+        drawable_width /
+        logical_width;
+
+    const int y =
+        logical_y *
+        drawable_height /
+        logical_height;
+
+    const Rect button =
+        audio_button(
+            drawable_width,
+            drawable_height,
+            ptz_available
+        );
+
+    return (
+        x >= button.x &&
+        x < button.x + button.width &&
+        y >= button.y &&
+        y < button.y + button.height
+    );
 }
 
 void Renderer::draw_error_marker(

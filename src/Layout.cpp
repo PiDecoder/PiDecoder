@@ -165,6 +165,12 @@ LayoutConfig LayoutStore::load(
             false
         );
 
+    layout.focus_audio_default_on =
+        document.value(
+            "focus_audio_default_on",
+            false
+        );
+
     if (
         document.contains("camera_order") &&
         document["camera_order"].is_array()
@@ -262,6 +268,10 @@ void LayoutStore::save(
         {
             "fullscreen_on_start",
             layout.fullscreen_on_start
+        },
+        {
+            "focus_audio_default_on",
+            layout.focus_audio_default_on
         },
         {"camera_order", layout.camera_order},
         {"placements", placements}

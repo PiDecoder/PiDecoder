@@ -1,5 +1,77 @@
 # Changelog
 
+## 1.1.0
+
+Field-tested and validated on the Raspberry Pi with an Axis camera (RTSP
+stream with an enabled microphone) — see `docs/faq.md` and
+`docs/configuration.md` for the hardware-compatibility details, including
+the known Aqara G410 exception below.
+
+### Native audio support
+
+- the native engine can now play audio in the Focus view (one enlarged
+  camera at a time); the mosaic/grid view stays silent, since playing
+  every visible tile's audio at once would be unusable;
+- sound starts muted every time Focus opens, on any camera, unless the
+  new "Micro actif par défaut en plein écran" layout toggle (see below)
+  is enabled; press **M** or click the new audio button to unmute;
+- the audio button is a small speaker icon, bottom-right of the Focus
+  view (shifted left of the PTZ pad instead, on cameras that have
+  one, so the two never overlap). It follows the same show/hide
+  principle as the existing PTZ overlay: shown immediately when Focus
+  opens, then reappears on any mouse movement and auto-hides after 5
+  seconds of inactivity. Blue = unmuted, grey = muted (with a bar
+  across the icon) or no audio track at all (dimmer, no bar);
+- a camera whose RTSP stream has no audio track at all shows the
+  dimmed speaker icon — pressing M or clicking does nothing audible
+  in that case;
+- audio output uses whatever device ALSA/mpv picks as the system
+  default on the Pi; nothing is forced;
+- no volume control (mute/unmute only) and no per-camera memory of the
+  mute choice in this beta — see `docs/PROJECT-STATE.md` for the full
+  list of deferred scope;
+- native engine only; no Web UI or backend change, since this audio
+  plays on the Pi's own local output, not through the browser;
+- fixed a regression introduced by an earlier commit in this same
+  beta: enabling audio decoding unconditionally as soon as Focus
+  opened (silencing it only through mpv's `mute` property) caused a
+  visible video lag/slow-motion effect, because Focus's `video-sync`
+  setting paces the image against the audio clock, and a live RTSP
+  audio stream's clock can be irregular. Audio decoding is now only
+  turned on for as long as the user has actually asked for sound
+  (pressed M or clicked the button); while muted — the default — no
+  audio is decoded at all and video timing is exactly as it was
+  before this feature existed;
+- **new**: "has a microphone (audio)" checkbox per camera in the Web
+  config, unchecked by default. It decides whether the Focus audio
+  button is offered for that camera at all (no icon whatsoever if
+  unchecked) — and it also fixes a real, separate bug: any camera
+  whose RTSP stream carries an audio track (not just the ones this
+  beta cares about) was breaking the mosaic/grid view with a frame
+  lag that grew worse over time, reproduced with both an Axis camera
+  (mic enabled) and an Aqara G410 intercom, and confirmed to happen
+  even on `main`/v1.0.0 with none of this beta's code. Root cause:
+  the mosaic's low-latency UDP settings don't tolerate a second
+  audio RTP stream interleaved with the video one. Checking this box
+  for a camera relaxes just enough of those settings for that
+  camera's tile to fix it, while every other (unchecked) camera keeps
+  the exact proven settings, unchanged;
+- fixed the mosaic lag for the Axis camera with its mic on, confirmed
+  on hardware. The Aqara G410 intercom still has some residual audio
+  trouble even with the box checked — set aside for now, low priority,
+  and does not affect video-only use of the G410;
+- the "Audio" checkbox label was shortened (was "a un micro (audio)" /
+  "has a microphone (audio)"), with the fuller explanation moved to
+  its tooltip;
+- new global toggle in the Web config's Disposition/Layout tab,
+  "Micro actif par défaut en plein écran" / "Microphone on by default
+  in fullscreen", next to "Fullscreen on startup". Off by default; when
+  on, Focus opens with sound already on instead of muted, for any
+  camera whose own "Audio" box is checked (no effect on the others);
+- every checkbox in the Web config (camera active/audio, layout
+  fullscreen/audio-default) now renders as an on/off slider toggle
+  instead of a plain checkbox — a visual-only change.
+
 ## 1.0.0
 
 ### English localization

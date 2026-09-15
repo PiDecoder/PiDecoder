@@ -2,16 +2,199 @@
 
 ## Active version
 
-- Current version: **v1.0.0** — tagged, deployed on the production
-  Raspberry Pi (`olympus-vss-mon1`), confirmed running with all services
-  active and the version string consistent everywhere (Web header/login,
-  Diagnostics, native on-screen overlay).
-- Base version: v0.9.9.5 RC3 (merged to `main`, tagged, deployed)
-- Active phase: v1.0 fully shipped — English localization merged to
-  `main`, version finalized from `1.0.0-dev` to `1.0.0`, the
-  README/CONTRIBUTING/SECURITY public-launch documentation pass
-  completed. No open items for this milestone; see "Outside the current
-  scope" below for what's next on the roadmap (audio, HTTPS, REST API).
+- Stable version: **v1.1.0** — native audio support in the Focus view
+  (see "v1.1 — audio support" below), field-tested and validated on the
+  Raspberry Pi with an Axis camera. Merged from
+  `feature/v1.1-audio-focus` into `main`, tagged, to be deployed on the
+  production Raspberry Pi (`olympus-vss-mon1`).
+- Base version: v1.0.0 (merged to `main`, tagged, deployed)
+- Active phase: none currently open — v1.1.0 closes the audio-support
+  roadmap item. Next roadmap item to be defined with the user.
+
+## v1.1 — audio support (validated on hardware, merged to `main`)
+
+Per the roadmap, v1.1 adds audio playback. Scope decided with the user
+before implementation:
+
+- audio plays **only in the Focus view** (one enlarged camera at a
+  time). The mosaic/grid view stays silent — playing the audio of every
+  visible tile at once would be unusable. A future version could add
+  audio for a hovered/selected mosaic tile, but that is not in this
+  beta;
+- the audio output device is whatever ALSA/mpv picks as the system
+  default on the Pi (HDMI if that's what's configured, jack otherwise).
+  No device is forced;
+- the sound starts **muted** every time the Focus view is opened, on
+  any camera. The user has to press **M** to unmute — this avoids a
+  surprise sound on what is primarily a surveillance video wall.
+
+Implementation (native C++ engine only — no Web UI or backend changes,
+since the Web browser never receives this audio, only the Pi's own local
+output does):
+
+- `Player` (`role_ == PlayerRole::Focus`): `configure()` sets `aid`
+  (mpv's audio-track-selection property) to `"no"` or `"auto"`
+  depending on the current mute state, instead of a blanket
+  `audio=no` — also re-applied by `configure()` on every reconnect,
+  so a transient RTSP drop does not silently reset the user's choice.
+  Grid-role players are unchanged (`audio=no`, always silent). New
+  methods: `set_muted(bool)`, `muted()`, `has_audio_track()` (scans
+  mpv's `track-list` for an entry of type `"audio"` — this works
+  whether or not the audio track is currently selected/decoding,
+  unlike the codec-name property used in an earlier version of this
+  beta; see the "Regression" note below for why that distinction
+  matters);
+- **regression found and fixed during field testing**: the first cut
+  of this feature set `aid=auto` (decode audio) unconditionally as
+  soon as Focus opened, and only used the `mute` property to silence
+  playback. That's what broke video playback — muted or not — with a
+  visible frame lag and slow-motion effect the user had already fixed
+  once, early in the project, before this beta existed. Root cause:
+  Focus's `video-sync` option is set to `"audio"` (see below), a
+  setting that had been inert for a long time because Focus never
+  actually decoded audio (`audio=no`) — with no real audio clock to
+  reference, mpv fell back to its own internal timing, which is the
+  stable behavior that had been tuned in. The moment `aid=auto` made
+  mpv decode a real (and, over RTSP, often irregular/jittery) audio
+  stream, `video-sync=audio` started actually doing its job: pacing
+  the video to match that audio clock, which is exactly what produced
+  the lag/slow-motion. The fix keeps `video-sync=audio` untouched (it
+  is the originally validated setting) and instead keeps `aid=no`
+  — audio not decoded at all — for as long as the camera stays muted,
+  which is the default and by far the most common state. Audio
+  decoding, and therefore any dependency on the audio clock, now only
+  turns on for the brief window where the user has explicitly pressed
+  M or clicked the audio button;
+- `Application`: **M** toggles `focus_player_`'s mute state while a
+  camera is in Focus (`SDLK_m`, alongside the existing `SDLK_ESCAPE`/
+  `SDLK_f` handling). The mute state can also be toggled with the
+  **mouse**, by clicking the audio button described below — same
+  outcome as pressing M;
+- the audio button follows the exact same show/hide principle as the
+  existing PTZ overlay: it appears on any mouse movement inside the
+  Focus view (regardless of whether the current camera has PTZ), is
+  shown immediately when Focus opens (so it's discoverable without
+  having to move the mouse first), and auto-hides after 5 seconds of
+  inactivity (`audio_indicator_duration_`, now matching
+  `ptz_overlay_timeout_` — it was 2 seconds in the keyboard-only
+  version of this beta);
+- `Renderer`: `draw_audio_indicator()` draws a clickable bordered
+  square button, bottom-right of the Focus view, same size as a PTZ
+  button (34–46px, scales with window size) so it looks consistent
+  with the PTZ pad. When the current camera has a PTZ overlay shown
+  in that same corner, the audio button shifts to sit just to its
+  left instead, so the two never overlap; otherwise it sits directly
+  in the bottom-right corner. `audio_button(canvas_width,
+  canvas_height, ptz_available)` computes that position and is shared
+  between drawing and hit-testing;
+- no text label anymore — just a small pixel-art speaker icon
+  (a body + a flared horn drawn as stepped bars, same style as the
+  PTZ arrow icons), colored blue (active/unmuted), grey (muted or no
+  audio track), with a red bar drawn across it specifically when
+  muted (there's no diagonal-line primitive available, so a full-width
+  bar stands in for the usual "muted speaker" cross); a camera with no
+  audio track at all shows a dimmer grey icon with no bar, since
+  there's nothing to mute;
+- new `audio_button_hit_at(logical_x, logical_y, ptz_available)`
+  mirrors `ptz_command_at`'s coordinate conversion to hit-test a click
+  against that button; `Application::process_sdl_event` checks it
+  (while the button is visible), passing `focused_camera_has_ptz()` so
+  the hit-test uses the same position as the draw call, right before
+  the generic single-left-click pan handler, so a click on the button
+  toggles mute instead of starting a pan;
+- clicking the button when the current camera has no audio track at
+  all still shows the indicator but does nothing audible, same as
+  pressing M in that situation.
+
+**Per-camera "has a microphone" setting, and a real mosaic bug it
+fixes** — added after field testing surfaced a serious regression:
+
+- new checkbox in the Web config, per camera, under "cams.audio_enabled"
+  ("a un micro (audio)" / "has a microphone (audio)"), **unchecked by
+  default** for every existing and newly-added camera. Persisted as
+  `audio_enabled` (top-level, alongside `enabled`) in `cameras.json`;
+  `sanitize()` in `config-web.py` defaults it to `false`, and it is
+  explicitly preserved (not reset) when a camera is re-discovered/
+  updated via ONVIF, same as the existing `enabled` field;
+- native side: `CameraConfig::audio_enabled` is read by `Config::load`
+  and passed into `Player`'s constructor as a new `audio_capable`
+  argument (`Player::audio_capable_`, defaults to `false` so any
+  existing call site that doesn't pass it keeps working). Both
+  `Application::initialize_players()` (grid) and `open_focus()` pass
+  each camera's `audio_enabled` through;
+- **root cause found and fixed**: it turned out *any* RTSP camera
+  whose stream carries an audio track — regardless of brand or codec —
+  broke the mosaic with a frame lag that grew over time, even on
+  `main` (v1.0.0), with zero relation to the Focus audio feature.
+  Reproduced identically with an Axis camera (mic enabled) and an
+  Aqara G410 intercom. Root cause: the mosaic's UDP demuxer settings
+  are deliberately extreme for minimum latency
+  (`max_delay=0,reorder_queue_size=0`, tuned against single-video-
+  stream cameras) and don't tolerate a second (audio) RTP stream
+  interleaved on the wire — unlike Focus, which uses TCP and was
+  never affected. Fix: `Player::configure()` now only applies those
+  extreme UDP settings to cameras where `audio_capable_` is false;
+  cameras flagged as having a microphone get a slightly relaxed set
+  (`max_delay=200000`, `reorder_queue_size=8`, `analyzeduration=500000`,
+  `probesize=32768` — still far below FFmpeg's own defaults). Every
+  other camera (the vast majority, unflagged) keeps the exact
+  settings that were already proven stable, byte for byte — zero
+  behavior change for them;
+- this same flag also now gates the Focus audio button entirely:
+  `Player::audio_capable()` (new accessor) is checked by
+  `Application::audio_indicator_visible()`, so the button/icon never
+  appears at all — not even dimmed — for a camera whose box isn't
+  checked, and `has_audio_track()` / `set_muted()` short-circuit the
+  same way (audio is never decoded for such a camera, whatever the
+  user presses);
+- **validated on hardware, partially**: fixed the mosaic lag for the
+  Axis camera with its mic enabled — this is the validated hardware
+  configuration for v1.1.0 (see `docs/faq.md` and
+  `docs/configuration.md`). The Aqara G410 intercom still shows some
+  trouble even with the box checked — flagged by the user as low
+  priority for now (not investigated further yet), and does not block
+  video-only use of the G410.
+
+**Follow-up round after field testing** (checkbox label, a new global
+default, and a UI pass):
+
+- the per-camera checkbox label was shortened from "a un micro
+  (audio)" / "has a microphone (audio)" to a single word, **"Audio"**
+  (same in both languages) — the longer explanation moved to the
+  checkbox's tooltip (`cams.audio_enabled_hint`) instead;
+- new **global** (not per-camera) setting in the Web config's
+  Disposition/Layout tab, right next to "Plein écran au démarrage" /
+  "Fullscreen on startup": **"Micro actif par défaut en plein écran"**
+  / "Microphone on by default in fullscreen". Off by default, like
+  its neighbour. Persisted as `focus_audio_default_on` in
+  `layout.json` (`LayoutConfig::focus_audio_default_on`,
+  `LayoutStore::load`/`save`). When on, `Application::open_focus()`
+  calls `focus_player_->set_muted(false)` right after creating the
+  Focus player instead of leaving it at its muted-by-default state.
+  Has no effect on a camera whose own "Audio" box isn't checked —
+  `Player::set_muted()` already only ever turns decoding on when
+  `audio_capable_` is true, so nothing needed to change there;
+- **all the boolean checkboxes across the Web config** (camera
+  "active", camera "Audio", layout "Plein écran au démarrage", layout
+  "Micro actif par défaut") now render as on/off slider toggles
+  instead of plain checkboxes — a pure visual change (new `.switch`
+  CSS component in `app.css`; same underlying `<input
+  type="checkbox">` elements and `id`/`class` names, so none of the
+  read/write JS logic changed).
+
+**Known, deliberately deferred scope** for this beta:
+
+- no volume level control — only mute/unmute. mpv's own volume stays
+  at its default (100%);
+- no per-camera memory of the user's mute choice beyond the new global
+  default above (still no *per-camera* override of that default).
+
+Built and field-tested on the Raspberry Pi (`feature/v1.1-audio-focus`):
+the user confirmed the tests passed and approved the release. Version
+bumped to **1.1.0** in `CMakeLists.txt`, `scripts/config-web.py`,
+`scripts/install.sh` and `scripts/validate-release.sh`; hardware
+compatibility documented in `docs/configuration.md` and `docs/faq.md`.
+Merged into `main` and tagged `v1.1.0`.
 
 ## v1.0 — English localization
 

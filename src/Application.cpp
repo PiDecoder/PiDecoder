@@ -211,7 +211,8 @@ void Application::initialize_players()
                 cameras_[camera_index].grid_url,
                 mpv_event_type_,
                 render_event_type_,
-                PlayerRole::Grid
+                PlayerRole::Grid,
+                cameras_[camera_index].audio_enabled
             );
 
         player->initialize();
@@ -248,6 +249,21 @@ void Application::process_sdl_event(
         show_ptz_overlay();
     }
 
+    if (
+        event.type == SDL_MOUSEMOTION &&
+        focus_player_ != nullptr
+    ) {
+        /*
+         * Contrairement à l'overlay PTZ, le bouton son n'est pas
+         * réservé aux caméras avec PTZ : il apparaît au moindre
+         * mouvement de souris en vue Focus, quelle que soit la
+         * caméra, et se cache après audio_indicator_duration_ sans
+         * mouvement — même principe que l'overlay PTZ.
+         */
+        show_audio_indicator();
+        redraw_requested_ = true;
+    }
+
     if (event.type == SDL_KEYDOWN) {
         if (
             event.key.keysym.sym ==
@@ -266,6 +282,14 @@ void Application::process_sdl_event(
         ) {
             window_->toggle_fullscreen();
             redraw_requested_ = true;
+            return;
+        }
+
+        if (
+            event.key.keysym.sym ==
+            SDLK_m
+        ) {
+            toggle_focus_audio();
             return;
         }
     }
@@ -398,6 +422,23 @@ void Application::process_sdl_event(
 
             return;
         }
+    }
+
+    if (
+        event.type ==
+            SDL_MOUSEBUTTONDOWN &&
+        focus_player_ != nullptr &&
+        event.button.button ==
+            SDL_BUTTON_LEFT &&
+        audio_indicator_visible() &&
+        renderer_->audio_button_hit_at(
+            event.button.x,
+            event.button.y,
+            focused_camera_has_ptz()
+        )
+    ) {
+        toggle_focus_audio();
+        return;
     }
 
     if (
@@ -606,7 +647,8 @@ void Application::open_focus(
             camera.focus_url,
             mpv_event_type_,
             render_event_type_,
-            PlayerRole::Focus
+            PlayerRole::Focus,
+            camera.audio_enabled
         );
 
     focus_player->initialize();
@@ -614,6 +656,18 @@ void Application::open_focus(
 
     focus_player_ =
         std::move(focus_player);
+
+    /*
+     * Réglage global "Micro actif par défaut en plein écran" (config
+     * Web, onglet Disposition, à côté de "Plein écran au démarrage") :
+     * si activé, le son démarre allumé au lieu de coupé. Sans effet
+     * réel sur une caméra dont la case "a un micro" n'est pas cochée
+     * (Player::set_muted respecte déjà audio_capable_ dans tous les
+     * cas), donc pas besoin de vérifier camera.audio_enabled ici.
+     */
+    focus_player_->set_muted(
+        !layout_.focus_audio_default_on
+    );
 
     reset_inspection();
 
@@ -627,6 +681,14 @@ void Application::open_focus(
     } else {
         ptz_overlay_visible_ = false;
     }
+
+    /*
+     * Le bouton son apparaît aussi dès l'ouverture du focus, comme
+     * l'overlay PTZ, même si has_audio_track() n'est pas encore
+     * connu à cet instant (le flux vient d'être chargé) : ça permet
+     * de découvrir le contrôle sans avoir à bouger la souris.
+     */
+    show_audio_indicator();
 
     redraw_requested_ = true;
 
@@ -659,6 +721,7 @@ void Application::close_focus()
     ptz_overlay_visible_ = false;
     ptz_preset_menu_open_ = false;
     ptz_overlay_until_ = {};
+    audio_indicator_until_ = {};
     reset_inspection();
     redraw_requested_ = true;
 }
@@ -1279,6 +1342,55 @@ bool Application::zoom_indicator_visible() const noexcept
     );
 }
 
+void Application::toggle_focus_audio() noexcept
+{
+    /*
+     * Le son n'existe qu'en vue Focus (une seule caméra agrandie à la
+     * fois) ; voir Player::configure pour le détail. Si aucune caméra
+     * n'est en focus, ou si son flux n'a pas de piste audio, on
+     * affiche quand même brièvement l'indicateur ("PAS DE SON") pour
+     * confirmer que la touche a bien été prise en compte, sans rien
+     * changer d'audible.
+     */
+    if (
+        focus_player_ == nullptr ||
+        !focus_player_->has_audio_track()
+    ) {
+        show_audio_indicator();
+        return;
+    }
+
+    focus_player_->set_muted(
+        !focus_player_->muted()
+    );
+
+    show_audio_indicator();
+    redraw_requested_ = true;
+}
+
+void Application::show_audio_indicator() noexcept
+{
+    audio_indicator_until_ =
+        std::chrono::steady_clock::now() +
+        audio_indicator_duration_;
+}
+
+bool Application::audio_indicator_visible() const noexcept
+{
+    /*
+     * Pas de bouton du tout pour une caméra dont la case "a un
+     * micro" n'est pas cochée en config Web (audio_capable()) : même
+     * un simple mouvement de souris ne doit rien afficher dans ce
+     * cas, conformément à la demande.
+     */
+    return (
+        focus_player_ != nullptr &&
+        focus_player_->audio_capable() &&
+        std::chrono::steady_clock::now() <
+            audio_indicator_until_
+    );
+}
+
 void Application::render()
 {
     /*
@@ -1315,7 +1427,10 @@ void Application::render()
             camera != nullptr
                 ? camera->ptz_presets
                 : no_presets,
-            ptz_preset_menu_open_
+            ptz_preset_menu_open_,
+            audio_indicator_visible(),
+            focus_player_->muted(),
+            focus_player_->has_audio_track()
         );
         return;
     }
