@@ -127,6 +127,15 @@
   color:#fff;
   margin-left:0
 }
+a.github-link{
+  text-decoration:none;
+  cursor:pointer;
+  transition:opacity .15s ease,transform .15s ease,background .15s ease
+}
+a.github-link:hover{
+  transform:translateY(-1px);
+  background:#323d4b
+}
 .shortcut-help{
   position:fixed;
   top:66px;

@@ -10,7 +10,7 @@
   <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
     <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
   </a>
-  <img src="https://img.shields.io/badge/release-v1.0.0-7A1F5C" alt="Release v1.0.0">
+  <img src="https://img.shields.io/badge/release-v1.1.0-7A1F5C" alt="Release v1.1.0">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
   <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
@@ -28,10 +28,15 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v1.0.0** is the first stable public release.
+> **PiDecoder v1.1.0** adds native audio playback in the focus view, on top of the v1.0.0
+> stable public release.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
 > Native PTZ movement, optical zoom, Stop and preset selection are available and have been
 > field-tested with an Axis Q6074.
+>
+> Audio is opt-in per camera and validated with an Axis camera (RTSP stream with an enabled
+> microphone). The Aqara G410 intercom has a known residual audio issue that does not affect
+> video-only use — see [`docs/faq.md`](docs/faq.md#is-audio-available) for details.
 >
 > The Web interface also protects stored ONVIF and PTZ metadata when camera video settings are
 > changed, including when an older browser tab submits a camera without that metadata.
@@ -84,6 +89,7 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 | Fullscreen focus view | Native pan and tilt | Persistent configuration | Logs and backups |
 | Digital zoom and pan | Optical zoom and forced Stop | Flexible mosaics | Authentication |
 | Native Raspberry Pi display | Native preset selector | PTZ overlay auto-hide | Configuration export |
+| Native audio in focus view (opt-in per camera) | | Audio-on-by-default toggle | |
 
 ## Native PTZ controls
 
@@ -289,6 +295,8 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 | Native PTZ preset selector | Passed on Axis Q6074 |
 | PTZ overlay auto-hide and fixed-camera filtering | Passed |
 | ONVIF metadata preservation during camera save | Passed in field test |
+| Native audio in focus view | Passed on Axis (mic enabled) |
+| Mosaic stability with an audio-bearing RTSP stream | Passed on Axis (mic enabled) |
 
 The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.
@@ -297,8 +305,8 @@ Administrator credentials are configured separately and are not included in the 
 
 | Version | Status | Planned focus |
 |---|---|---|
-| v1.0.0 | Current | First stable public release, native PTZ and bilingual FR/EN Web UI |
-| v1.1 | Planned | Audio support |
+| v1.0.0 | Released | First stable public release, native PTZ and bilingual FR/EN Web UI |
+| v1.1.0 | Current | Native audio support in the focus view |
 | v1.2 | Planned | HTTPS |
 | v1.3 | Planned | REST API |
 | v2.0 | Long-term | Multi-Raspberry cluster |
