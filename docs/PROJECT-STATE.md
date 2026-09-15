@@ -107,17 +107,59 @@ output does):
   all still shows the indicator but does nothing audible, same as
   pressing M in that situation.
 
+**Per-camera "has a microphone" setting, and a real mosaic bug it
+fixes** — added after field testing surfaced a serious regression:
+
+- new checkbox in the Web config, per camera, under "cams.audio_enabled"
+  ("a un micro (audio)" / "has a microphone (audio)"), **unchecked by
+  default** for every existing and newly-added camera. Persisted as
+  `audio_enabled` (top-level, alongside `enabled`) in `cameras.json`;
+  `sanitize()` in `config-web.py` defaults it to `false`, and it is
+  explicitly preserved (not reset) when a camera is re-discovered/
+  updated via ONVIF, same as the existing `enabled` field;
+- native side: `CameraConfig::audio_enabled` is read by `Config::load`
+  and passed into `Player`'s constructor as a new `audio_capable`
+  argument (`Player::audio_capable_`, defaults to `false` so any
+  existing call site that doesn't pass it keeps working). Both
+  `Application::initialize_players()` (grid) and `open_focus()` pass
+  each camera's `audio_enabled` through;
+- **root cause found and fixed**: it turned out *any* RTSP camera
+  whose stream carries an audio track — regardless of brand or codec —
+  broke the mosaic with a frame lag that grew over time, even on
+  `main` (v1.0.0), with zero relation to the Focus audio feature.
+  Reproduced identically with an Axis camera (mic enabled) and an
+  Aqara G410 intercom. Root cause: the mosaic's UDP demuxer settings
+  are deliberately extreme for minimum latency
+  (`max_delay=0,reorder_queue_size=0`, tuned against single-video-
+  stream cameras) and don't tolerate a second (audio) RTP stream
+  interleaved on the wire — unlike Focus, which uses TCP and was
+  never affected. Fix: `Player::configure()` now only applies those
+  extreme UDP settings to cameras where `audio_capable_` is false;
+  cameras flagged as having a microphone get a slightly relaxed set
+  (`max_delay=200000`, `reorder_queue_size=8`, `analyzeduration=500000`,
+  `probesize=32768` — still far below FFmpeg's own defaults). Every
+  other camera (the vast majority, unflagged) keeps the exact
+  settings that were already proven stable, byte for byte — zero
+  behavior change for them;
+- this same flag also now gates the Focus audio button entirely:
+  `Player::audio_capable()` (new accessor) is checked by
+  `Application::audio_indicator_visible()`, so the button/icon never
+  appears at all — not even dimmed — for a camera whose box isn't
+  checked, and `has_audio_track()` / `set_muted()` short-circuit the
+  same way (audio is never decoded for such a camera, whatever the
+  user presses);
+- **not yet validated on hardware** — the exact UDP tuning values above
+  are a reasoned first attempt (chosen with a safety margin, well
+  below FFmpeg defaults) but weren't tunable/testable without real
+  camera hardware; expect at least one more round of adjustment once
+  tested on the Pi with the Axis (mic) and/or Aqara G410 cameras.
+
 **Known, deliberately deferred scope** for this beta:
 
 - no volume level control — only mute/unmute. mpv's own volume stays
   at its default (100%);
 - no per-camera memory of the user's mute choice — every Focus session
-  starts muted, by design (see above);
-- no ONVIF-based advance detection of which cameras actually have a
-  microphone/audio profile — `has_audio_track()` only becomes accurate
-  once mpv has started decoding the stream (i.e. once Focus is already
-  open), so there's no "this camera has audio" hint in the camera list
-  or the Web UI.
+  starts muted, by design (see above).
 
 Built and field-tested on the Raspberry Pi (`feature/v1.1-audio-focus`):
 the user confirmed the tests passed. Not yet merged to `main`.

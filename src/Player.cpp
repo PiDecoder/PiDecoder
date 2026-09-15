@@ -12,10 +12,12 @@ Player::Player(
     std::string url,
     const Uint32 mpv_event_type,
     const Uint32 render_event_type,
-    const PlayerRole role
+    const PlayerRole role,
+    const bool audio_capable
 )
     : url_(std::move(url)),
       role_(role),
+      audio_capable_(audio_capable),
       mpv_event_type_(mpv_event_type),
       render_event_type_(render_event_type)
 {
@@ -687,7 +689,7 @@ void Player::set_muted(const bool muted)
         mpv_set_property_string(
             mpv_,
             "aid",
-            muted ? "no" : "auto"
+            (audio_capable_ && !muted) ? "auto" : "no"
         ),
         "Changement du son focus"
     );
@@ -696,6 +698,11 @@ void Player::set_muted(const bool muted)
 bool Player::muted() const noexcept
 {
     return audio_muted_;
+}
+
+bool Player::audio_capable() const noexcept
+{
+    return audio_capable_;
 }
 
 bool Player::has_audio_track() const noexcept
@@ -708,9 +715,15 @@ bool Player::has_audio_track() const noexcept
      * une caméra a du son avant même que l'utilisateur ait appuyé
      * sur M (voir set_muted() : le décodage audio reste coupé par
      * défaut, donc "audio-codec-name" resterait vide).
+     *
+     * audio_capable_ à faux (case "cette caméra a un micro" décochée
+     * en config Web) coupe court immédiatement : on ne propose pas
+     * le contrôle audio pour une caméra que l'utilisateur n'a pas
+     * signalée comme telle, même si son flux en contient une.
      */
     if (
         role_ != PlayerRole::Focus ||
+        !audio_capable_ ||
         mpv_ == nullptr ||
         !loaded_
     ) {
@@ -852,12 +865,18 @@ void Player::configure()
          * audio à suivre), et le décodage audio n'est activé qu'au
          * moment où l'utilisateur le demande (voir set_muted(), qui
          * fait exactement la même bascule à chaud).
+         *
+         * audio_capable_ reflète la case "cette caméra a un micro"
+         * cochée par l'utilisateur dans la config Web : si elle n'est
+         * pas cochée, on ne décode jamais l'audio pour cette caméra,
+         * même si l'utilisateur appuie sur M (set_muted() respecte
+         * aussi cette même règle).
          */
         check(
             mpv_set_option_string(
                 mpv_,
                 "aid",
-                audio_muted_ ? "no" : "auto"
+                (audio_capable_ && !audio_muted_) ? "auto" : "no"
             ),
             "État initial audio focus"
         );
@@ -1016,19 +1035,62 @@ void Player::configure()
             "Transport RTSP UDP grille"
         );
 
-        check(
-            mpv_set_option_string(
-                mpv_,
-                "demuxer-lavf-o",
-                "fflags=nobuffer,"
-                "max_delay=0,"
-                "reorder_queue_size=0,"
-                "use_wallclock_as_timestamps=1,"
-                "analyzeduration=0,"
-                "probesize=32"
-            ),
-            "Configuration RTSP UDP grille"
-        );
+        if (audio_capable_) {
+            /*
+             * Caméra avec micro (case cochée en config Web) :
+             * réglages UDP légèrement assouplis par rapport à la
+             * branche ci-dessous, réservée aux caméras purement
+             * vidéo.
+             *
+             * Constaté sur le terrain : les réglages UDP les plus
+             * extrêmes (aucune tolérance au réordonnancement des
+             * paquets, délai nul) tiennent très bien avec un seul
+             * flux RTP (vidéo), mais provoquent un décalage d'image
+             * qui grandit avec le temps dès qu'un second flux RTP
+             * (audio) arrive entrelacé dessus — reproduit à
+             * l'identique sur plusieurs caméras différentes (Axis
+             * avec micro activé, Aqara G410), donc lié à la présence
+             * d'une piste audio elle-même, pas à une marque ou un
+             * codec précis. La vue Focus, qui gère cette même
+             * caméra sans souci, utilise TCP (donc pas de
+             * réordonnancement RTP à gérer) : ça pointe vers
+             * max_delay/reorder_queue_size comme réglages en cause
+             * ici.
+             *
+             * Valeurs choisies avec une marge prudente (toujours très
+             * en dessous des valeurs par défaut de FFmpeg) plutôt que
+             * strictement minimales : n'ayant pas pu tester sur du
+             * matériel réel, un ajustement fin restera sans doute
+             * nécessaire une fois validé sur le Pi.
+             */
+            check(
+                mpv_set_option_string(
+                    mpv_,
+                    "demuxer-lavf-o",
+                    "fflags=nobuffer,"
+                    "max_delay=200000,"
+                    "reorder_queue_size=8,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=500000,"
+                    "probesize=32768"
+                ),
+                "Configuration RTSP UDP grille (avec audio)"
+            );
+        } else {
+            check(
+                mpv_set_option_string(
+                    mpv_,
+                    "demuxer-lavf-o",
+                    "fflags=nobuffer,"
+                    "max_delay=0,"
+                    "reorder_queue_size=0,"
+                    "use_wallclock_as_timestamps=1,"
+                    "analyzeduration=0,"
+                    "probesize=32"
+                ),
+                "Configuration RTSP UDP grille"
+            );
+        }
     } else {
         /*
          * Focus = priorité à la qualité.

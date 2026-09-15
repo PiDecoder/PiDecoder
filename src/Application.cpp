@@ -211,7 +211,8 @@ void Application::initialize_players()
                 cameras_[camera_index].grid_url,
                 mpv_event_type_,
                 render_event_type_,
-                PlayerRole::Grid
+                PlayerRole::Grid,
+                cameras_[camera_index].audio_enabled
             );
 
         player->initialize();
@@ -646,7 +647,8 @@ void Application::open_focus(
             camera.focus_url,
             mpv_event_type_,
             render_event_type_,
-            PlayerRole::Focus
+            PlayerRole::Focus,
+            camera.audio_enabled
         );
 
     focus_player->initialize();
@@ -1363,8 +1365,15 @@ void Application::show_audio_indicator() noexcept
 
 bool Application::audio_indicator_visible() const noexcept
 {
+    /*
+     * Pas de bouton du tout pour une caméra dont la case "a un
+     * micro" n'est pas cochée en config Web (audio_capable()) : même
+     * un simple mouvement de souris ne doit rien afficher dans ce
+     * cas, conformément à la demande.
+     */
     return (
         focus_player_ != nullptr &&
+        focus_player_->audio_capable() &&
         std::chrono::steady_clock::now() <
             audio_indicator_until_
     );

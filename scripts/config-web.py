@@ -284,7 +284,11 @@ def rtsp_with_credentials(uri, username, password, lang=DEFAULT_LANG):
 def sanitize(c,lang=DEFAULT_LANG):
     name=str(c.get('name','Caméra')).strip() or 'Caméra'; g=str(c.get('grid_url','')).strip(); f=str(c.get('focus_url','')).strip() or g
     if not g: raise ValueError(i18n_t('camera.grid_url_missing',lang,name=name))
-    result={'name':name,'enabled':bool(c.get('enabled',True)),'grid_url':g,'focus_url':f}
+    # audio_enabled : case "cette caméra a un micro" côté config Web, décochée par
+    # défaut (False) pour toute caméra nouvellement ajoutée. Voir CameraConfig::audio_enabled
+    # côté moteur natif pour ce que ce réglage déclenche (réglages mosaïque assouplis +
+    # affichage du bouton son en Focus).
+    result={'name':name,'enabled':bool(c.get('enabled',True)),'audio_enabled':bool(c.get('audio_enabled',False)),'grid_url':g,'focus_url':f}
     if isinstance(c.get('onvif'),dict):result['onvif']=c['onvif']
     return result
 
@@ -1151,6 +1155,7 @@ class H(BaseHTTPRequestHandler):
                 camera={
                     'name':name,
                     'enabled':True,
+                    'audio_enabled':False,
                     'grid_url':grid_uri,
                     'focus_url':focus_uri,
                     'onvif':{
@@ -1183,6 +1188,7 @@ class H(BaseHTTPRequestHandler):
 
                     if isinstance(previous,dict):
                         camera['enabled']=bool(previous.get('enabled',True))
+                        camera['audio_enabled']=bool(previous.get('audio_enabled',False))
 
                     cameras[existing_index]=sanitize(camera,lang)
 

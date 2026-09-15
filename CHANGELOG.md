@@ -35,7 +35,23 @@
   turned on for as long as the user has actually asked for sound
   (pressed M or clicked the button); while muted — the default — no
   audio is decoded at all and video timing is exactly as it was
-  before this feature existed.
+  before this feature existed;
+- **new**: "has a microphone (audio)" checkbox per camera in the Web
+  config, unchecked by default. It decides whether the Focus audio
+  button is offered for that camera at all (no icon whatsoever if
+  unchecked) — and it also fixes a real, separate bug: any camera
+  whose RTSP stream carries an audio track (not just the ones this
+  beta cares about) was breaking the mosaic/grid view with a frame
+  lag that grew worse over time, reproduced with both an Axis camera
+  (mic enabled) and an Aqara G410 intercom, and confirmed to happen
+  even on `main`/v1.0.0 with none of this beta's code. Root cause:
+  the mosaic's low-latency UDP settings don't tolerate a second
+  audio RTP stream interleaved with the video one. Checking this box
+  for a camera relaxes just enough of those settings for that
+  camera's tile to fix it, while every other (unchecked) camera keeps
+  the exact proven settings, unchanged. Not yet validated on real
+  hardware — first attempt at the exact tuning values, likely needs
+  a round of adjustment once tested on the Pi.
 
 ## 1.0.0
 

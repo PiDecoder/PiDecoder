@@ -29,7 +29,8 @@ public:
         std::string url,
         Uint32 mpv_event_type,
         Uint32 render_event_type,
-        PlayerRole role
+        PlayerRole role,
+        bool audio_capable = false
     );
     ~Player();
 
@@ -72,6 +73,16 @@ public:
     [[nodiscard]] bool muted() const noexcept;
     [[nodiscard]] bool has_audio_track() const noexcept;
 
+    /*
+     * Reflète la case "cette caméra a un micro" de la config Web
+     * (CameraConfig::audio_enabled), indépendamment de ce que
+     * has_audio_track() détecte au fil de l'eau : sert à décider si
+     * le bouton son doit être affiché du tout en vue Focus (pas
+     * d'icône si la case n'est pas cochée, même si le flux contient
+     * en fait une piste audio).
+     */
+    [[nodiscard]] bool audio_capable() const noexcept;
+
 private:
     static void* get_proc_address(void* context, const char* name);
     static void on_mpv_event(void* context);
@@ -107,6 +118,17 @@ private:
 
     std::string url_;
     PlayerRole role_{PlayerRole::Grid};
+
+    /*
+     * Reflète CameraConfig::audio_enabled (case cochée dans la config
+     * Web) : cette caméra diffuse une piste audio et l'utilisateur
+     * l'a signalé. Contrôle, dans configure(), l'assouplissement des
+     * réglages mosaïque (nécessaire uniquement quand un deuxième
+     * flux RTP audio est réellement présent) et si le décodage audio
+     * peut être activé du tout en Focus.
+     */
+    bool audio_capable_{false};
+
     Uint32 mpv_event_type_;
     Uint32 render_event_type_;
 
