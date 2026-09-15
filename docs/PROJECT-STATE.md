@@ -33,15 +33,39 @@ Implementation (native C++ engine only — no Web UI or backend changes,
 since the Web browser never receives this audio, only the Pi's own local
 output does):
 
-- `Player` (`role_ == PlayerRole::Focus`): `configure()` now sets
-  `audio=auto` instead of the previous blanket `audio=no`, and applies
-  the current mute state as an mpv `mute` option/property immediately
-  (also re-applied by `configure()` on every reconnect, so a transient
-  RTSP drop does not silently reset the user's choice). Grid-role
-  players are unchanged (`audio=no`, always silent). New methods:
-  `set_muted(bool)`, `muted()`, `has_audio_track()` (queries mpv's
-  `audio-codec-name` property; empty/unavailable means the camera's
-  stream has no audio track at all);
+- `Player` (`role_ == PlayerRole::Focus`): `configure()` sets `aid`
+  (mpv's audio-track-selection property) to `"no"` or `"auto"`
+  depending on the current mute state, instead of a blanket
+  `audio=no` — also re-applied by `configure()` on every reconnect,
+  so a transient RTSP drop does not silently reset the user's choice.
+  Grid-role players are unchanged (`audio=no`, always silent). New
+  methods: `set_muted(bool)`, `muted()`, `has_audio_track()` (scans
+  mpv's `track-list` for an entry of type `"audio"` — this works
+  whether or not the audio track is currently selected/decoding,
+  unlike the codec-name property used in an earlier version of this
+  beta; see the "Regression" note below for why that distinction
+  matters);
+- **regression found and fixed during field testing**: the first cut
+  of this feature set `aid=auto` (decode audio) unconditionally as
+  soon as Focus opened, and only used the `mute` property to silence
+  playback. That's what broke video playback — muted or not — with a
+  visible frame lag and slow-motion effect the user had already fixed
+  once, early in the project, before this beta existed. Root cause:
+  Focus's `video-sync` option is set to `"audio"` (see below), a
+  setting that had been inert for a long time because Focus never
+  actually decoded audio (`audio=no`) — with no real audio clock to
+  reference, mpv fell back to its own internal timing, which is the
+  stable behavior that had been tuned in. The moment `aid=auto` made
+  mpv decode a real (and, over RTSP, often irregular/jittery) audio
+  stream, `video-sync=audio` started actually doing its job: pacing
+  the video to match that audio clock, which is exactly what produced
+  the lag/slow-motion. The fix keeps `video-sync=audio` untouched (it
+  is the originally validated setting) and instead keeps `aid=no`
+  — audio not decoded at all — for as long as the camera stays muted,
+  which is the default and by far the most common state. Audio
+  decoding, and therefore any dependency on the audio clock, now only
+  turns on for the brief window where the user has explicitly pressed
+  M or clicked the audio button;
 - `Application`: **M** toggles `focus_player_`'s mute state while a
   camera is in Focus (`SDLK_m`, alongside the existing `SDLK_ESCAPE`/
   `SDLK_f` handling). The mute state can also be toggled with the

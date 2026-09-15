@@ -665,11 +665,29 @@ void Player::set_muted(const bool muted)
         return;
     }
 
+    /*
+     * On ne se contente pas de la propriété "mute" (qui ne fait que
+     * rendre le son silencieux) : on active ou désactive le
+     * décodage audio lui-même via "aid" ("no" = piste audio non
+     * décodée du tout, "auto" = piste audio décodée et jouée).
+     *
+     * Pourquoi : dès que mpv décode une piste audio, "video-sync"
+     * (réglé sur "audio" en Focus, cf. configure()) se met à
+     * synchroniser l'image sur l'horloge audio. Sur un flux RTSP de
+     * caméra, cette horloge peut être irrégulière (paquets audio
+     * espacés, jitter réseau) : coupé par défaut avec "mute" seul,
+     * l'image restait donc calée sur un flux audio décodé mais
+     * silencieux, avec un fort risque de décalage et de ralenti —
+     * exactement le problème constaté en test. En laissant "aid" à
+     * "no" tant que l'utilisateur n'a pas explicitement demandé le
+     * son, l'image retrouve son comportement d'origine (aucune
+     * horloge audio à suivre), identique à celui de la mosaïque.
+     */
     check(
         mpv_set_property_string(
             mpv_,
-            "mute",
-            muted ? "yes" : "no"
+            "aid",
+            muted ? "no" : "auto"
         ),
         "Changement du son focus"
     );
@@ -683,9 +701,13 @@ bool Player::muted() const noexcept
 bool Player::has_audio_track() const noexcept
 {
     /*
-     * L'audio n'est décodé qu'en vue Focus (voir configure()) ; en
-     * mosaïque, ou avant qu'une frame ait été reçue, mpv n'a pas
-     * encore déterminé si le flux contient une piste audio.
+     * Piste audio détectée via la liste des pistes du démultiplexeur
+     * (track-list), qui recense toutes les pistes trouvées dans le
+     * flux dès son ouverture — que la piste audio soit ou non
+     * sélectionnée pour le décodage ("aid"). Ça permet de savoir si
+     * une caméra a du son avant même que l'utilisateur ait appuyé
+     * sur M (voir set_muted() : le décodage audio reste coupé par
+     * défaut, donc "audio-codec-name" resterait vide).
      */
     if (
         role_ != PlayerRole::Focus ||
@@ -695,24 +717,51 @@ bool Player::has_audio_track() const noexcept
         return false;
     }
 
-    char* codec_name = nullptr;
+    int64_t track_count = 0;
 
-    const int status =
+    const int count_status =
         mpv_get_property(
             mpv_,
-            "audio-codec-name",
-            MPV_FORMAT_STRING,
-            &codec_name
+            "track-list/count",
+            MPV_FORMAT_INT64,
+            &track_count
         );
 
-    if (status < 0 || codec_name == nullptr) {
+    if (count_status < 0 || track_count <= 0) {
         return false;
     }
 
-    const bool has_audio = codec_name[0] != '\0';
-    mpv_free(codec_name);
+    for (int64_t index = 0; index < track_count; ++index) {
+        const std::string property_name =
+            "track-list/" +
+            std::to_string(index) +
+            "/type";
 
-    return has_audio;
+        char* track_type = nullptr;
+
+        const int status =
+            mpv_get_property(
+                mpv_,
+                property_name.c_str(),
+                MPV_FORMAT_STRING,
+                &track_type
+            );
+
+        if (status < 0 || track_type == nullptr) {
+            continue;
+        }
+
+        const bool is_audio =
+            std::string(track_type) == "audio";
+
+        mpv_free(track_type);
+
+        if (is_audio) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void* Player::get_proc_address(void*, const char* name)
@@ -785,18 +834,32 @@ void Player::configure()
          *
          * Le son démarre coupé (audio_muted_ vaut true par défaut à
          * la création du Player) : l'utilisateur l'active lui-même
-         * avec la touche M, pour éviter un bruit surprise à
-         * l'ouverture du focus sur un mur de vidéosurveillance.
-         * set_muted() met à jour cette même propriété mpv à chaud.
+         * avec la touche M ou le bouton, pour éviter un bruit
+         * surprise à l'ouverture du focus sur un mur de
+         * vidéosurveillance.
+         *
+         * Important : tant que c'est coupé, on met "aid" à "no",
+         * c'est-à-dire qu'on ne décode PAS la piste audio du tout —
+         * pas juste "mute" (silencieux mais décodé). "video-sync"
+         * est réglé sur "audio" plus bas pour la vue Focus ; si mpv
+         * décode réellement une piste audio, l'image se met à suivre
+         * l'horloge audio au lieu de son propre rythme. Sur un flux
+         * RTSP de caméra, cette horloge audio peut être irrégulière
+         * (paquets espacés, jitter réseau), ce qui provoque un
+         * décalage et un ralenti de l'image très visibles — c'est le
+         * bug remonté en test. En laissant "aid" à "no" par défaut,
+         * l'image se comporte exactement comme avant (aucune horloge
+         * audio à suivre), et le décodage audio n'est activé qu'au
+         * moment où l'utilisateur le demande (voir set_muted(), qui
+         * fait exactement la même bascule à chaud).
          */
-        check(mpv_set_option_string(mpv_, "audio", "auto"), "Activation audio focus");
         check(
             mpv_set_option_string(
                 mpv_,
-                "mute",
-                audio_muted_ ? "yes" : "no"
+                "aid",
+                audio_muted_ ? "no" : "auto"
             ),
-            "État initial du son focus"
+            "État initial audio focus"
         );
     } else {
         check(mpv_set_option_string(mpv_, "audio", "no"), "Désactivation audio grille");

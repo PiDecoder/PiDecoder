@@ -25,7 +25,17 @@
   mute choice in this beta — see `docs/PROJECT-STATE.md` for the full
   list of deferred scope;
 - native engine only; no Web UI or backend change, since this audio
-  plays on the Pi's own local output, not through the browser.
+  plays on the Pi's own local output, not through the browser;
+- fixed a regression introduced by an earlier commit in this same
+  beta: enabling audio decoding unconditionally as soon as Focus
+  opened (silencing it only through mpv's `mute` property) caused a
+  visible video lag/slow-motion effect, because Focus's `video-sync`
+  setting paces the image against the audio clock, and a live RTSP
+  audio stream's clock can be irregular. Audio decoding is now only
+  turned on for as long as the user has actually asked for sound
+  (pressed M or clicked the button); while muted — the default — no
+  audio is decoded at all and video timing is exactly as it was
+  before this feature existed.
 
 ## 1.0.0
 
