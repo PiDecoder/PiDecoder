@@ -29,10 +29,10 @@ LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallFilter=@system-service
 MemoryDenyWriteExecute=true
-ReadWritePaths=@TARGET@/config
+ReadWritePaths=@TARGET@/config @REPO_PATH@
 
 Environment=PIDECODER_USER=@SERVICE_USER@
-ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@
+ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@ --repo-path @REPO_PATH@
 Restart=on-failure
 RestartSec=2
 StandardOutput=journal

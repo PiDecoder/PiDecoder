@@ -21,6 +21,18 @@
   explicit user decision after checking Axis's own documentation (see
   "Step 2" below for why) — not worth the complexity for a feature
   that's unlikely to ever be used.
+- v1.3 — per the user's explicit request, a one-click software update
+  (check + install from the Web UI) and a full network configuration
+  panel (hostname, DHCP/static IP, NTP, timezone), with automatic
+  rollback if a hostname/IP change would otherwise lock the user out.
+  Implemented and thoroughly exercised against a fake-binary integration
+  harness (`nmcli`/`hostnamectl`/`timedatectl`/`systemd-run`/`runuser`/
+  `systemctl` stand-ins, plus real local git repositories for the update
+  check/pull logic) — **but never against real NetworkManager,
+  systemd-timesyncd, hostnamed or actual Raspberry Pi hardware.** See
+  "v1.3 — Software update and network configuration" below, in
+  particular the field-testing caution at the end of that section, before
+  trying the IP/DHCP toggle on the production Pi.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -317,6 +329,190 @@ not worth the complexity and unlikely to ever be used; reverted before
 going anywhere near production. Left here for reference if revisited
 later — keep the RTSPS/SRTP distinction and the Axis port-322 specifics
 in mind.
+
+## v1.3 — Software update and network configuration (Web UI)
+
+Per the user's explicit request ("Un check update depuis la page web ca
+serrait trop bien... possibilité de passé le pi en adresse manuel ou dhcp
+via WEB et choisir les parametre réeau / NTP, hostname, etc"), two new
+features were added to the Web UI: a software update check/install button
+on the Système tab, and a full network configuration panel (new "Réseau"
+tab) covering hostname, DHCP/static IP, NTP, and timezone. Clarified with
+the user via `AskUserQuestion`: the update feature is "check + install
+button" (not fully automatic), and the network feature must have automatic
+rollback as its safety net (not, e.g., a confirmation dialog alone).
+
+### Why this needed a new architecture: `pidecoder-config.service`'s sandbox
+
+`pidecoder-config.service` runs as root but under fairly strict systemd
+hardening (`ProtectSystem=strict`, `ProtectHostname=true`,
+`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`,
+`SystemCallFilter=@system-service`, `NoNewPrivileges=true`). Running
+`hostnamectl set-hostname`, editing `/etc/hosts` or
+`/etc/systemd/timesyncd.conf`, or calling `nmcli con mod` directly from
+`config-web.py`'s own process would fail under this confinement — read-only
+filesystem protections. The same problem already existed for the HTTPS
+on/off toggle (v1.2) and was solved there with `systemd-run`: a transient
+unit it starts does **not** inherit the calling unit's sandboxing (it's an
+independent unit with its own, empty confinement) — the same technique as
+running `sudo bash script.sh` from a shell that itself couldn't touch those
+paths. This round generalizes that pattern into a dedicated module,
+`scripts/system_admin.py`, with two delegation modes:
+
+- `run_detached(script, description)` — writes `script` to
+  `/run/pidecoder-admin-<random>.sh` and starts it via
+  `systemd-run --collect --unit=... bash <path>`, fire-and-forget. Used
+  for the software update and for hostname/IP changes, which need a
+  background timer (see rollback below) and, for the update, must survive
+  `pidecoder-config.service` itself being restarted mid-flight by
+  `install.sh`.
+- `run_sync_unsandboxed(command, timeout)` — `systemd-run --wait --pipe
+  --collect --quiet bash -c <command>`, which blocks and relays the
+  command's stdout/stderr/exit code as if it had been run directly. Used
+  for NTP and timezone changes, which are low-risk (can't lock anyone out)
+  and don't need the rollback machinery, just a synchronous result to show
+  in the UI.
+
+### Software update (`/api/update/*`)
+
+- `check_update(repo_path, service_user)` runs `git fetch` (and
+  `rev-parse`/`rev-list`/`log` against `@{upstream}`) in the Git clone,
+  wrapped in `runuser -u <service_user> --` so the fetch's refs stay owned
+  by the account that owns the clone (the desktop/video-wall user) instead
+  of `root` — `pidecoder-config.service` runs as root, and root-owned
+  files inside the user's clone would later break plain `git status`/
+  `git pull` run by hand over SSH ("detected dubious ownership"). Returns
+  whether an update is available, how many commits behind, and the latest
+  upstream commit's one-line summary; handles "not a git repo", "no
+  upstream branch", and "fetch failed" as distinct, displayed states
+  rather than generic errors.
+- `start_update(...)` runs, in one detached script: `runuser -u
+  <service_user> -- git -C <repo_path> pull`, then `bash
+  <repo_path>/scripts/install.sh --user <service_user> --target <target>
+  --bind <bind> --port <port>`. `install.sh` restarts
+  `pidecoder-config.service` at the end of a normal run — the very process
+  handling the `/api/update/start` request gets killed mid-flight — which
+  is exactly why this has to run as an independent `systemd-run` unit
+  rather than inline: it survives the restart, and the reincarnated
+  service reads the same JSON status file, so the Web UI's progress
+  display doesn't need to know a restart happened.
+- `<service>` (the user running the video-wall session) is determined by
+  reading `User=` back out of `/etc/systemd/system/pidecoder.service`
+  rather than trusting `install.sh`'s own auto-detection
+  (`SUDO_USER`/`logname`/single-passwd-candidate), which is unreliable
+  when `install.sh` is re-invoked from `systemd-run` with no controlling
+  terminal.
+- install.sh's own existing failure handling (`trap rollback ERR INT TERM`
+  restoring the previous `/opt/pidecoder` and restarting services) is
+  relied on as-is for the install step; it is **not** duplicated here.
+  If `git pull` or `install.sh` fails, the status file records `state:
+  "error"` with the failing step and the last 200 log lines, and the
+  "Update now" button reappears so the user can retry once the underlying
+  issue (network, disk space, a bad merge...) is fixed.
+- Requires `--repo-path`, a new `install.sh`/`pidecoder-config.service.in`
+  argument (see below) — an installation that hasn't re-run `install.sh`
+  since before this round won't have it, and the Web UI shows a clear
+  "update unavailable, re-run install.sh once" message rather than a
+  broken button.
+
+### Network configuration (`/api/network/*`, new "Réseau" tab)
+
+- Hostname, DHCP/static IP, NTP, and timezone are all read through
+  `hostnamectl`/`nmcli`/`timedatectl` (Raspberry Pi OS Bookworm uses
+  NetworkManager, not `dhcpcd`, confirmed via web research) — no
+  configuration file is parsed directly for the *read* path.
+- **Automatic rollback**, generalized from the same confirm-or-revert
+  pattern already used for the HTTPS restart countdown: applying a new
+  hostname or IP writes a `config/network-pending/<token>.json` status
+  file (`state: "pending"` → `"applied"`), then the detached script sleeps
+  up to `PENDING_DELAY_SECONDS` (45s) checking once a second for a
+  `<token>.confirmed` sentinel file. If `/api/network/confirm` (posted
+  from the Web UI once the user confirms they can still reach the page)
+  creates that sentinel in time, the script exits and the status becomes
+  `"confirmed"`; otherwise it reverts to the pre-change value (old
+  hostname, or the connection's previous `ipv4.method`/`addresses`/
+  `gateway`/`dns`) and marks the status `"reverted"`. This is entirely
+  server-side — it does not depend on the browser successfully reaching
+  back, which is the whole point (a bad IP change is exactly the case
+  where it might not). `/api/network/status`'s `pending` field survives a
+  page reload on the new address, so a countdown/confirm banner isn't lost
+  if the tab that started the change can't be reached.
+- Hostname change also fixes up `/etc/hosts`'s `127.0.1.1` line (`sed -i`)
+  since `hostnamectl set-hostname` does not do this itself — left stale,
+  the old hostname would keep resolving to the Pi's own loopback-adjacent
+  address.
+- IP change: `connection_name` is only ever taken from the set already
+  returned by `list_connections()` (validated server-side in
+  `config-web.py` before it ever reaches `system_admin.start_ip_change`),
+  never accepted as an arbitrary client-supplied string, since it ends up
+  interpolated into an `nmcli con mod <name> ...` command run as root.
+  Static addressing requires an explicit `/prefix` (`validate_cidr`
+  rejects a bare IP rather than silently assuming `/32`, which
+  `ipaddress.ip_interface()` would otherwise do and which is almost
+  certainly not what someone typing a LAN address intended).
+- NTP: no D-Bus method exists to set a custom server list (only
+  `timedatectl set-ntp true/false` for on/off), so the server list is
+  written directly into `/etc/systemd/timesyncd.conf`'s `[Time]` section
+  (existing file preserved, `NTP=` line replaced or added, section header
+  added if missing), followed by `systemctl restart systemd-timesyncd`.
+  NTP server validation (`validate_ntp_servers`) intentionally allows
+  hostnames (e.g. `pool.ntp.org`), unlike the IPv4-only
+  `validate_dns_list` used for DNS servers.
+- Timezone: `timedatectl set-timezone`, validated against
+  `timedatectl list-timezones` server-side before being accepted.
+- Every mutating endpoint validates its input server-side
+  (`validate_hostname`, `validate_cidr`, `validate_ipv4`,
+  `validate_dns_list`, `validate_ntp_servers`, the known-connection-name
+  check, the known-timezone check) before it is ever interpolated into a
+  shell command run as root — none of this trusts the browser.
+
+### Plumbing: `@REPO_PATH@`
+
+A new `install.sh` templating variable, `@REPO_PATH@` (sourced from
+`$SOURCE_ROOT`, the Git clone `install.sh` is run from), is substituted
+into `pidecoder-config.service`'s `ExecStart` (`--repo-path` argument) and
+`ReadWritePaths` (so the detached update script, which runs outside the
+service's own sandbox anyway via `systemd-run`, isn't the only thing that
+needs write access — `pidecoder-config.service` itself needs read access
+to the clone for `check_update`'s `git fetch`). **This means this round
+requires a full `sudo ./scripts/install.sh` on the Pi, not just
+`sync-dev.sh`**, even though there is no C++ change — `sync-dev.sh`
+deliberately never touches systemd unit files, and the new
+`--repo-path`/`ReadWritePaths` only take effect through a full install.
+
+### Testing performed and its limits
+
+Both features' backends were exercised end-to-end against a fake-binary
+integration harness — stand-in `nmcli`, `hostnamectl`, `timedatectl`,
+`systemd-run`, `runuser`, and `systemctl` scripts on `PATH`, a real running
+`config-web.py` process, and `curl` — covering: hostname change through
+the full pending → applied → confirmed lifecycle and, separately, the
+unconfirmed → automatic reversion path (with `PENDING_DELAY_SECONDS`
+temporarily lowered to a few seconds for the test only, never in the
+shipped code); the same two paths for a static/DHCP IP change on a fake
+connection; rejection of an unknown connection name, a bare IP without a
+CIDR prefix, an invalid NTP server, and an invalid timezone; NTP and
+timezone apply; and the full update flow — `check_update` against a real
+local Git remote genuinely one commit behind (correct commit count and
+summary), `start_update` running a real `git pull` plus a stand-in
+`install.sh` through to a `"done"` status with the repository actually
+updated, and the same flow with the stand-in `install.sh` deliberately
+failing, correctly producing an `"error"` status with the failing step and
+log tail. This is more thorough than most previous rounds got (RTSPS, for
+comparison, only got isolated `g++` snippet compilation) — deliberately,
+given the stakes of a feature that can change how the Pi is reached.
+
+**None of this exercised the real `NetworkManager`, `systemd-timesyncd`,
+`hostnamed`, or `systemd-run`'s actual sandbox-escaping behavior, and none
+of it ran on actual Raspberry Pi hardware.** Before relying on this in
+production: test the hostname, NTP, and timezone changes first — lower
+risk, nothing there can cut off network access. Test the IP/DHCP toggle
+last, and keep a second way to reach the Pi open while doing it (a
+keyboard/monitor on the Pi itself, or a second SSH session over a
+connection that doesn't depend on the address being changed) — the
+automatic rollback is designed to make this unnecessary, but it has not
+yet been proven against the real `nmcli`/NetworkManager stack, only
+against a shell script standing in for it.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

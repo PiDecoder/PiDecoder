@@ -167,7 +167,7 @@ function updateVersionLabel(){
 async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();s.authenticated?showApp():showLogin()}
 async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
-function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}}
+function tab(id,b){for(let x of ['cams','layout','sys','network','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo();updateStatusRefresh()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}if(id==='network'){networkRefresh()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;audioDefault.checked=!!cfg.layout.focus_audio_default_on;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
@@ -2202,6 +2202,286 @@ manualOnvifIp.addEventListener('input',setIpv4Validation);
 manualOnvifPort.addEventListener('change',rememberManualOnvif);
 manualOnvifPath.addEventListener('change',rememberManualOnvif);
 restoreManualOnvif();
+
+// --------------------------------------------------------------------------
+// Mise à jour logicielle (onglet Système)
+// --------------------------------------------------------------------------
+
+async function updateStatusRefresh(){
+  try{
+    const s=await api('/api/update/status');
+    if(s.state!=='idle'){
+      renderUpdateStatus(s);
+      if(s.state==='running'){
+        updateDoneOrError=false;
+        pollUpdateStatus();
+      }
+    }
+  }catch(e){/* silencieux : ne pas gêner l'ouverture de l'onglet */}
+}
+
+async function updateCheck(){
+  updateCheckButton.disabled=true;
+  updateActions.classList.add('hidden');
+  updateStatus.textContent=t('update.checking');
+  try{
+    renderUpdateCheck(await api('/api/update/check'));
+  }catch(e){
+    updateStatus.textContent=e.message;
+  }finally{
+    updateCheckButton.disabled=false;
+  }
+}
+
+function renderUpdateCheck(r){
+  if(!r.supported){
+    updateStatus.textContent=r.reason==='not_a_git_repo'?t('update.not_a_repo'):t('update.no_repo_path');
+    return;
+  }
+  if(r.available===null){
+    updateStatus.textContent=t('update.check_failed',{error:r.error||''});
+    return;
+  }
+  if(r.error==='no_upstream'){
+    updateStatus.textContent=t('update.no_upstream');
+    return;
+  }
+  if(r.available){
+    updateStatus.innerHTML=
+      `<strong>${esc(t('update.available',{count:r.commits_behind??'?'}))}</strong>`+
+      (r.latest_summary?`<br>${esc(r.latest_summary)}`:'');
+    updateActions.classList.remove('hidden');
+  }else{
+    updateStatus.textContent=t('update.up_to_date');
+  }
+}
+
+let updatePollTimer=null;
+
+async function updateStart(){
+  updateStartButton.disabled=true;
+  try{
+    await api('/api/update/start',{method:'POST',body:'{}'});
+    updateDoneOrError=false;
+    updateProgress.classList.remove('hidden');
+    updateActions.classList.add('hidden');
+    updateProgressText.textContent=t('update.step_git_pull');
+    pollUpdateStatus();
+  }catch(e){
+    toast(e.message,true);
+    updateStartButton.disabled=false;
+  }
+}
+
+async function pollUpdateStatus(){
+  clearTimeout(updatePollTimer);
+  try{
+    renderUpdateStatus(await api('/api/update/status'));
+  }catch(e){
+    // pidecoder-config.service redémarre en fin d'installation : la requête
+    // échoue brièvement pendant la bascule, on continue simplement d'essayer.
+  }
+  if(!updateDoneOrError)updatePollTimer=setTimeout(pollUpdateStatus,2000);
+}
+
+let updateDoneOrError=false;
+
+function renderUpdateStatus(s){
+  if(s.state==='idle')return;
+  updateProgress.classList.remove('hidden');
+  const stepLabel=s.step==='git_pull'?t('update.step_git_pull'):s.step==='install'?t('update.step_install'):'';
+  updateDoneOrError=(s.state==='done'||s.state==='error');
+  if(s.state==='running'){
+    updateProgressText.textContent=stepLabel;
+  }else if(s.state==='done'){
+    updateProgressText.textContent=t('update.done');
+    updateStartButton.disabled=false;
+    toast(t('update.done'));
+  }else if(s.state==='error'){
+    updateProgressText.textContent=t('update.failed',{step:stepLabel});
+    updateStartButton.disabled=false;
+    updateActions.classList.remove('hidden');
+    toast(t('update.failed',{step:stepLabel}),true);
+  }
+  updateLog.textContent=s.log_tail||'';
+  updateLog.scrollTop=updateLog.scrollHeight;
+}
+
+// --------------------------------------------------------------------------
+// Réseau (onglet Réseau) : nom d'hôte, adresse IP, NTP, fuseau horaire
+// --------------------------------------------------------------------------
+
+let networkConnections=[];
+let networkPendingTimer=null;
+
+async function networkRefresh(){
+  try{
+    renderNetworkStatus(await api('/api/network/status'));
+  }catch(e){
+    networkStatus.textContent=e.message;
+  }
+}
+
+function renderNetworkStatus(s){
+  networkStatus.textContent=s.nmcli_available?'':t('network.nmcli_unavailable');
+  networkHostnameInput.value=s.hostname||'';
+
+  networkConnections=s.connections||[];
+  const previousSelection=networkConnectionSelect.value;
+  networkConnectionSelect.innerHTML=networkConnections.map(c=>
+    `<option value="${esc(c.name)}">${esc(c.name)}${c.active?' ✓':''}</option>`
+  ).join('');
+  const hasConnections=networkConnections.length>0;
+  networkConnectionSelect.disabled=!s.nmcli_available||!hasConnections;
+  networkMethodSelect.disabled=networkConnectionSelect.disabled;
+  networkIpButton.disabled=networkConnectionSelect.disabled;
+
+  if(hasConnections){
+    const toSelect=networkConnections.find(c=>c.name===previousSelection)?previousSelection:networkConnections[0].name;
+    networkConnectionSelect.value=toSelect;
+    networkLoadConnectionFields(toSelect);
+  }
+
+  networkNtpEnabled.checked=!!(s.ntp&&s.ntp.enabled);
+  networkNtpServersInput.value=((s.ntp&&s.ntp.servers)||[]).join(', ');
+
+  if(!networkTimezoneSelect.dataset.loaded){
+    networkLoadTimezones(s.timezone);
+  }else if(s.timezone){
+    networkTimezoneSelect.value=s.timezone;
+  }
+
+  renderNetworkPending(s.pending);
+}
+
+function networkLoadConnectionFields(name){
+  const conn=networkConnections.find(c=>c.name===name);
+  if(!conn)return;
+  networkMethodSelect.value=conn.method;
+  networkAddressInput.value=conn.address||'';
+  networkGatewayInput.value=conn.gateway||'';
+  networkDnsInput.value=(conn.dns||[]).join(', ');
+  networkManualFields.classList.toggle('hidden',conn.method!=='manual');
+}
+
+function networkConnectionChanged(){
+  networkLoadConnectionFields(networkConnectionSelect.value);
+}
+
+function networkMethodChanged(){
+  networkManualFields.classList.toggle('hidden',networkMethodSelect.value!=='manual');
+}
+
+async function networkLoadTimezones(current){
+  try{
+    const r=await api('/api/network/timezones');
+    networkTimezoneSelect.innerHTML=(r.timezones||[]).map(z=>
+      `<option value="${esc(z)}">${esc(z)}</option>`
+    ).join('');
+    networkTimezoneSelect.dataset.loaded='1';
+    if(current)networkTimezoneSelect.value=current;
+  }catch(e){
+    toast(e.message,true);
+  }
+}
+
+async function networkChangeHostname(){
+  networkHostnameButton.disabled=true;
+  try{
+    const r=await api('/api/network/hostname',{method:'POST',body:JSON.stringify({hostname:networkHostnameInput.value.trim()})});
+    toast(t('network.change_scheduled',{seconds:r.delay_seconds}));
+    networkRefresh();
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    networkHostnameButton.disabled=false;
+  }
+}
+
+async function networkChangeIp(){
+  networkIpButton.disabled=true;
+  networkIpStatus.textContent='';
+  try{
+    const manual=networkMethodSelect.value==='manual';
+    const body={
+      connection:networkConnectionSelect.value,
+      method:networkMethodSelect.value,
+      address:manual?networkAddressInput.value.trim():'',
+      gateway:manual?networkGatewayInput.value.trim():'',
+      dns:manual?networkDnsInput.value.split(',').map(x=>x.trim()).filter(Boolean):[],
+    };
+    const r=await api('/api/network/ip',{method:'POST',body:JSON.stringify(body)});
+    toast(t('network.change_scheduled',{seconds:r.delay_seconds}));
+    networkRefresh();
+  }catch(e){
+    networkIpStatus.textContent=e.message;
+  }finally{
+    networkIpButton.disabled=false;
+  }
+}
+
+function renderNetworkPending(pending){
+  clearTimeout(networkPendingTimer);
+  if(!pending){
+    networkPendingBanner.classList.add('hidden');
+    networkPendingBanner.innerHTML='';
+    return;
+  }
+
+  const kindLabel=pending.kind==='hostname'?t('network.pending_kind_hostname'):t('network.pending_kind_ip');
+  const remaining=Math.max(0,Math.round(
+    pending.delay_seconds-((Date.now()/1000)-(pending.applied_at||pending.started_at||Date.now()/1000))
+  ));
+
+  networkPendingBanner.classList.remove('hidden');
+  networkPendingBanner.innerHTML=
+    `<strong>${esc(t('network.pending_title',{kind:kindLabel}))}</strong>`+
+    `<div class="muted" style="margin-top:6px">${esc(t('network.pending_hint',{seconds:remaining}))}</div>`+
+    `<div class="row" style="margin-top:10px">`+
+    `<button class="primary" onclick="networkConfirmPending('${esc(pending.token)}')">${esc(t('network.pending_confirm_button'))}</button>`+
+    `</div>`;
+
+  networkPendingTimer=setTimeout(()=>networkRefresh(),3000);
+}
+
+async function networkConfirmPending(token){
+  try{
+    await api('/api/network/confirm',{method:'POST',body:JSON.stringify({token})});
+    toast(t('network.pending_confirmed'));
+    networkPendingBanner.classList.add('hidden');
+    clearTimeout(networkPendingTimer);
+    networkRefresh();
+  }catch(e){
+    toast(e.message,true);
+  }
+}
+
+async function networkApplyNtp(){
+  networkNtpButton.disabled=true;
+  networkNtpStatus.textContent='';
+  try{
+    const servers=networkNtpServersInput.value.split(',').map(x=>x.trim()).filter(Boolean);
+    await api('/api/network/ntp',{method:'POST',body:JSON.stringify({enabled:networkNtpEnabled.checked,servers})});
+    toast(t('network.ntp_applied'));
+    networkRefresh();
+  }catch(e){
+    networkNtpStatus.textContent=e.message;
+  }finally{
+    networkNtpButton.disabled=false;
+  }
+}
+
+async function networkApplyTimezone(){
+  networkTimezoneButton.disabled=true;
+  try{
+    await api('/api/network/timezone',{method:'POST',body:JSON.stringify({timezone:networkTimezoneSelect.value})});
+    toast(t('network.timezone_applied'));
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    networkTimezoneButton.disabled=false;
+  }
+}
 
 setInterval(serviceStatus,3000);serviceStatus();
 setInterval(sysInfo,3000);boot().catch(e=>{toast(e.message,true);showLogin()});

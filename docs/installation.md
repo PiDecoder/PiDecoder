@@ -119,6 +119,13 @@ admin
 
 ## Safe updates
 
+Since this version, an equivalent one-click update is also available from
+the Web administration interface — see
+[Software update from the Web UI](#software-update-from-the-web-ui) below.
+The manual steps below still work and remain the only option on an
+installation that predates this feature (identifiable by an "update
+unavailable" message on that page).
+
 Update the repository and run the same installer again:
 
 ```bash
@@ -263,6 +270,58 @@ sudo ./scripts/manage-tls.sh enable              # restore/regenerate
 `disable` moves the active certificate aside (`cert.pem.disabled` /
 `key.pem.disabled`) instead of deleting it, so `enable` can restore the exact
 same certificate later.
+
+## Software update from the Web UI
+
+The Système tab includes an update panel: it checks the Git repository
+against its tracked remote branch and, if a newer commit is available,
+shows a "Update now" button. Clicking it runs the same `git pull` +
+`sudo ./scripts/install.sh` sequence described in
+[Safe updates](#safe-updates) above, in the background, and streams the
+progress and log output back to the page — including through the service
+restart that `install.sh` performs at the end, which briefly interrupts
+the page's connection to the server.
+
+This requires `--repo-path` to have been recorded during installation,
+which happens automatically as of this version. On an installation from
+before this feature, the panel shows a message asking to run
+`sudo ./scripts/install.sh` once from the Git clone to enable it — this is
+a one-time, harmless re-install with no other effect.
+
+If `install.sh` fails partway through (a build error, a missing
+dependency...), its own existing rollback restores the previous
+`/opt/pidecoder` and restarts the services automatically, exactly as it
+would for a manual update — the Web UI update button does not change this
+safety behavior, only how the update is triggered.
+
+## Network configuration from the Web UI
+
+The Réseau tab lets you change the Pi's hostname, switch a network
+connection between DHCP and a manual (static) IP address, configure NTP
+time servers, and set the timezone — without needing SSH access.
+
+Because a mistake in the hostname or IP address could otherwise cut off
+access to the Pi remotely, both of those changes include an automatic
+safety net: the new value is applied immediately, but if it is not
+confirmed from the Web UI (a "Confirm this change" button appears) within
+45 seconds, the Pi automatically reverts to the previous value. This
+safety net runs on the Pi itself and does not depend on your browser
+successfully reconnecting — it is designed specifically for the case
+where the change makes the page briefly or permanently unreachable at its
+old address.
+
+Practical notes:
+
+- If you change the IP address, the page will likely become unreachable
+  at its old URL; reconnect at the new address within the 45-second
+  window to confirm the change, or it will revert on its own.
+- NTP and timezone changes are lower-risk (they cannot affect network
+  reachability) and apply immediately without a confirmation step.
+- As with any change to the Pi's network configuration, keep a fallback
+  way to reach the device (a keyboard and monitor connected directly, or
+  a second SSH session over a connection that does not depend on the
+  address being changed) the first few times you use the IP/DHCP toggle,
+  until you are comfortable with how it behaves on your network.
 
 ## Startup architecture
 

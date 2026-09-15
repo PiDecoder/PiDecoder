@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.3 (nouveau — testé en bac à sable, jamais sur le Pi réel)
+
+### Mise à jour en un clic et configuration réseau depuis la page Web
+
+Demande explicite de l'utilisateur : un bouton de vérification/installation
+des mises à jour, et un panneau complet de configuration réseau (nom
+d'hôte, IP DHCP/manuelle, NTP, fuseau horaire), avec un filet de sécurité
+automatique pour ne jamais perdre l'accès au Pi à cause d'une erreur de
+frappe sur l'adresse IP.
+
+- nouvel onglet **Réseau** dans la page Web : nom d'hôte, adresse IP
+  (DHCP ou manuelle par connexion NetworkManager), synchronisation de
+  l'heure (NTP) et fuseau horaire ;
+- nouveau panneau **Mise à jour** dans l'onglet Système : vérifie l'état
+  du dépôt Git par rapport à sa branche distante et affiche un bouton de
+  mise à jour si une nouvelle version est disponible ;
+- **sécurité — rétablissement automatique** : un changement de nom
+  d'hôte ou d'adresse IP est appliqué immédiatement mais annulé
+  automatiquement s'il n'est pas confirmé depuis la page Web dans les 45
+  secondes qui suivent. Ce mécanisme est entièrement côté serveur (une
+  minuterie détachée qui surveille un fichier de confirmation), donc il
+  fonctionne même si le changement rend la page inaccessible — c'est
+  justement le cas qu'il doit couvrir ;
+- **architecture** : `pidecoder-config.service` tourne avec un bac à
+  sable systemd strict (`ProtectSystem=strict`, `ProtectHostname=true`,
+  etc.) qui interdit d'écrire directement dans `/etc/hostname`,
+  `/etc/hosts`, `/etc/systemd/timesyncd.conf` ou d'appeler `nmcli`
+  directement depuis son propre processus. Comme pour la bascule
+  HTTPS on/off (v1.2), tout changement système passe par une unité
+  `systemd-run` transitoire indépendante — qui n'hérite pas du bac à
+  sable de l'unité appelante — dans un nouveau module
+  `scripts/system_admin.py` ;
+- `git fetch`/`git pull` (vérification et mise à jour) sont lancés via
+  `runuser -u <utilisateur du service vidéo> --` pour ne jamais laisser
+  de fichiers appartenant à `root` dans le dépôt Git de l'utilisateur, ce
+  qui casserait ensuite les commandes Git lancées à la main en SSH ;
+- la mise à jour s'appuie sur le mécanisme de restauration déjà présent
+  dans `scripts/install.sh` (restauration automatique de la version
+  précédente en cas d'échec) plutôt que de le dupliquer ;
+- toutes les entrées (nom d'hôte, adresse IP/passerelle/DNS en CIDR,
+  serveurs NTP, fuseau horaire, nom de connexion réseau) sont validées
+  côté serveur avant d'être utilisées dans une commande système exécutée
+  en root ;
+- nouvelle variable de template `@REPO_PATH@` dans
+  `systemd/pidecoder-config.service.in` et `scripts/install.sh`, pour que
+  le service connaisse l'emplacement du clone Git. **Important : ce
+  changement nécessite un `sudo ./scripts/install.sh` complet sur le Pi
+  pour prendre effet — `sync-dev.sh` ne touche jamais aux fichiers
+  systemd et ne suffit pas cette fois-ci, même en l'absence de
+  changement C++.**
+
+**Tests effectués et leurs limites.** Contrairement à la plupart des
+tournées précédentes, ce lot a été testé de bout en bout dans un bac à
+sable avec des exécutables factices (`nmcli`, `hostnamectl`,
+`timedatectl`, `systemd-run`, `runuser`, `systemctl`) et de vrais dépôts
+Git locaux : cycle complet nom d'hôte/IP (appliqué → confirmé, et
+appliqué → annulé automatiquement faute de confirmation), rejets de
+validation (connexion inconnue, IP sans masque, serveur NTP invalide,
+fuseau horaire invalide), et mise à jour complète (vérification, git
+pull + install.sh réussis, et le cas d'échec d'install.sh). **Ce lot n'a
+en revanche jamais été testé contre un vrai NetworkManager, un vrai
+systemd-timesyncd/hostnamed, ni sur le Raspberry Pi physique.**
+Recommandation avant de l'utiliser en production : tester d'abord le nom
+d'hôte, le NTP et le fuseau horaire (aucun risque de perte d'accès), et
+ne tester la bascule IP/DHCP qu'en gardant un second accès au Pi ouvert
+(écran/clavier branchés, ou une seconde session SSH sur une connexion
+qui ne dépend pas de l'adresse en cours de changement).
+
 ## 1.2 (en cours — étape 1 confirmée sur le Pi par l'utilisateur)
 
 ### HTTPS pour l'interface d'administration (étape 1/2)

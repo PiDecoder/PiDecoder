@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_for_ptz_camera, discover, find_ptz_camera, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
+import system_admin as sysadmin
 
 VERSION='1.1.0-dev'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
@@ -992,7 +993,7 @@ def schedule_self_restart(delay_seconds=2):
         return False
 
 
-class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False; tls_cert_path:Path; tls_key_path:Path; tls_context:object=None
+class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False; tls_cert_path:Path; tls_key_path:Path; tls_context:object=None; repo_path:str=None; bind:str='0.0.0.0'; port:int=8080
 class H(BaseHTTPRequestHandler):
     def secure_flag(self):
         # Le drapeau de cookie « Secure » n'a de sens que sur une connexion
@@ -1138,6 +1139,22 @@ class H(BaseHTTPRequestHandler):
             lay=load(self.server.root/'config/layout.json',{})
             raw=json.dumps({'format':'pidecoder-config','version':VERSION,'exported_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'cameras':cams.get('cameras',[]),'layout':lay},indent=2,ensure_ascii=False).encode('utf-8')
             self.send_response(200);self.send_header('Content-Type','application/json;charset=utf-8');self.send_header('Content-Disposition','attachment; filename=pidecoder-config.json');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
+        if p=='/api/update/check':
+            return self.j(sysadmin.check_update(self.server.repo_path,sysadmin.get_service_user()))
+        if p=='/api/update/status':
+            return self.j(sysadmin.update_status(self.server.root))
+        if p=='/api/network/status':
+            nmcli_ok=sysadmin.nmcli_available()
+            return self.j({
+                'nmcli_available':nmcli_ok,
+                'connections':sysadmin.list_connections() if nmcli_ok else [],
+                'hostname':sysadmin.current_hostname(),
+                'ntp':sysadmin.ntp_config(),
+                'timezone':sysadmin.current_timezone(),
+                'pending':sysadmin.pending_change(self.server.root),
+            })
+        if p=='/api/network/timezones':
+            return self.j({'timezones':sysadmin.list_timezones()})
         self.send_error(404)
     def do_POST(self):
         p=urlparse(self.path).path
@@ -1473,13 +1490,88 @@ class H(BaseHTTPRequestHandler):
                     'pidecoder_lang=; SameSite=Lax; Path=/; Max-Age=0; Secure',
                 ]
                 return self.j({'ok':True,'restarting':True,'redirect_url':self.tls_redirect_url('http')},cookie=expire_cookies)
+            if p=='/api/update/start':
+                if not self.server.repo_path:
+                    raise ValueError(i18n_t('update.no_repo_path',self.lang()))
+                status=sysadmin.update_status(self.server.root)
+                if status.get('state')=='running':
+                    raise ValueError(i18n_t('update.already_running',self.lang()))
+                d=self.body()
+                skip_deps=bool(d.get('skip_deps',False))
+                service_user=sysadmin.get_service_user()
+                if not service_user:
+                    raise ValueError(i18n_t('update.no_service_user',self.lang()))
+                sysadmin.start_update(
+                    self.server.root,self.server.repo_path,service_user,
+                    str(self.server.root),self.server.bind,self.server.port,skip_deps,
+                )
+                return self.j({'ok':True,'started':True})
+            if p=='/api/network/hostname':
+                d=self.body()
+                try:
+                    new_hostname=sysadmin.validate_hostname(str(d.get('hostname','')))
+                except ValueError:
+                    raise ValueError(i18n_t('network.invalid_hostname',self.lang()))
+                try:
+                    result=sysadmin.start_hostname_change(self.server.root,new_hostname)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.hostname_change_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True,**result})
+            if p=='/api/network/ip':
+                if not sysadmin.nmcli_available():
+                    raise ValueError(i18n_t('network.nmcli_unavailable',self.lang()))
+                d=self.body()
+                connection=str(d.get('connection',''))
+                known=[c['name'] for c in sysadmin.list_connections()]
+                if connection not in known:
+                    raise ValueError(i18n_t('network.unknown_connection',self.lang()))
+                method=str(d.get('method',''))
+                if method not in ('auto','manual'):
+                    raise ValueError(i18n_t('network.invalid_method',self.lang()))
+                address=gateway=None;dns=[]
+                if method=='manual':
+                    try:
+                        address=sysadmin.validate_cidr(str(d.get('address','')))
+                        gateway=sysadmin.validate_ipv4(str(d.get('gateway','')))
+                        dns=sysadmin.validate_dns_list([str(x) for x in d.get('dns',[])])
+                    except ValueError:
+                        raise ValueError(i18n_t('network.invalid_address',self.lang()))
+                result=sysadmin.start_ip_change(self.server.root,connection,method,address,gateway,dns)
+                return self.j({'ok':True,**result})
+            if p=='/api/network/confirm':
+                d=self.body()
+                token=str(d.get('token',''))
+                ok=sysadmin.confirm_change(self.server.root,token)
+                return self.j({'ok':ok})
+            if p=='/api/network/ntp':
+                d=self.body()
+                enabled=bool(d.get('enabled',True))
+                try:
+                    servers=sysadmin.validate_ntp_servers([str(x) for x in d.get('servers',[])])
+                except ValueError:
+                    raise ValueError(i18n_t('network.invalid_ntp_server',self.lang()))
+                try:
+                    sysadmin.apply_ntp(enabled,servers)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.ntp_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True})
+            if p=='/api/network/timezone':
+                d=self.body()
+                timezone=str(d.get('timezone','')).strip()
+                if timezone not in sysadmin.list_timezones():
+                    raise ValueError(i18n_t('network.invalid_timezone',self.lang()))
+                try:
+                    sysadmin.apply_timezone(timezone)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.timezone_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True})
             self.send_error(404)
         except ValueError as e:self.j({'ok':False,'error':str(e)},400)
         except Exception as e:self.j({'ok':False,'error':i18n_t('server.error',self.lang(),error=str(e))},500)
     def log_message(self,fmt,*args):print('[config-web] '+fmt%args)
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080);ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive le TLS et sert en HTTP simple (déconseillé, pour développement uniquement)');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
+    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080);ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive le TLS et sert en HTTP simple (déconseillé, pour développement uniquement)');ap.add_argument('--repo-path',default=None,help='Chemin du clone Git (ex: ~/PiDecoder), pour la vérification/mise à jour depuis la page Web. Absent sur une installation antérieure à cette fonctionnalité, tant que install.sh n’a pas été relancé une fois.');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
     if a.set_password:
         p=getpass.getpass('Nouveau mot de passe : ');q=getpass.getpass('Confirmation : ')
         if p!=q:raise SystemExit('Les mots de passe ne correspondent pas')
@@ -1490,6 +1582,7 @@ def main():
     use_tls=(not a.no_https) and tls_cert.is_file() and tls_key.is_file()
     s=Server((a.bind,a.port),H);s.root=root;s.auth=auth
     s.tls_cert_path=tls_cert;s.tls_key_path=tls_key;s.tls_context=None
+    s.repo_path=a.repo_path;s.bind=a.bind;s.port=a.port
     if use_tls:
         ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version=ssl.TLSVersion.TLSv1_2

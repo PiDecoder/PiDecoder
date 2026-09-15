@@ -124,6 +124,67 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Certificat installé mais rechargement TLS échoué : {error}',
         'en': 'Certificate installed but the TLS reload failed: {error}',
     },
+    'update.no_repo_path': {
+        'fr': (
+            'Mise à jour indisponible : cette installation ne connaît pas '
+            'l\'emplacement du dépôt Git. Relance sudo ./scripts/install.sh '
+            'depuis ton clone Git une première fois pour activer cette '
+            'fonctionnalité.'
+        ),
+        'en': (
+            'Update unavailable: this installation does not know where the '
+            'Git clone is. Run sudo ./scripts/install.sh from your Git '
+            'clone once to enable this feature.'
+        ),
+    },
+    'update.already_running': {
+        'fr': 'Une mise à jour est déjà en cours',
+        'en': 'An update is already in progress',
+    },
+    'update.no_service_user': {
+        'fr': 'Impossible de déterminer l\'utilisateur du service vidéo',
+        'en': 'Unable to determine the video service user',
+    },
+    'network.invalid_hostname': {
+        'fr': 'Nom d\'hôte invalide (lettres, chiffres et tirets, 63 caractères maximum)',
+        'en': 'Invalid hostname (letters, digits and hyphens, 63 characters max)',
+    },
+    'network.hostname_change_failed': {
+        'fr': 'Échec du changement de nom d\'hôte : {error}',
+        'en': 'Hostname change failed: {error}',
+    },
+    'network.nmcli_unavailable': {
+        'fr': 'NetworkManager (nmcli) est introuvable sur ce système',
+        'en': 'NetworkManager (nmcli) was not found on this system',
+    },
+    'network.unknown_connection': {
+        'fr': 'Connexion réseau inconnue',
+        'en': 'Unknown network connection',
+    },
+    'network.invalid_method': {
+        'fr': 'Mode d\'adressage invalide',
+        'en': 'Invalid addressing mode',
+    },
+    'network.invalid_address': {
+        'fr': 'Adresse IP, passerelle ou DNS invalide',
+        'en': 'Invalid IP address, gateway or DNS server',
+    },
+    'network.invalid_ntp_server': {
+        'fr': 'Adresse de serveur NTP invalide',
+        'en': 'Invalid NTP server address',
+    },
+    'network.ntp_failed': {
+        'fr': 'Échec de la configuration NTP : {error}',
+        'en': 'NTP configuration failed: {error}',
+    },
+    'network.invalid_timezone': {
+        'fr': 'Fuseau horaire invalide',
+        'en': 'Invalid timezone',
+    },
+    'network.timezone_failed': {
+        'fr': 'Échec du changement de fuseau horaire : {error}',
+        'en': 'Timezone change failed: {error}',
+    },
     'import.invalid_file': {
         'fr': 'Fichier PiDecoder invalide',
         'en': 'Invalid PiDecoder file',

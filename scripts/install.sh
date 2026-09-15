@@ -620,7 +620,8 @@ python3 - \
     "$TARGET" \
     "$WAYLAND_DISPLAY_NAME" \
     "$WEB_BIND" \
-    "$WEB_PORT" <<'PY_RENDER_UNITS'
+    "$WEB_PORT" \
+    "$SOURCE_ROOT" <<'PY_RENDER_UNITS'
 from pathlib import Path
 import sys
 
@@ -643,6 +644,7 @@ import sys
     wayland_display,
     web_bind,
     web_port,
+    repo_path,
 ) = sys.argv[1:]
 
 replacements = {
@@ -654,6 +656,7 @@ replacements = {
     "@WAYLAND_DISPLAY@": wayland_display,
     "@WEB_BIND@": web_bind,
     "@WEB_PORT@": web_port,
+    "@REPO_PATH@": repo_path,
 }
 
 for source, destination in (
