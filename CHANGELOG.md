@@ -164,6 +164,38 @@ session tant qu'il n'est pas supprimé manuellement.
   Seul le cas du bouton on/off de la Web UI et de `manage-tls.sh disable`
   (chemins contrôlés) sont couverts ; documenté comme limitation connue.
 
+### Confort (retour terrain) : attente pendant le redémarrage HTTPS on/off
+
+Deux remarques après un nouveau test sur le Pi : le message sur les
+cookies aurait dû être visible avant même de cliquer, et la redirection
+automatique (fixée à 2,5s) tombait souvent sur une page inaccessible —
+`pidecoder-config.service` mettant plus longtemps que ça à redémarrer
+complètement (arrêt de l'ancien processus, rechargement du certificat,
+nouvelle écoute).
+
+- le message d'avertissement au-dessus du bouton on/off (déjà visible
+  avant de cliquer, affiché en continu pendant le redémarrage) mentionne
+  maintenant explicitement le cas des cookies : « si la connexion semble
+  acceptée sans rien afficher ensuite, vide les cookies de ce site » ;
+- remplacement de la redirection fixe à 2,5s par un compte à rebours de
+  30 secondes affiché en direct dans le panneau (« Redirection
+  automatique dans Ns… »), avant de rediriger une seule fois à la fin —
+  30s est large par rapport au temps de redémarrage observé, pour éviter
+  d'atterrir sur une page d'erreur du navigateur pendant l'attente ;
+- limitation assumée : une vérification active (sonder l'URL cible et
+  rediriger dès qu'elle répond, plutôt qu'attendre 30s à l'aveugle) a été
+  envisagée mais écartée — passer de HTTPS à HTTP déclencherait un blocage
+  « contenu mixte » du navigateur (une page HTTPS ne peut pas interroger
+  une URL HTTP en JavaScript), donc une vérification active ne
+  fonctionnerait que dans un sens (HTTP→HTTPS) et pas dans l'autre
+  (HTTPS→HTTP, le sens justement le plus délicat). Un délai fixe généreux,
+  identique dans les deux sens, reste plus simple et plus prévisible ;
+- validé : `node --check` sur `app.js`/`i18n.js`, parité des clés FR/EN
+  (242 de chaque côté) ; **le comportement réel du compte à rebours et du
+  redémarrage n'a pas pu être rejoué dans l'environnement de
+  développement** (pas de service `pidecoder-config` ni de navigateur
+  réel disponibles ici) — à confirmer sur le Pi.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier

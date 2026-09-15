@@ -1190,9 +1190,12 @@ async function tlsToggle(){
   try{
     const r=await api(`/api/tls/${action}`,{method:'POST',body:'{}'});
     if(r.restarting){
-      tlsStatus.innerHTML=`<strong>${esc(t('sec.tls_restarting'))}</strong>`;
       toast(t('sec.tls_restarting'));
-      setTimeout(()=>{if(r.redirect_url)window.location.href=r.redirect_url},2500);
+      if(r.redirect_url){
+        tlsRestartCountdown(r.redirect_url);
+      }else{
+        tlsStatus.innerHTML=`<strong>${esc(t('sec.tls_restarting'))}</strong>`;
+      }
     }else{
       tlsRefreshStatus();
       tlsToggleButton.disabled=false;
@@ -1201,6 +1204,37 @@ async function tlsToggle(){
     toast(e.message,true);
     tlsToggleButton.disabled=false;
   }
+}
+
+function tlsRestartCountdown(url){
+  // Rediriger tout de suite (ou après un délai court fixe) tombe souvent
+  // sur une page inaccessible : redémarrer pidecoder-config.service prend
+  // quelques secondes (arrêt de l'ancien processus, rechargement du
+  // certificat, nouvelle écoute), pendant lesquelles la nouvelle URL ne
+  // répond pas encore. On affiche donc un compte à rebours généreux (30s,
+  // largement suffisant en pratique) avec le message d'avertissement sur
+  // les cookies déjà visible au-dessus, puis on redirige une seule fois à
+  // la fin plutôt que de laisser le navigateur afficher une erreur de
+  // connexion pendant l'attente.
+  let remaining=30;
+
+  const render=()=>{
+    tlsStatus.innerHTML=
+      `<strong>${esc(t('sec.tls_restarting'))}</strong>`+
+      `<br>${esc(t('sec.tls_restart_countdown',{seconds:remaining}))}`;
+  };
+
+  render();
+
+  const iv=setInterval(()=>{
+    remaining-=1;
+    if(remaining<=0){
+      clearInterval(iv);
+      window.location.href=url;
+      return;
+    }
+    render();
+  },1000);
 }
 
 async function tlsGenerate(){

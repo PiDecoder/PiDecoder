@@ -108,7 +108,7 @@
 
       'sec.tls_title':'Certificat HTTPS',
       'sec.tls_hint':'Génère ou importe le certificat de l\'interface Web, et active ou désactive HTTPS.',
-      'sec.tls_toggle_warning':'Ceci redémarre l\'interface Web et recharge la page dans quelques secondes.',
+      'sec.tls_toggle_warning':'Ceci redémarre l\'interface Web (jusqu\'à environ 30 secondes) puis recharge la page automatiquement. Si la connexion semble acceptée sans rien afficher ensuite, vide les cookies de ce site dans ton navigateur.',
       'sec.tls_status_active':'HTTPS actif',
       'sec.tls_status_inactive':'HTTPS inactif (HTTP simple)',
       'sec.tls_subject':'Sujet',
@@ -118,6 +118,7 @@
       'sec.tls_enable_button':'Activer HTTPS',
       'sec.tls_disable_button':'Désactiver HTTPS',
       'sec.tls_restarting':'Redémarrage du service, redirection dans quelques secondes…',
+      'sec.tls_restart_countdown':'Redirection automatique dans {seconds}s…',
       'sec.tls_generate_button':'Générer un nouveau certificat auto-signé',
       'sec.tls_generated_active':'Nouveau certificat généré et actif immédiatement.',
       'sec.tls_generated_staged':'Nouveau certificat généré — il sera utilisé à l\'activation de HTTPS.',
@@ -369,7 +370,7 @@
 
       'sec.tls_title':'HTTPS certificate',
       'sec.tls_hint':'Generate or import the Web interface\'s certificate, and turn HTTPS on or off.',
-      'sec.tls_toggle_warning':'This restarts the Web interface and reloads the page in a few seconds.',
+      'sec.tls_toggle_warning':'This restarts the Web interface (up to about 30 seconds) then reloads the page automatically. If the connection seems accepted but nothing happens next, clear this site\'s cookies in your browser.',
       'sec.tls_status_active':'HTTPS active',
       'sec.tls_status_inactive':'HTTPS inactive (plain HTTP)',
       'sec.tls_subject':'Subject',
@@ -379,6 +380,7 @@
       'sec.tls_enable_button':'Enable HTTPS',
       'sec.tls_disable_button':'Disable HTTPS',
       'sec.tls_restarting':'Restarting the service, redirecting in a few seconds…',
+      'sec.tls_restart_countdown':'Redirecting automatically in {seconds}s…',
       'sec.tls_generate_button':'Generate a new self-signed certificate',
       'sec.tls_generated_active':'New certificate generated and active immediately.',
       'sec.tls_generated_staged':'New certificate generated — it will be used once HTTPS is enabled.',
