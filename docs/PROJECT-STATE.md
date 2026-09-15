@@ -231,6 +231,34 @@ and `main()` silently drops to HTTP on its own) remains an open,
 undocumented-in-code limitation — there's no HTTPS response left to
 clean up the cookie from at that point.
 
+**Process bug found: deployment instructions given to the user were
+wrong for this entire round.** After several rounds of "restart the
+service, no need to reinstall" guidance for Python/JS-only changes, the
+user reported seeing no change at all across multiple deliveries — a
+full-screen overlay that never appeared, a disable flow still closing in
+~2s instead of the new 30s countdown, a version number that never moved.
+Root cause: `pidecoder-config.service` runs `/opt/pidecoder/scripts/
+config-web.py` (see `ExecStart` in `systemd/pidecoder-config.service.in`)
+— a physical copy of `scripts/` made once by `install.sh` (`cp -a
+"$STAGED_ROOT" "$TARGET"`), entirely separate from the Git checkout at
+`~/PiDecoder`. `git pull` only updates the checkout; nothing copies those
+files into `/opt/pidecoder` except running `install.sh` again. So
+"restart the service" alone, without ever re-running `install.sh`, just
+re-executes whatever was already deployed — every round since Step 1's
+initial hardware confirmation may have silently been testing stale code.
+Fixed by adding `scripts/sync-dev.sh` (dev-only convenience: `cp -a` of
+`scripts/` into `/opt/pidecoder/scripts/` plus a service restart, skipping
+the full installer's native rebuild and video-engine restart) and by
+changing `config-web.py`'s `VERSION` to `'1.1.0-dev'` (reusing the
+existing `-dev`/`-rc`/`-beta`/`-alpha` → `release_label` convention
+already in the diagnostics code) so a successful sync is visible in the
+header/login page without digging into devtools. Documented in
+`docs/installation.md` ("`git pull` alone does not update a running
+installation"). Going forward, every delivered round that touches
+`scripts/` should tell the user to run `sudo bash scripts/sync-dev.sh`
+(or `sudo ./scripts/install.sh` when C++ sources changed), never a bare
+service restart.
+
 ### Step 2 — RTSPS between the Pi and the cameras
 
 Not started. Unlike step 1, this isn't a self-contained piece of work:

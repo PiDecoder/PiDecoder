@@ -231,6 +231,47 @@ seulement plutôt que d'attendre les 30 secondes prévues.
   être rejoué ici** — à reconfirmer sur le Pi après un rechargement forcé
   du navigateur.
 
+### Correction de procédure : `git pull` + redémarrage ne suffisait pas
+
+Cause trouvée après que l'utilisateur ait signalé ne voir aucun changement
+malgré plusieurs manches livrées d'affilée (superposition plein écran
+invisible, désactivation toujours instantanée à ~2s, numéro de version
+qui ne bouge jamais) : **la consigne donnée précédemment était fausse**.
+`pidecoder-config.service` exécute les fichiers sous `/opt/pidecoder/`
+(voir `ExecStart` dans `systemd/pidecoder-config.service.in`), une copie
+physique distincte du clone Git (`~/PiDecoder`) — copie faite uniquement
+par `install.sh` (`cp -a "$STAGED_ROOT" "$TARGET"`), jamais par `git
+pull`. Redémarrer le service sans jamais relancer `install.sh` ne fait
+donc que relancer le même fichier déjà en place : rien de nouveau n'est
+jamais exécuté, quel que soit le nombre de fois où `git pull` est fait
+dans `~/PiDecoder`.
+
+- **`scripts/sync-dev.sh`** (nouveau, outil de développement uniquement —
+  ne fait pas partie de l'installeur) : copie `scripts/` du clone Git vers
+  `/opt/pidecoder/scripts/` (permissions alignées sur celles
+  d'`install.sh` pour les scripts exécutables), puis redémarre
+  `pidecoder-config.service`. Beaucoup plus rapide que l'installeur
+  complet (qui recompile le moteur natif et coupe l'affichage vidéo) —
+  pensé pour itérer sur des changements Python/JS/HTML/CSS en
+  développement. Ne touche ni `config/` (caméras, disposition,
+  identifiants Web, certificats TLS), ni le moteur natif, ni les unités
+  systemd ;
+- `VERSION` dans `config-web.py` passe de `'1.1.0'` à `'1.1.0-dev'` —
+  réutilise un mécanisme déjà présent dans le code (`release_label`
+  affiché en diagnostics : Stable/Development/RC/Beta/Alpha selon un
+  suffixe `-dev`/`-rc`/`-beta`/`-alpha` dans `VERSION`) pour rendre visible,
+  dans l'en-tête et la page de connexion, qu'une version de développement
+  tourne — sert de vérification indépendante que la synchronisation a
+  bien eu lieu, en plus de `sync-dev.sh` lui-même. Sans effet sur
+  `CMakeLists.txt` (qui reste à `1.1.0`, requis par CMake pour le moteur
+  natif) ni sur la validation CI, qui ne contrôle pas cette chaîne ;
+- ajouté à `validate-release.sh` (vérification syntaxe shell et fichiers
+  requis), comme chaque script livré ;
+- **pour toutes les manches HTTPS précédentes de cette session** : il est
+  possible qu'aucune n'ait jamais réellement tourné sur le Pi avant
+  celle-ci, malgré les confirmations de test — à revalider entièrement
+  une fois `sync-dev.sh` utilisé pour la première fois.
+
 ### À venir (étape 2/2) : RTSPS entre le Pi et les caméras
 
 Pas encore commencé. Contrairement à la page Web, ce n'est pas un chantier

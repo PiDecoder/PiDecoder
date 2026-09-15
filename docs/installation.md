@@ -144,6 +144,29 @@ Before replacing an existing installation, it creates a timestamped backup under
 
 See [Backup and restore](backup.md) for details.
 
+### `git pull` alone does not update a running installation
+
+`pidecoder-config.service` runs the files under `/opt/pidecoder/` — a
+physical copy made by `install.sh` (`cp -a`), separate from the Git
+checkout. Running `git pull` in the checkout only updates the checkout
+itself; it does **not** touch `/opt/pidecoder`, and restarting the
+service afterwards just re-runs the same files that were already there.
+To pick up changes, run `sudo ./scripts/install.sh` again as shown above.
+
+For quick iteration on `scripts/` (Python, Shell, or the Web UI) during
+development, `scripts/sync-dev.sh` copies just those files into
+`/opt/pidecoder/scripts/` and restarts `pidecoder-config.service`,
+without the full installer's native-engine rebuild and service restarts
+(it does not touch the video engine or `config/`):
+
+```bash
+sudo bash scripts/sync-dev.sh
+```
+
+This is a development convenience only — it is not part of the supported
+install/upgrade path and is not a substitute for `install.sh` on a
+production deployment.
+
 ## Installer options
 
 ```text

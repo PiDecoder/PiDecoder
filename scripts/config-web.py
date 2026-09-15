@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_for_ptz_camera, discover, find_ptz_camera, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
 
-VERSION='1.1.0'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='1.1.0-dev'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 
 # Anti-bruteforce sur /api/login : au-delà de LOGIN_MAX_ATTEMPTS échecs pour une
 # même adresse IP en LOGIN_WINDOW secondes, l'IP est bloquée LOGIN_LOCKOUT
