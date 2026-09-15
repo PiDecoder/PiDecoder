@@ -28,8 +28,8 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v1.1.0** adds native audio playback in the focus view, on top of the v1.0.0
-> stable public release.
+> **PiDecoder v1.1.0** is the current stable release. It adds native audio playback in the
+> focus view on top of the v1.0.0 stable public release.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
 > Native PTZ movement, optical zoom, Stop and preset selection are available and have been
 > field-tested with an Axis Q6074.
@@ -81,15 +81,17 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 
 ## Features
 
-| Video wall | ONVIF and PTZ | Layout | Administration |
-|---|---|---|---|
-| Multiple RTSP streams | Automatic discovery | Drag and drop | Web interface |
-| H.264 playback | Manual IPv4 addition | Resize camera tiles | System diagnostics |
-| Automatic reconnection | Profile and preset detection | Main-camera layout | Service controls |
-| Fullscreen focus view | Native pan and tilt | Persistent configuration | Logs and backups |
-| Digital zoom and pan | Optical zoom and forced Stop | Flexible mosaics | Authentication |
-| Native Raspberry Pi display | Native preset selector | PTZ overlay auto-hide | Configuration export |
-| Native audio in focus view (opt-in per camera) | | Audio-on-by-default toggle | |
+| Video wall | Audio | ONVIF and PTZ | Layout | Administration |
+|---|---|---|---|---|
+| Multiple RTSP streams | Native playback in the focus view, opt-in per camera | Automatic discovery | Drag and drop reordering | Bilingual (FR/EN) Web interface |
+| H.264 playback | Mute/unmute with the speaker button or the **M** key | Manual IPv4 addition | Resize camera tiles | System diagnostics (CPU, memory, temperature, throttling) |
+| Automatic reconnection | Auto-hiding audio button, mirroring the PTZ overlay | Profile and preset detection | Uniform, main-camera and free layout templates | Configurable log viewer (20/50/100 lines) |
+| Fullscreen focus view | "Audio on by default" toggle in Layout | Native pan and tilt | Persistent, auto-saved configuration | Notification history with unread counter |
+| Digital zoom and pan | Mosaic stays silent by design, whatever the setting | Optical zoom and forced Stop | Full screen at startup toggle | Keyboard shortcuts panel |
+| On-screen digital zoom percentage | Per-camera flag also protects mosaic latency for cameras without audio | Native preset selector | Grid-too-small guardrails | Configuration export and import |
+| Native Raspberry Pi display (SDL2/OpenGL, no browser needed) | | PTZ overlay auto-hide | | Rate-limited authentication with lockout |
+| | | ONVIF/PTZ metadata preserved on camera save | | systemd sandboxing per service, credential redaction in logs |
+| | | | | Link to the [GitHub repository](https://github.com/PiDecoder/PiDecoder) in the header |
 
 ## Native PTZ controls
 
@@ -275,7 +277,7 @@ journalctl -u pidecoder.service -n 50 --no-pager
 | PTZ transport | ONVIF through a local Unix socket bridge |
 | Administration | Python 3 Web service |
 
-Other Linux platforms may work, but they are not yet part of the validated v1.0 target.
+Other Linux platforms may work, but they are not yet part of the validated v1.1 target.
 
 ## Current validation status
 
@@ -295,23 +297,29 @@ Other Linux platforms may work, but they are not yet part of the validated v1.0 
 | Native PTZ preset selector | Passed on Axis Q6074 |
 | PTZ overlay auto-hide and fixed-camera filtering | Passed |
 | ONVIF metadata preservation during camera save | Passed in field test |
-| Native audio in focus view | Passed on Axis (mic enabled) |
+| Native audio playback in the focus view | Passed on Axis (mic enabled) |
 | Mosaic stability with an audio-bearing RTSP stream | Passed on Axis (mic enabled) |
+| Audio playback and mosaic stability on an Aqara G410 intercom | Known residual issue, not blocking — see [FAQ](docs/faq.md#is-audio-available) |
+| Native C++ unit tests (Grid, Layout, credential redaction) | Passed in CI |
+| Native engine build (CMake + compile) | Passed in CI on every push |
+| FR/EN translation parity (frontend and backend) | Passed in CI |
+| Login rate limiting and lockout | Passed in CI |
+| Credential redaction in service logs | Passed in CI |
 
 The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.
 
 ## Roadmap
 
-| Version | Status | Planned focus |
+| Version | Status | Focus |
 |---|---|---|
 | v1.0.0 | Released | First stable public release, native PTZ and bilingual FR/EN Web UI |
-| v1.1.0 | Current | Native audio support in the focus view |
+| v1.1.0 | Released | Native audio support in the focus view, validated on Axis |
 | v1.2 | Planned | HTTPS |
 | v1.3 | Planned | REST API |
 | v2.0 | Long-term | Multi-Raspberry cluster |
 
-Roadmap items are planned goals and may change as the project evolves.
+Roadmap items are planned goals and may change as the project evolves. No version is currently in active development; the next item will be picked from the list above.
 
 ## Project principles
 
