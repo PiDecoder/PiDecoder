@@ -100,11 +100,18 @@ On a first installation, the installer asks for the password of the Web account 
 
 ## 4. Open the administration interface
 
-Open:
+Open, over HTTP or HTTPS (both are active by default, on their own port):
 
 ```text
 http://RASPBERRY_PI_IP:8080
+https://RASPBERRY_PI_IP:8443
 ```
+
+The browser will show a certificate warning the first time over HTTPS — see
+[HTTPS and TLS certificates](#https-and-tls-certificates) below. Both ports
+can be changed, or either protocol turned off, from the Security tab once
+logged in (see [Changing the certificate later](#changing-the-certificate-later-without-reinstalling)
+and [Enabling/disabling HTTP or HTTPS from the Web UI](#enablingdisabling-http-or-https-from-the-web-ui)).
 
 Default Web username:
 
@@ -112,10 +119,16 @@ Default Web username:
 admin
 ```
 
+If you don't know the Pi's IP address, connect a screen to it: PiDecoder
+shows its IP, hostname, MAC address and both Web ports as an overlay for
+30 seconds at startup, and again at any time by pressing the **I** key.
+
 > [!WARNING]
-> The current administration interface uses HTTP.
-> Do not expose port 8080 directly to the Internet.
-> Keep it on a trusted management network or behind an appropriate secured reverse proxy.
+> Keep the administration interface on a trusted management network, or
+> behind an appropriate secured reverse proxy, even over HTTPS — the
+> certificate is self-signed by default (see below), which authenticates
+> the Pi to a browser that has already accepted it, but is not equivalent
+> to a certificate from a public authority.
 
 ## Safe updates
 
@@ -181,14 +194,18 @@ production deployment.
 --target PATH            Installation directory (default: /opt/pidecoder)
 --wayland-display NAME   Wayland socket name (default: wayland-0)
 --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
---port PORT              Web administration port (default: 8080)
+--port PORT              Web administration HTTP port (default: 8080)
+--https-port PORT        Web administration HTTPS port (default: 8443).
+                          Must differ from --port.
 --tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
                           self-signed one. Requires --tls-key.
 --tls-key PATH           Import the matching TLS private key (PEM). Requires
                           --tls-cert.
 --no-https               Do not install a certificate; serve the Web
-                          administration interface over plain HTTP instead.
-                          Mutually exclusive with --tls-cert/--tls-key.
+                          administration interface over plain HTTP only at
+                          install time. Mutually exclusive with --tls-cert/--tls-key.
+                          HTTPS can still be turned on later, with a
+                          certificate, from the Security tab.
 --skip-deps              Do not run apt-get
 --no-start               Install and enable units without starting them
 --check                  Validate the host and source without changing anything
@@ -215,7 +232,11 @@ sudo PIDECODER_ALLOW_UNSUPPORTED=1 ./scripts/install.sh
 
 ## HTTPS and TLS certificates
 
-The Web administration interface is served over HTTPS by default.
+The Web administration interface serves HTTP and HTTPS at the same time,
+each on its own independent port — 8080 and 8443 by default. Either one
+can be turned off on its own (see
+[Enabling/disabling HTTP or HTTPS from the Web UI](#enablingdisabling-http-or-https-from-the-web-ui)
+below), but not both at once, so the interface can never lock itself out.
 
 On a fresh install, if no certificate is imported, `install.sh` generates a
 self-signed one covering the Pi's hostname and its detected local IPv4
@@ -271,6 +292,28 @@ sudo ./scripts/manage-tls.sh enable              # restore/regenerate
 `key.pem.disabled`) instead of deleting it, so `enable` can restore the exact
 same certificate later.
 
+### Enabling/disabling HTTP or HTTPS from the Web UI
+
+The Security tab has two panels, "HTTPS" and "Accès HTTP" (HTTP access),
+mirroring each other: each lets you generate or import a certificate,
+switch the corresponding protocol on or off, and see its current status,
+without leaving the browser or touching SSH. Turning off the last
+remaining protocol is refused with a clear message, since that would cut
+off all access to the interface.
+
+### Changing the HTTP/HTTPS port numbers
+
+A third panel, "Ports de l'administration Web" (Web administration
+ports), lets you change the two port numbers directly, without a full
+reinstall. Applying a change restarts both the Web administration service
+and the video engine — a brief interruption of the on-screen video — so
+the startup overlay (IP/hostname/MAC/ports, see [step 4](#4-open-the-administration-interface))
+reflects the new ports immediately instead of waiting for the next
+natural restart. Unlike the hostname/IP change described below, there is
+no confirmation step or automatic rollback: a wrong port number can never
+lock you out of the Pi's network or SSH access the way a wrong IP address
+can.
+
 ## Software update from the Web UI
 
 The Système tab includes an update panel: it checks the Git repository
@@ -302,19 +345,22 @@ time servers, and set the timezone — without needing SSH access.
 
 Because a mistake in the hostname or IP address could otherwise cut off
 access to the Pi remotely, both of those changes include an automatic
-safety net: the new value is applied immediately, but if it is not
-confirmed from the Web UI (a "Confirm this change" button appears) within
-45 seconds, the Pi automatically reverts to the previous value. This
-safety net runs on the Pi itself and does not depend on your browser
-successfully reconnecting — it is designed specifically for the case
-where the change makes the page briefly or permanently unreachable at its
-old address.
+safety net: the new value is applied immediately, and a full-screen
+overlay with a "Confirm this change" button appears — checked for
+automatically as soon as you log back in, even in a fresh browser tab, so
+you don't need to remember to click back into the Réseau tab. If the
+change isn't confirmed within 120 seconds, the Pi automatically reverts
+to the previous value. This safety net runs on the Pi itself and does not
+depend on your browser successfully reconnecting — it is designed
+specifically for the case where the change makes the page briefly or
+permanently unreachable at its old address.
 
 Practical notes:
 
 - If you change the IP address, the page will likely become unreachable
-  at its old URL; reconnect at the new address within the 45-second
-  window to confirm the change, or it will revert on its own.
+  at its old URL; reconnect at the new address within the 120-second
+  window to confirm the change (the overlay gives you a direct link to
+  the new address), or it will revert on its own.
 - NTP and timezone changes are lower-risk (they cannot affect network
   reachability) and apply immediately without a confirmation step.
 - As with any change to the Pi's network configuration, keep a fallback

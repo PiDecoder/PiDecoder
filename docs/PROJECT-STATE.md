@@ -2,87 +2,40 @@
 
 ## Active version
 
-- Stable version: **v1.1.0** — native audio support in the Focus view
-  (see "v1.1 — audio support" below), field-tested and validated on the
-  Raspberry Pi with an Axis camera. Merged from
-  `feature/v1.1-audio-focus` into `main`, tagged, to be deployed on the
-  production Raspberry Pi (`olympus-vss-mon1`).
-- Base version: v1.0.0 (merged to `main`, tagged, deployed)
-- Active phase: v1.2 roadmap — end-to-end HTTPS, split into two steps
-  decided with the user: (1) HTTPS for the Web administration interface,
-  (2) RTSPS between the Pi and the cameras. Step 1 implemented on
-  `feature/v1.2-https` and confirmed working by the user on the
-  Raspberry Pi ("https good"); two follow-up rounds — SSH-based
-  certificate management (`--no-https`, `manage-tls.sh`) and, per the
-  user's explicit request, the same certificate management plus a full
-  HTTPS on/off toggle exposed directly in the Web UI's Sécurité tab —
-  are implemented and validated in the sandbox but **not yet
-  field-tested** (see "v1.2 — HTTPS" below). Step 2 abandoned by
-  explicit user decision after checking Axis's own documentation (see
-  "Step 2" below for why) — not worth the complexity for a feature
-  that's unlikely to ever be used.
-- v1.3 — per the user's explicit request, a one-click software update
-  (check + install from the Web UI) and a full network configuration
-  panel (hostname, DHCP/static IP, NTP, timezone), with automatic
-  rollback if a hostname/IP change would otherwise lock the user out.
-  Implemented and thoroughly exercised against a fake-binary integration
-  harness (`nmcli`/`hostnamectl`/`timedatectl`/`systemd-run`/`runuser`/
-  `systemctl` stand-ins, plus real local git repositories for the update
-  check/pull logic) — **but never against real NetworkManager,
-  systemd-timesyncd, hostnamed or actual Raspberry Pi hardware.** See
-  "v1.3 — Software update and network configuration" below, in
-  particular the field-testing caution at the end of that section, before
-  trying the IP/DHCP toggle on the production Pi. First round of field
-  feedback from the user led to a follow-up: a `check_update` bug fix
-  (see "Follow-up after first field feedback" under that section), a
-  rework of the confirm/rollback countdown UX (full-screen overlay
-  instead of a polling banner), and a new small feature — the Pi's
-  IP/hostname/Web-port shown as an overlay on the player's own screen for
-  30s at startup (or on demand via a keyboard shortcut) — whose C++ half
-  has never been built in this environment (no SDL2/mpv dev headers
-  available here) and needs a first real `sudo ./scripts/install.sh` on
-  the Pi to confirm it even compiles. A second round of field feedback
-  found the first `check_update` fix incomplete (real cause: `runuser`
-  blocked by `pidecoder-config.service`'s `SystemCallFilter`, now routed
-  through `run_sync_unsandboxed()` like every other privileged op) and the
-  confirm overlay still not appearing reliably after an IP change
-  (`showApp()` now checks for a pending change on login instead of
-  waiting for a manual tab click, and the auto-revert delay was raised
-  from 45 to 120s) — see "Follow-up after second field feedback" under
-  that section. A third round dropped the visible ticking countdown
-  entirely (the change is applied near-instantly in practice, so a timer
-  that visibly counted down was misleading) in favor of a static popup
-  with just a "Confirm" button; the 120s auto-revert safety net is
-  unchanged, only the UI display was simplified — see "Follow-up after
-  third field feedback" under that section. A fourth round fixed a race
-  where the popup could reappear right after clicking Confirm
-  (`confirm_change()` now updates the status file immediately instead of
-  waiting up to a second for the detached script's own poll loop to
-  notice) — see "Follow-up after fourth field feedback" under that
-  section. A fifth round fixed the player-side startup overlay never
-  appearing at all (its text was computed exactly once, in the
-  constructor, and stayed frozen empty forever if the network wasn't
-  ready at that exact instant — now recomputed on every call) and added
-  the MAC address to it — its root cause turned out to be a systemd
-  sandbox setting (`RestrictAddressFamilies` missing `AF_NETLINK`)
-  blocking the netlink socket `getifaddrs()` needs, confirmed fixed on
-  the Pi; the overlay was then redesigned as a small bordered two-line
-  card, and a follow-up round fixed that card rendering too small on
-  the real screen (the line-height range was too low to ever reach the
-  bitmap font's "large" size), confirmed good on the Pi — see
-  "Follow-up after fifth field feedback" under that section. Right
-  after, three more requests, all confirmed working on the Pi: HTTP and
-  HTTPS now run on two independent, separately configurable ports instead
-  of one port that used to switch protocol (see the same section, and
-  "v1.2 — HTTPS" below); a suspected "update reverts static IP to DHCP"
-  bug turned out not to be caused by the update at all, and the user
-  confirmed a static IP now survives an update; and the two port numbers
-  can now be edited directly from the Sécurité tab (immediate restart of
-  the video engine so the player's overlay reflects the new ports right
-  away, per the user's explicit choice) — not yet field-tested, see the
-  same section.
+- Stable version: **v1.2.0** — HTTPS for the Web administration
+  interface (HTTP and HTTPS on two independent, editable ports, each
+  individually enabled/disabled, certificate managed from the Web UI or
+  SSH), a one-click software update from the Web UI, a full network
+  configuration panel (hostname, DHCP/static IP, NTP, timezone) with an
+  automatic confirm-or-revert safety net, and an on-screen
+  IP/hostname/MAC/port overlay on the player's own screen at startup or
+  on the **I** key. Everything below this line up to "v1.1 — audio
+  support" documents how this version was built, across many rounds of
+  field feedback on the real Raspberry Pi. To be merged from
+  `feature/v1.2-https` into `main` and tagged.
+  - **Confirmed working on the Pi**: the startup overlay (sizing and
+    display bug both fixed), HTTP/HTTPS on two independent ports with
+    on/off toggles, hostname/IP change with its confirm/auto-revert
+    safety net (after four rounds of real-hardware bug fixes), a static
+    IP surviving a software update, and editing the HTTP/HTTPS port
+    numbers from the Sécurité tab.
+  - **Not field-tested**: NTP server and timezone configuration
+    specifically (exercised only against a fake-binary sandbox harness —
+    `nmcli`/`hostnamectl`/`timedatectl`/`systemd-run`/`runuser`/
+    `systemctl` stand-ins). These share the exact same privileged-change
+    mechanism already proven for hostname/IP, so the risk is considered
+    low, but it's worth a quick real check post-release since there's no
+    lockout risk on either setting.
+  - Step 2 of the original HTTPS roadmap item (RTSPS between the Pi and
+    the cameras) was abandoned by explicit user decision after checking
+    Axis's own documentation (see "Step 2" below for why) — not worth
+    the complexity for a feature that's unlikely to ever be used.
+- Base version: v1.1.0 — native audio support in the Focus view (see
+  "v1.1 — audio support" below), field-tested and validated on the
+  Raspberry Pi with an Axis camera. Merged to `main`, tagged, deployed.
+- v1.0.0 (merged to `main`, tagged, deployed)
 
-## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
+## v1.2.0, part 1 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
 Per the roadmap, v1.2 adds HTTPS. The user asked to secure "the stream"
 too; since PiDecoder's video is decoded natively on the Pi's own screen
@@ -378,7 +331,7 @@ going anywhere near production. Left here for reference if revisited
 later — keep the RTSPS/SRTP distinction and the Axis port-322 specifics
 in mind.
 
-## v1.3 — Software update and network configuration (Web UI)
+## v1.2.0, part 2 — Software update, network configuration and port editing (Web UI)
 
 Per the user's explicit request ("Un check update depuis la page web ca
 serrait trop bien... possibilité de passé le pi en adresse manuel ou dhcp
@@ -590,8 +543,9 @@ small feature request:
   only in the initial "pending" write) — fixed, since the redirect link
   needs the new address from that same status.
 - **Startup IP overlay on the player screen** — a new, separate small
-  feature requested at the same time (not a fix): see "v1.3 —
-  Software update and network configuration" is the Web UI half; the
+  feature requested at the same time (not a fix): see "v1.2.0, part 2 —
+  Software update, network configuration and port editing" for the Web
+  UI half; the
   player-side half is `src/NetworkInfo.cpp` plus the
   `Renderer::draw_startup_info_overlay`/`Application::show_startup_info_overlay`
   changes, documented in the Changelog entry for this round. Same

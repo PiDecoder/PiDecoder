@@ -1,6 +1,15 @@
 # Changelog
 
-## 1.3 (nouveau — testé en bac à sable, jamais sur le Pi réel)
+## 1.2.0 — HTTPS, mise à jour Web, configuration réseau et gestion des ports (2026-09-16)
+
+Version publiée regroupant tout ce qui a été construit depuis la
+v1.1.0 : HTTPS pour l'interface d'administration (avec HTTP et HTTPS sur
+deux ports indépendants, éditables depuis la Web UI), la mise à jour en
+un clic, le panneau de configuration réseau (nom d'hôte, IP DHCP/manuelle,
+NTP, fuseau horaire) avec son filet de sécurité automatique, et l'overlay
+IP/nom d'hôte/MAC/ports affiché sur l'écran du player au démarrage. Le
+détail ci-dessous liste chaque fonctionnalité avec son propre historique
+de tests (bac à sable puis retours terrain successifs sur le Pi réel).
 
 ### HTTP et HTTPS sur deux ports distincts (demande explicite)
 
@@ -453,26 +462,30 @@ frappe sur l'adresse IP.
   systemd et ne suffit pas cette fois-ci, même en l'absence de
   changement C++.**
 
-**Tests effectués et leurs limites.** Contrairement à la plupart des
-tournées précédentes, ce lot a été testé de bout en bout dans un bac à
-sable avec des exécutables factices (`nmcli`, `hostnamectl`,
-`timedatectl`, `systemd-run`, `runuser`, `systemctl`) et de vrais dépôts
-Git locaux : cycle complet nom d'hôte/IP (appliqué → confirmé, et
-appliqué → annulé automatiquement faute de confirmation), rejets de
-validation (connexion inconnue, IP sans masque, serveur NTP invalide,
-fuseau horaire invalide), et mise à jour complète (vérification, git
-pull + install.sh réussis, et le cas d'échec d'install.sh). **Ce lot n'a
-en revanche jamais été testé contre un vrai NetworkManager, un vrai
-systemd-timesyncd/hostnamed, ni sur le Raspberry Pi physique.**
-Recommandation avant de l'utiliser en production : tester d'abord le nom
-d'hôte, le NTP et le fuseau horaire (aucun risque de perte d'accès), et
-ne tester la bascule IP/DHCP qu'en gardant un second accès au Pi ouvert
-(écran/clavier branchés, ou une seconde session SSH sur une connexion
-qui ne dépend pas de l'adresse en cours de changement).
+**Tests effectués.** Avant tout retour terrain, ce lot a été testé de bout
+en bout dans un bac à sable avec des exécutables factices (`nmcli`,
+`hostnamectl`, `timedatectl`, `systemd-run`, `runuser`, `systemctl`) et de
+vrais dépôts Git locaux : cycle complet nom d'hôte/IP (appliqué →
+confirmé, et appliqué → annulé automatiquement faute de confirmation),
+rejets de validation (connexion inconnue, IP sans masque, serveur NTP
+invalide, fuseau horaire invalide), et mise à jour complète (vérification,
+git pull + install.sh réussis, et le cas d'échec d'install.sh).
 
-## 1.2 (en cours — étape 1 confirmée sur le Pi par l'utilisateur)
+**Depuis, testé pour de vrai sur le Pi et confirmé** pour l'essentiel du
+lot : le changement d'IP manuelle (avec son filet de sécurité et son
+popup de confirmation, voir les quatre rounds de correctifs juste
+au-dessus) et la mise à jour en un clic ont chacun été éprouvés sur le
+matériel réel, avec plusieurs bugs trouvés et corrigés en cours de route ;
+l'utilisateur a également confirmé qu'une IP manuelle survit désormais à
+une mise à jour (« il a bien garder l'ip manuel après update »). Ce qui
+n'a en revanche **pas fait l'objet d'un retour terrain explicite** :
+la configuration NTP et le changement de fuseau horaire spécifiquement
+(le mécanisme sous-jacent est le même que pour le nom d'hôte/IP, déjà
+validé, mais ces deux réglages précis n'ont pas été testés séparément par
+l'utilisateur) — à essayer en priorité une fois en production, sans risque
+de perte d'accès contrairement au changement d'IP.
 
-### HTTPS pour l'interface d'administration (étape 1/2)
+### HTTPS pour l'interface d'administration (étape 1/2, confirmé sur le Pi)
 
 Premier volet du chantier HTTPS de bout en bout : la page Web
 d'administration. Le chiffrement du flux RTSP entre le Pi et les caméras

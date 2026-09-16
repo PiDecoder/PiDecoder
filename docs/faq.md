@@ -239,6 +239,10 @@ sudo systemctl restart pidecoder-wayland.path
 
 ## How do I update PiDecoder?
 
+Since v1.2.0, the easiest way is the **Update** panel in the System tab of the Web interface: it checks the Git repository against its remote branch and offers a one-click update when a new version is available. It runs the same installer under the hood, so runtime configuration and network settings (including HTTP/HTTPS ports) are preserved the same way as a manual update.
+
+The manual way still works, over SSH:
+
 ```bash
 cd PiDecoder
 git pull
@@ -293,9 +297,9 @@ Redact private values before publishing.
 
 ## Is HTTPS included?
 
-Not in v1.1.0.
+Yes, since v1.2.0. The Web administration interface can serve HTTP and HTTPS at the same time, each on its own port (8080/8443 by default, both editable from the Security tab). A self-signed certificate is generated automatically on first install; it can be regenerated, replaced with your own certificate/key pair, or the whole HTTPS listener can be turned off, all from the Security tab (or over SSH with `scripts/manage-tls.sh`). Either protocol can be disabled independently, but not both at once, so the Web interface can never be locked out.
 
-The current Web service uses HTTP. Keep it on a trusted network. HTTPS is listed as a planned roadmap item, not a current feature.
+Note that this only covers the Web administration interface. The RTSP video stream between the Pi and the cameras is not encrypted (RTSPS): it was evaluated and set aside, since it depends on each camera's own support and isn't worth the added complexity for a stream that never leaves the local network.
 
 ## Is PTZ fully available?
 

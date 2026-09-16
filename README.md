@@ -10,7 +10,7 @@
   <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
     <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
   </a>
-  <img src="https://img.shields.io/badge/release-v1.1.0-7A1F5C" alt="Release v1.1.0">
+  <img src="https://img.shields.io/badge/release-v1.2.0-7A1F5C" alt="Release v1.2.0">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
   <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
@@ -28,11 +28,23 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v1.1.0** is the current stable release. It adds native audio playback in the
-> focus view on top of the v1.0.0 stable public release.
+> **PiDecoder v1.2.0** is the current stable release. It adds HTTPS for the Web
+> administration interface (HTTP and HTTPS on two independent, editable ports),
+> a one-click software update and a full network configuration panel (hostname,
+> DHCP/static IP, NTP, timezone) with automatic rollback on a lockout-prone change,
+> and an on-screen IP/hostname/MAC/port overlay at startup — on top of the native
+> audio support introduced in v1.0.0 and v1.1.0.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
 > Native PTZ movement, optical zoom, Stop and preset selection are available and have been
 > field-tested with an Axis Q6074.
+>
+> HTTPS is on by default with a self-signed certificate generated on first install; the
+> certificate, the HTTP/HTTPS ports and either protocol's on/off state can all be changed
+> from the Security tab without SSH access. The hostname/IP/NTP/timezone panel and the
+> one-click update button have been field-tested and had several real bugs fixed as a
+> result — see [`CHANGELOG.md`](CHANGELOG.md) for the full trail. NTP and timezone changes
+> specifically have not had a dedicated field test, though they share the same proven
+> mechanism as the hostname/IP change.
 >
 > Audio is opt-in per camera and validated with an Axis camera (RTSP stream with an enabled
 > microphone). The Aqara G410 intercom has a known residual audio issue that does not affect
@@ -90,10 +102,12 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 | Digital zoom and pan | Mosaic stays silent by design, whatever the setting | Optical zoom and forced Stop | Full screen at startup toggle | Keyboard shortcuts panel |
 | On-screen digital zoom percentage | Per-camera flag also protects mosaic latency for cameras without audio | Native preset selector | Grid-too-small guardrails | Configuration export and import |
 | Native Raspberry Pi display (SDL2/OpenGL, no browser needed) | | PTZ overlay auto-hide | | Rate-limited authentication with lockout |
-| On-screen IP/hostname/Web-port overlay, 30s at startup or on demand with the **I** key | | | | One-click software update check and install |
+| On-screen IP/hostname/MAC/Web-port overlay, 30s at startup or on demand with the **I** key | | | | One-click software update check and install |
 | | | | | Hostname, IP (DHCP/static), NTP and timezone configuration, with automatic rollback |
-| | | ONVIF/PTZ metadata preserved on camera save | | systemd sandboxing per service, credential redaction in logs |
+| | | ONVIF/PTZ metadata preserved on camera save | | HTTPS by default, HTTP and HTTPS on two independent ports, each individually enabled/disabled |
+| | | | | HTTP/HTTPS ports editable, and TLS certificate managed, from the Web UI (no SSH needed) |
 | | | | | Link to the [GitHub repository](https://github.com/PiDecoder/PiDecoder) in the header |
+| | | | | systemd sandboxing per service, credential redaction in logs |
 
 ## Native PTZ controls
 
@@ -208,7 +222,10 @@ Open the administration interface at:
 
 ```text
 http://RASPBERRY_PI_IP:8080
+https://RASPBERRY_PI_IP:8443
 ```
+
+Both HTTP and HTTPS are active by default, each on its own port; both are editable — and either protocol can be turned off — from the Security tab. See [`docs/installation.md`](docs/installation.md#https-and-tls-certificates) for details.
 
 ## Safe updates
 
@@ -225,7 +242,7 @@ Existing runtime configuration is preserved automatically before the new version
 
 ```text
 pidecoder-config.service
-└── Web administration on port 8080
+└── Web administration on ports 8080 (HTTP) and 8443 (HTTPS)
 
 pidecoder-ptz.service
 └── persistent local ONVIF PTZ bridge
@@ -279,7 +296,7 @@ journalctl -u pidecoder.service -n 50 --no-pager
 | PTZ transport | ONVIF through a local Unix socket bridge |
 | Administration | Python 3 Web service |
 
-Other Linux platforms may work, but they are not yet part of the validated v1.1 target.
+Other Linux platforms may work, but they are not yet part of the validated v1.2 target.
 
 ## Current validation status
 
@@ -307,6 +324,12 @@ Other Linux platforms may work, but they are not yet part of the validated v1.1 
 | FR/EN translation parity (frontend and backend) | Passed in CI |
 | Login rate limiting and lockout | Passed in CI |
 | Credential redaction in service logs | Passed in CI |
+| HTTPS by default, self-signed certificate generation and import | Passed on the Pi |
+| HTTP/HTTPS independent on/off toggle and port editing from the Web UI | Passed on the Pi |
+| On-screen IP/hostname/MAC/port overlay at startup and on the **I** key | Passed on the Pi |
+| One-click software update from the Web UI, including a forced-failure rollback | Passed on the Pi |
+| Hostname/IP change with confirm-or-auto-revert safety net, including across a software update | Passed on the Pi |
+| NTP server and timezone configuration | Passed in a sandbox with fake system tools only, not yet field-tested |
 
 The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.
@@ -317,7 +340,7 @@ Administrator credentials are configured separately and are not included in the 
 |---|---|---|
 | v1.0.0 | Released | First stable public release, native PTZ and bilingual FR/EN Web UI |
 | v1.1.0 | Released | Native audio support in the focus view, validated on Axis |
-| v1.2 | Planned | HTTPS |
+| v1.2.0 | Released | HTTPS on independent, editable HTTP/HTTPS ports; one-click software update; network configuration (hostname, IP, NTP, timezone) with automatic rollback; startup IP/MAC/port overlay |
 | v1.3 | Planned | REST API |
 | v2.0 | Long-term | Multi-Raspberry cluster |
 

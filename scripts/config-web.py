@@ -11,7 +11,7 @@ from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_fo
 from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
 import system_admin as sysadmin
 
-VERSION='1.1.0-dev'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='1.2.0'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 # Le serveur HTTPS, quand il tourne (voir main()) — pas forcément celui qui a
 # reçu la requête en cours : HTTP et HTTPS écoutent maintenant sur deux ports
 # distincts en parallèle (voir "Server" et main()), donc self.server dans un
