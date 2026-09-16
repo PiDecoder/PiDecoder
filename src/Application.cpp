@@ -73,6 +73,7 @@ int Application::run()
 
         initialize_players();
         show_startup_info_overlay();
+        note_pointer_activity();
 
         std::cout
             << "PiDecoder v"
@@ -119,6 +120,7 @@ int Application::run()
 
             update_inspection_animation();
             update_ptz_overlay_visibility();
+            update_cursor_visibility();
 
             if (redraw_requested_) {
                 render();
@@ -241,6 +243,10 @@ void Application::process_sdl_event(
         stop_ptz_command();
         running_ = false;
         return;
+    }
+
+    if (event.type == SDL_MOUSEMOTION) {
+        note_pointer_activity();
     }
 
     if (
@@ -1342,6 +1348,32 @@ void Application::update_ptz_overlay_visibility() noexcept
         ptz_overlay_visible_ = false;
         redraw_requested_ = true;
     }
+}
+
+void Application::note_pointer_activity() noexcept
+{
+    cursor_hide_at_ =
+        std::chrono::steady_clock::now() +
+        cursor_idle_timeout_;
+
+    if (!cursor_visible_) {
+        SDL_ShowCursor(SDL_ENABLE);
+        cursor_visible_ = true;
+    }
+}
+
+void Application::update_cursor_visibility() noexcept
+{
+    if (
+        !cursor_visible_ ||
+        std::chrono::steady_clock::now() <
+            cursor_hide_at_
+    ) {
+        return;
+    }
+
+    SDL_ShowCursor(SDL_DISABLE);
+    cursor_visible_ = false;
 }
 
 bool Application::zoom_indicator_visible() const noexcept

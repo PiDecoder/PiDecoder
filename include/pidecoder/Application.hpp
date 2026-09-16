@@ -91,6 +91,9 @@ private:
     void show_ptz_overlay() noexcept;
     void update_ptz_overlay_visibility() noexcept;
 
+    void note_pointer_activity() noexcept;
+    void update_cursor_visibility() noexcept;
+
     void clamp_inspection_center() noexcept;
 
     [[nodiscard]] bool zoom_indicator_visible() const noexcept;
@@ -136,6 +139,24 @@ private:
 
     std::chrono::steady_clock::time_point
         ptz_overlay_until_{};
+
+    /*
+     * Curseur masqué après quelques secondes d'immobilité, comme sur un
+     * mur d'images classique — sans ça, le curseur (souris USB restée
+     * branchée, ou trackpad du BIOS/clavier de maintenance) reste affiché
+     * en permanence au milieu de la mosaïque. Jamais implémenté avant
+     * l'image SD (voir CHANGELOG) : le seul poste déjà validé sur le
+     * terrain tournait sur Raspberry Pi OS Desktop, dont l'environnement
+     * de bureau s'en chargeait lui-même ; l'image, elle, ne fait tourner
+     * que labwc seul, qui ne masque le curseur d'aucun client à sa place.
+     * Repose uniquement sur SDL_ShowCursor, portable et déjà utilisé par
+     * le projet — pas de dépendance à une fonctionnalité particulière du
+     * compositeur.
+     */
+    bool cursor_visible_{true};
+
+    std::chrono::steady_clock::time_point
+        cursor_hide_at_{};
 
     Grid grid_;
 
@@ -211,6 +232,9 @@ private:
 
     static constexpr std::chrono::seconds
         startup_info_duration_{30};
+
+    static constexpr std::chrono::seconds
+        cursor_idle_timeout_{3};
 };
 
 } // namespace pidecoder

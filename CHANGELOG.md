@@ -83,6 +83,26 @@ puisque sur ces images userconfig.service *remplace* getty@tty1, désactivé.
 Deux vérifications ont été ajoutées en fin de construction : que l'assistant
 est bien masqué, et que l'utilisateur de l'image existe toujours.
 
+### Retour terrain : le curseur de souris ne disparaissait plus
+
+Le curseur restait affiché en permanence au milieu de la mosaïque, même
+sans y toucher — jamais remarqué avant l'image SD, tout simplement parce
+que ce comportement n'a jamais été implémenté dans le moteur natif
+lui-même : le seul poste déjà validé sur le terrain (`olympus-vss-mon1`)
+tourne sur Raspberry Pi OS Desktop, dont l'environnement de bureau s'en
+chargeait à la place de l'application. L'image, elle, ne fait tourner que
+labwc seul — rien qui masque le curseur d'un client à sa place.
+
+Ajouté dans `Application.cpp`/`Application.hpp` : le curseur se masque
+après 3 secondes sans mouvement de souris (`SDL_ShowCursor`, déjà utilisé
+ailleurs dans le projet — portable, sans dépendance à une fonctionnalité
+particulière du compositeur), et réapparaît au moindre mouvement. Même
+principe déjà utilisé pour l'overlay PTZ et l'indicateur audio (minuteur
+`std::chrono::steady_clock` remis à zéro à chaque activité).
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh` (recompilation),
+pas seulement `sync-dev.sh`.
+
 ### Retour terrain : écran noir au premier démarrage tant qu'aucune caméra n'est configurée
 
 Le passage sur Bookworm a corrigé le plantage du mur vidéo, mais un souci
