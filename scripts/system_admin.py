@@ -333,6 +333,48 @@ def update_status(root: Path) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Accès SSH
+# --------------------------------------------------------------------------
+
+def ssh_status() -> dict:
+    """État actif/activé du service SSH, lu directement dans ce process.
+
+    Simple lecture (`systemctl is-active`/`is-enabled`), donc pas besoin de
+    passer par `run_sync_unsandboxed()` — exactement le même principe que
+    `/api/service-status` dans config-web.py pour pidecoder.service. `ssh`
+    est le nom d'unité standard sur Raspberry Pi OS (celui qu'utilise aussi
+    raspi-config), présent mais désactivé par défaut sur l'image PiDecoder
+    (voir build-image.sh : openssh-server est installé, mais jamais activé).
+    """
+    try:
+        active = subprocess.run(
+            ['systemctl', 'is-active', '--quiet', 'ssh'], check=False,
+        ).returncode == 0
+        enabled = subprocess.run(
+            ['systemctl', 'is-enabled', '--quiet', 'ssh'], check=False,
+        ).returncode == 0
+    except OSError:
+        return {'supported': False}
+    return {'supported': True, 'active': active, 'enabled': enabled}
+
+
+def set_ssh_enabled(enabled: bool) -> subprocess.CompletedProcess:
+    """Active (ou désactive) le service SSH, hors du bac à sable de
+    pidecoder-config.service.
+
+    `systemctl enable/disable` écrit un lien symbolique sous
+    /etc/systemd/system — interdit par `ProtectSystem=strict` — et `--now`
+    déclenche en plus un aller-retour D-Bus avec systemd (activation
+    immédiate du service), deux opérations hors de `ReadWritePaths` de ce
+    service. Même contrainte, même solution que pour la mise à jour
+    logicielle et les changements réseau (voir le docstring du module) :
+    déléguée à une unité systemd-run indépendante.
+    """
+    action = 'enable' if enabled else 'disable'
+    return run_sync_unsandboxed(f'systemctl {action} --now ssh', timeout=15)
+
+
+# --------------------------------------------------------------------------
 # Réseau : lecture d'état
 # --------------------------------------------------------------------------
 

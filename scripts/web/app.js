@@ -220,7 +220,7 @@ function updateVersionLabel(){
 async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();if(!s.authenticated){showLogin()}else if(s.must_change){showFirstRun()}else{showApp()}}
 async function doLogin(e){e.preventDefault();le.textContent='';try{const r=await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';r.must_change?showFirstRun():showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
-function tab(id,b){for(let x of ['cams','layout','sys','network','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo();updateStatusRefresh()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}if(id==='network'){networkRefresh()}}
+function tab(id,b){for(let x of ['cams','layout','sys','network','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo();updateStatusRefresh()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus();sshRefreshStatus()}if(id==='network'){networkRefresh()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;audioDefault.checked=!!cfg.layout.focus_audio_default_on;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
@@ -1335,6 +1335,40 @@ async function httpToggle(){
   }catch(e){
     toast(e.message,true);
     httpToggleButton.disabled=false;
+  }
+}
+
+async function sshRefreshStatus(){
+  try{
+    renderSshStatus(await api('/api/ssh/status'));
+  }catch(e){
+    sshStatus.textContent=e.message;
+  }
+}
+
+function renderSshStatus(r){
+  if(!r.supported){
+    sshToggleButton.disabled=true;
+    sshStatus.textContent=t('ssh.unsupported');
+    return;
+  }
+  const active=!!r.active;
+  sshToggleButton.textContent=active?t('ssh.disable_button'):t('ssh.enable_button');
+  sshToggleButton.dataset.action=active?'disable':'enable';
+  sshToggleButton.disabled=false;
+  sshStatus.innerHTML=`<strong>${esc(active?t('ssh.status_active'):t('ssh.status_inactive'))}</strong>`;
+}
+
+async function sshToggle(){
+  const action=sshToggleButton.dataset.action;
+  sshToggleButton.disabled=true;
+  try{
+    await api(`/api/ssh/${action}`,{method:'POST',body:'{}'});
+    toast(action==='enable'?t('ssh.enabled_toast'):t('ssh.disabled_toast'));
+    sshRefreshStatus();
+  }catch(e){
+    toast(e.message,true);
+    sshToggleButton.disabled=false;
   }
 }
 

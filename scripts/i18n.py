@@ -177,6 +177,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Impossible de déterminer l\'utilisateur du service vidéo',
         'en': 'Unable to determine the video service user',
     },
+    'ssh.enable_failed': {
+        'fr': 'Échec de l\'activation de SSH : {error}',
+        'en': 'Failed to enable SSH: {error}',
+    },
+    'ssh.disable_failed': {
+        'fr': 'Échec de la désactivation de SSH : {error}',
+        'en': 'Failed to disable SSH: {error}',
+    },
     'network.invalid_hostname': {
         'fr': 'Nom d\'hôte invalide (lettres, chiffres et tirets, 63 caractères maximum)',
         'en': 'Invalid hostname (letters, digits and hyphens, 63 characters max)',

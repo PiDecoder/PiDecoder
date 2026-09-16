@@ -1237,6 +1237,8 @@ class H(BaseHTTPRequestHandler):
             return self.j(sysadmin.check_update(self.server.repo_path,sysadmin.get_service_user()))
         if p=='/api/update/status':
             return self.j(sysadmin.update_status(self.server.root))
+        if p=='/api/ssh/status':
+            return self.j(sysadmin.ssh_status())
         if p=='/api/network/status':
             nmcli_ok=sysadmin.nmcli_available()
             return self.j({
@@ -1676,6 +1678,16 @@ class H(BaseHTTPRequestHandler):
                     self.server.https_port,skip_deps,
                 )
                 return self.j({'ok':True,'started':True})
+            if p=='/api/ssh/enable':
+                result=sysadmin.set_ssh_enabled(True)
+                if result.returncode!=0:
+                    raise ValueError(i18n_t('ssh.enable_failed',self.lang(),error=(result.stderr or result.stdout or '').strip()))
+                return self.j({'ok':True})
+            if p=='/api/ssh/disable':
+                result=sysadmin.set_ssh_enabled(False)
+                if result.returncode!=0:
+                    raise ValueError(i18n_t('ssh.disable_failed',self.lang(),error=(result.stderr or result.stdout or '').strip()))
+                return self.j({'ok':True})
             if p=='/api/network/hostname':
                 d=self.body()
                 try:

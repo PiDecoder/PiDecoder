@@ -59,6 +59,22 @@ qui a tapé les commandes.
   est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
   le même script, sans variante.
 
+### Bouton « Activer SSH » dans la page Web (demande explicite)
+
+SSH est installé mais désactivé par défaut sur l'image (voir plus haut, clés
+d'hôte régénérées au premier démarrage) — jusqu'ici, l'activer demandait un
+accès physique à l'écran/clavier du Pi (console locale, ou modifier la carte
+SD sur un autre poste). Nouveau panneau dans l'onglet Sécurité de la page
+Web : bouton pour activer (et désactiver) SSH à la volée, sans redémarrage
+du service Web ni du moteur vidéo.
+
+Même contrainte de conception que la mise à jour logicielle et les
+changements réseau (voir `system_admin.py`) : `pidecoder-config.service`
+tourne avec `ProtectSystem=strict`, qui interdirait l'écriture du lien
+`/etc/systemd/system/...` que fait `systemctl enable`. L'activation est donc
+déléguée à une unité `systemd-run` indépendante, hors de ce bac à sable —
+même mécanisme, pas de nouvelle dérogation à ajouter au service.
+
 ### Retour terrain : l'assistant de Raspberry Pi OS renommait l'utilisateur de l'image
 
 Première carte réellement flashée, et un seul défaut expliquait tous les
