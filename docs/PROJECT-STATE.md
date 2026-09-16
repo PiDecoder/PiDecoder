@@ -59,7 +59,12 @@
   (`confirm_change()` now updates the status file immediately instead of
   waiting up to a second for the detached script's own poll loop to
   notice) — see "Follow-up after fourth field feedback" under that
-  section.
+  section. A fifth round fixed the player-side startup overlay never
+  appearing at all (its text was computed exactly once, in the
+  constructor, and stayed frozen empty forever if the network wasn't
+  ready at that exact instant — now recomputed on every call) and added
+  the MAC address to it — see "Follow-up after fifth field feedback"
+  under that section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -660,6 +665,43 @@ timing. Verified end-to-end with a simulated IP change (delay shortened
 for the test only, never in shipped code): status reads `None` from
 `pending_change()` immediately after `confirm_change()` returns, no
 window where the popup could reappear.
+
+### Follow-up after fifth field feedback: startup overlay never appeared on screen, + MAC address
+
+The user reported the player-side IP/hostname/web-port overlay (see
+"Affichage de l'IP..." in the Changelog) simply never showed up on the
+actual screen, neither at startup nor via the **I** key. Found on review:
+`startup_info_text_` was computed exactly **once**, in `Application`'s
+constructor — i.e. before SDL was even initialized, and therefore
+potentially before the Pi's network was actually ready (the systemd unit
+waits on `network-online.target`, but that's not an absolute guarantee
+depending on whether `NetworkManager-wait-online.service` is enabled). If
+`getifaddrs()` found no active interface at that exact instant, the text
+stayed empty for the **entire remaining process lifetime** — including
+for the I key, which only re-read that same frozen (empty) string instead
+of recomputing it. Fixed: `show_startup_info_overlay()` now recomputes
+the text on every call (both at startup and on I) instead of trusting a
+value captured once — which also means I now reflects an IP change made
+from the Web UI without needing to restart the player.
+`Application::startup_info_text_`'s constructor initializer was removed
+accordingly (see the updated comment on that member in
+`Application.hpp`).
+
+Also added, per explicit request: the **MAC address** in the overlay
+(useful for a DHCP reservation, for instance). `NetworkInfo.cpp` now also
+looks up, via `getifaddrs()`, the `AF_PACKET` entry for the *same*
+interface that carries the displayed IPv4 address (not an arbitrary
+interface's MAC if more than one exists) — e.g. `IP 192.168.1.50 MAC
+AA:BB:CC:DD:EE:FF HOTE PIDECODER-PI WEB :8080`.
+
+**Testing**: `NetworkInfo.cpp` (still dependency-free) was compiled and
+run here, MAC address included and correctly tied to the chosen
+interface. `Application.cpp`/`Application.hpp` were not touched on the
+rendering side this round — only when the text is computed — but still
+could not be compiled in this sandbox (no SDL2/mpv dev headers, same
+long-standing limitation). First thing to check on the Pi after `sudo
+./scripts/install.sh`: that the overlay now actually appears, both at
+startup and via I, and that it includes the MAC address.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

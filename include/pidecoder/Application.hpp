@@ -163,11 +163,20 @@ private:
         audio_indicator_until_{};
 
     /*
-     * Adresse IP/nom d'hôte/port Web calculés une seule fois au
-     * démarrage (ne peut pas changer en cours d'exécution sans
-     * redémarrage du service, voir NetworkInfo.hpp) — vide si aucune
-     * interface réseau active n'a été trouvée, auquel cas l'overlay ne
-     * s'affiche jamais plutôt que d'afficher une chaîne vide.
+     * Adresse IP/MAC/nom d'hôte/port Web affichés par l'overlay de
+     * démarrage — voir NetworkInfo.hpp. Recalculé à chaque appel de
+     * show_startup_info_overlay() (démarrage et raccourci clavier I),
+     * PAS une seule fois pour toutes à la construction : sinon, si le
+     * réseau n'était pas encore prêt pile à cet instant (juste après
+     * initialize_players() dans run(), avant que network-online.target
+     * ne soit une garantie absolue selon la configuration
+     * NetworkManager), ce champ restait vide pour le reste de
+     * l'exécution — y compris pour le raccourci clavier, censé pouvoir
+     * le rappeler à tout moment. Recalculer permet aussi de refléter un
+     * changement d'IP fait depuis la page Web sans redémarrer le player.
+     * Vide si aucune interface réseau active n'a été trouvée au moment
+     * de l'appel, auquel cas l'overlay ne s'affiche pas plutôt que
+     * d'afficher une chaîne vide.
      */
     std::string startup_info_text_;
 

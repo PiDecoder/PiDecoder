@@ -38,6 +38,40 @@ changement d'IP/DHCP fait depuis la page Web (voir ci-dessus).
   premier lieu sur le Pi : que `sudo ./scripts/install.sh` compile bien
   sans erreur.
 
+### Corrections sur l'overlay IP du player : bug d'affichage + adresse MAC
+
+Retour terrain : l'overlay IP/nom d'hôte/port Web ne s'affichait jamais à
+l'écran, ni au démarrage ni via la touche **I**. Cause trouvée à la
+relecture : `startup_info_text_` (le texte de l'overlay) n'était calculé
+**qu'une seule fois**, dans le constructeur d'`Application` — c'est-à-dire
+avant même l'initialisation de SDL, et donc potentiellement avant que le
+réseau du Pi ne soit complètement prêt (l'unité systemd attend bien
+`network-online.target`, mais ce n'est pas une garantie absolue selon que
+`NetworkManager-wait-online.service` est actif ou non). Si `getifaddrs()`
+ne trouvait aucune interface active à ce moment précis, le texte restait
+vide **pour le reste de l'exécution** — y compris pour la touche I, qui ne
+faisait que relire ce même texte figé au lieu de le recalculer. Corrigé :
+`show_startup_info_overlay()` recalcule désormais l'IP/le nom d'hôte à
+chaque appel (démarrage *et* touche I) plutôt que de se fier à une valeur
+capturée une fois pour toutes — ce qui, en prime, permet à la touche I de
+refléter un changement d'IP fait depuis la page Web sans redémarrer le
+player.
+
+Par la même occasion, ajout demandé de l'**adresse MAC** dans l'overlay
+(utile pour une réservation DHCP, par exemple) : `NetworkInfo.cpp` va
+désormais chercher, via `getifaddrs()`, l'entrée `AF_PACKET` de la *même*
+interface que celle qui porte l'adresse IPv4 affichée (pas une adresse
+MAC au hasard si plusieurs interfaces existent) — ex. `IP 192.168.1.50
+MAC AA:BB:CC:DD:EE:FF HOTE PIDECODER-PI WEB :8080`.
+
+**Testé** : `NetworkInfo.cpp` (aucune dépendance SDL2/mpv) compile et
+s'exécute correctement ici, adresse MAC comprise. Le reste
+(`Application.cpp`/`Application.hpp`, non modifiés cette fois côté
+rendu — seul le moment du calcul du texte a changé) n'a toujours pas pu
+être compilé dans cet environnement (SDL2/mpv indisponibles) : à vérifier
+en premier sur le Pi via `sudo ./scripts/install.sh`, en particulier que
+l'overlay apparaît bien cette fois-ci au démarrage et via la touche I.
+
 ### Corrections après premier retour terrain
 
 - **« Update unavailable: this folder is not a Git repository »** alors que

@@ -35,8 +35,7 @@ Application::Application(
     LayoutConfig layout
 )
     : cameras_(std::move(cameras)),
-      layout_(std::move(layout)),
-      startup_info_text_(startup_network_info_text())
+      layout_(std::move(layout))
 {
     if (cameras_.empty()) {
         throw std::invalid_argument(
@@ -1405,6 +1404,17 @@ bool Application::audio_indicator_visible() const noexcept
 
 void Application::show_startup_info_overlay() noexcept
 {
+    /*
+     * Recalculé à chaque appel plutôt que mis en cache une seule fois :
+     * voir le commentaire sur startup_info_text_ dans Application.hpp.
+     * Concrètement, ça évite que ce raccourci reste muet pour le reste
+     * de l'exécution si le tout premier appel (dans run(), juste après
+     * initialize_players()) tombait avant que le réseau soit vraiment
+     * prêt, et ça permet à la touche I de refléter un changement d'IP
+     * fait depuis la page Web sans avoir à redémarrer le player.
+     */
+    startup_info_text_ = startup_network_info_text();
+
     /*
      * Rien à afficher si aucune adresse IPv4 n'a pu être déterminée
      * (voir NetworkInfo.hpp) — inutile de faire clignoter un encart
