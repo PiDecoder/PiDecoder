@@ -327,8 +327,8 @@
       'network.pending_confirm_button':'✔ Confirmer ce changement',
       'network.pending_confirmed':'✔ Changement confirmé',
       'network.pending_auto_reverted':'⚠ Non confirmé à temps — l\'ancien réglage a été automatiquement rétabli',
-      'network.pending_try_ip':'Essayer la nouvelle adresse : {address}',
-      'network.pending_try_hostname':'Essayer via le nom d\'hôte : {hostname} (peut prendre un instant)',
+      'network.pending_try_ip':'Essayer la nouvelle adresse : {address} (il faudra se reconnecter)',
+      'network.pending_try_hostname':'Essayer via le nom d\'hôte : {hostname} (peut prendre un instant, il faudra se reconnecter)',
     },
     en:{
       'login.username':'Username',
@@ -643,8 +643,8 @@
       'network.pending_confirm_button':'✔ Confirm this change',
       'network.pending_confirmed':'✔ Change confirmed',
       'network.pending_auto_reverted':'⚠ Not confirmed in time — the previous setting was automatically restored',
-      'network.pending_try_ip':'Try the new address: {address}',
-      'network.pending_try_hostname':'Try via hostname: {hostname} (may take a moment)',
+      'network.pending_try_ip':'Try the new address: {address} (you will need to log in again)',
+      'network.pending_try_hostname':'Try via hostname: {hostname} (may take a moment, you will need to log in again)',
     },
   };
 

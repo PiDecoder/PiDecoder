@@ -62,6 +62,44 @@ changement d'IP/DHCP fait depuis la page Web (voir ci-dessus).
   l'ancienne/nouvelle valeur une fois appliqué (seulement au moment de la
   demande initiale) — corrigé, nécessaire pour afficher ce lien.
 
+### Corrections après second retour terrain (test réel sur le Pi)
+
+Les deux correctifs ci-dessus n'étaient pas suffisants une fois testés sur
+le vrai matériel — le message d'erreur plus détaillé introduit par le
+premier correctif a justement permis de voir le vrai problème.
+
+- **« Update unavailable » persistant, cause réelle trouvée** : le message
+  d'erreur remonté sur le Pi réel était en fait
+  `runuser: cannot set user id: Operation not permitted`. Cause : contrairement
+  à toutes les autres opérations privilégiées de ce module (mise à jour,
+  changement de nom d'hôte/IP, NTP...), `check_update()` appelait
+  `runuser`/`git` **directement dans le process de
+  `pidecoder-config.service`**, qui tourne sous un bac à sable systemd
+  strict (`SystemCallFilter=@system-service`). Ce filtre bloque les appels
+  système de changement d'UID (`setuid`/`setresuid`...) dont `runuser` a
+  besoin — d'où l'échec, alors même que le service tourne en root.
+  `check_update()` délègue désormais chacun de ses appels `git` à
+  `run_sync_unsandboxed()` (unité `systemd-run` indépendante, hors bac à
+  sable), exactement comme c'était déjà fait pour NTP et le fuseau
+  horaire. Vérifié avec un faux `runuser`/`systemd-run`/dépôt Git local
+  (dépôt à jour, en retard, sans upstream, invalide) ;
+- **le plein écran de confirmation réseau restait affiché jusqu'à
+  expiration du délai, même après reconnexion sur la nouvelle IP** :
+  deux causes cumulées. D'abord, `/api/network/status` (et donc le plein
+  écran) n'était consulté que si l'utilisateur pensait à recliquer
+  manuellement sur l'onglet Réseau une fois reconnecté sur la nouvelle
+  adresse — la page ne vérifiait jamais spontanément s'il y avait un
+  changement en attente juste après la connexion. Ensuite, le délai de 45
+  secondes avant rétablissement automatique était trop court une fois
+  compté le temps réel de cliquer le lien, recharger la page sur la
+  nouvelle origine et s'authentifier à nouveau (nouvelle IP = nouvelle
+  origine = cookie de session à refaire). Corrections : la page vérifie
+  désormais s'il y a un changement réseau en attente dès la connexion
+  (avant même d'ouvrir l'onglet Réseau) et affiche immédiatement le plein
+  écran avec le temps restant réel ; le délai avant rétablissement
+  automatique est passé de 45 à 120 secondes ; le lien vers la nouvelle
+  adresse précise maintenant qu'une reconnexion sera nécessaire.
+
 ### Mise à jour en un clic et configuration réseau depuis la page Web
 
 Demande explicite de l'utilisateur : un bouton de vérification/installation

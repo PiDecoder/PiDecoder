@@ -41,7 +41,15 @@
   30s at startup (or on demand via a keyboard shortcut) — whose C++ half
   has never been built in this environment (no SDL2/mpv dev headers
   available here) and needs a first real `sudo ./scripts/install.sh` on
-  the Pi to confirm it even compiles.
+  the Pi to confirm it even compiles. A second round of field feedback
+  found the first `check_update` fix incomplete (real cause: `runuser`
+  blocked by `pidecoder-config.service`'s `SystemCallFilter`, now routed
+  through `run_sync_unsandboxed()` like every other privileged op) and the
+  confirm overlay still not appearing reliably after an IP change
+  (`showApp()` now checks for a pending change on login instead of
+  waiting for a manual tab click, and the auto-revert delay was raised
+  from 45 to 120s) — see "Follow-up after second field feedback" under
+  that section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -561,6 +569,45 @@ small feature request:
   is blocked here), whereas the two fixes above are Python/JS only and
   were exercised against a real running `config-web.py` the same way as
   the rest of this feature.
+
+### Follow-up after second field feedback
+
+Both fixes above turned out not to be enough once tried on real hardware —
+the more detailed error message the first fix introduced is exactly what
+made the real cause visible this time.
+
+- **"Update unavailable" still failing, real cause found**: the error now
+  shown on the real Pi was `runuser: cannot set user id: Operation not
+  permitted`. Root cause: unlike every other privileged operation in this
+  module (update, hostname/IP change, NTP...), `check_update()` called
+  `runuser`/`git` **directly inside `pidecoder-config.service`'s own
+  process**, which runs under a strict systemd sandbox
+  (`SystemCallFilter=@system-service`). That filter blocks the UID-change
+  syscalls (`setuid`/`setresuid`/...) `runuser` needs, even though the
+  service itself runs as root — hence the failure. `check_update()` now
+  routes every `git` call through `run_sync_unsandboxed()` (an independent
+  `systemd-run` unit, outside the sandbox), exactly like NTP and timezone
+  changes already did. Verified against a fake `runuser`/`systemd-run`
+  plus a real local Git repository (up to date, behind, no upstream,
+  invalid path, with and without a `service_user`).
+- **The network-pending overlay stayed up until the countdown ran out,
+  even after reconnecting on the new IP**: two compounding causes. First,
+  `/api/network/status` (and so the overlay) was only checked when the
+  user happened to click back into the Réseau tab after logging back in
+  at the new address — the app never proactively checked for a pending
+  change right after login. Second, the 45-second auto-revert window was
+  too tight once the real cost of clicking the link, loading the page on
+  the new origin, and logging in again (new IP = new origin = no shared
+  session cookie) was accounted for. Fixed by having `showApp()` call
+  `networkRefresh()` immediately on login (so a pending change's overlay
+  appears right away, showing accurate remaining time computed from the
+  server-side `applied_at` timestamp rather than restarting a fresh
+  countdown) and by raising `PENDING_DELAY_SECONDS` from 45 to 120; the
+  redirect link's text now also warns that a re-login will be needed.
+  Verified structurally (generated script content, API return shape,
+  `app.js` syntax) — the actual login-then-overlay timing still needs a
+  real-world check on the Pi, this sandbox has no browser/cookie
+  environment to reproduce that with.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

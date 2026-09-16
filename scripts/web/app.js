@@ -156,7 +156,16 @@ async function api(path,opt={}){
 }
 
 function showLogin(){app.classList.add('hidden');login.classList.remove('hidden')}
-async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');await loadCfg();sysInfo()}
+async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');
+  // Vérifie tout de suite s'il y a un changement réseau en attente de
+  // confirmation (ex. : on vient de se reconnecter sur la nouvelle IP
+  // après un changement d'adresse) — sans ça, le plein écran de
+  // confirmation restait invisible tant que l'utilisateur n'allait pas
+  // cliquer manuellement sur l'onglet Réseau, et le compte à rebours
+  // pouvait déjà être écoulé le temps qu'il y pense. Ne bloque pas
+  // l'affichage du reste de l'appli (pas de await).
+  networkRefresh();
+  await loadCfg();sysInfo()}
 let currentVersion='';
 function updateVersionLabel(){
   if(!currentVersion)return;

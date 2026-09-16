@@ -138,6 +138,17 @@ def check_update(repo_path: str | None, service_user: str | None) -> dict:
     pas polluer la propriété des fichiers du clone Git avec des entrées
     appartenant à root, ce qui casserait ensuite `git status`/`git pull`
     lancés à la main en SSH (« detected dubious ownership »).
+
+    Important : `runuser` a besoin de changer l'UID du process (setuid),
+    ce que `SystemCallFilter=@system-service` de pidecoder-config.service
+    bloque (retour « Operation not permitted » — confirmé sur le terrain,
+    pas seulement en théorie). Contrairement à `start_update()`, cette
+    fonction tourne directement dans le process de ce service au moment de
+    la requête HTTP (pas de redémarrage à gérer, contrairement à une vraie
+    mise à jour) : chaque appel `git` est donc délégué à
+    `run_sync_unsandboxed()`, qui l'exécute dans une unité systemd-run
+    indépendante (hors bac à sable), exactement comme les changements NTP
+    et fuseau horaire.
     """
     if not repo_path:
         return {
@@ -151,7 +162,8 @@ def check_update(repo_path: str | None, service_user: str | None) -> dict:
         cmd = ['git', '-C', str(repo), *args]
         if service_user:
             cmd = ['runuser', '-u', service_user, '--', *cmd]
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        command = ' '.join(shlex.quote(part) for part in cmd)
+        return run_sync_unsandboxed(command, timeout=timeout)
 
     # On vérifie via `git` lui-même plutôt que la simple présence d'un
     # dossier `.git` : un clone Git valide peut aussi avoir un `.git` sous
@@ -494,8 +506,13 @@ def validate_ntp_servers(values: list[str]) -> list[str]:
 # n'a pas été appelé entre-temps. Volontairement large : le temps que
 # l'admin recharge la page sur la nouvelle adresse, s'authentifie à
 # nouveau (nouvelle origine = nouveau cookie de session) et clique sur
-# confirmer.
-PENDING_DELAY_SECONDS = 45
+# confirmer. Initialement à 45s, ça s'est révélé trop court en usage réel
+# (retour terrain : le temps de cliquer le lien, recharger la page et se
+# reconnecter dépasse déjà les 45s) — remonté à 120s. Voir aussi
+# showApp() côté app.js, qui appelle désormais networkRefresh() dès la
+# connexion pour afficher tout de suite le temps restant réel, sans
+# attendre que l'utilisateur pense à rouvrir l'onglet Réseau.
+PENDING_DELAY_SECONDS = 120
 
 
 def pending_paths(root: Path) -> dict:
