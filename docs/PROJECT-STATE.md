@@ -34,6 +34,96 @@
   "v1.1 — audio support" below), field-tested and validated on the
   Raspberry Pi with an Axis camera. Merged to `main`, tagged, deployed.
 - v1.0.0 (merged to `main`, tagged, deployed)
+- **In progress (v1.3)**: a ready-to-flash SD card image, so a new unit no
+  longer needs "install Raspberry Pi OS, then install PiDecoder" — see
+  "v1.3 — SD card image" below. Implemented and exercised in the sandbox as
+  far as it can be here, but **the image has never actually been built**
+  (building it requires an arm64 chroot, which this sandbox cannot do), so
+  nothing has been flashed or booted yet.
+
+## v1.3 — SD card image (built but never yet produced for real)
+
+Explicit request: be able to flash PiDecoder straight onto an SD card,
+without installing Raspberry Pi OS first and PiDecoder second.
+
+**Approach, and the road not taken.** `scripts/build-image.sh` starts from
+the *official* Raspberry Pi OS Lite arm64 image (pinned to a dated release
+and verified against its SHA256), opens it through loop devices, and runs
+the ordinary `scripts/install.sh` inside a chroot. The obvious alternative
+was pi-gen, the official image builder, which reconstructs a whole system
+from a debootstrap: hours per build, and a complete OS to own and maintain,
+where all we actually need is to add one application to a base that is
+already field-proven. Keeping the published base image means a flashed card
+and a manual installation differ only in who typed the commands — the same
+installer, the same units, the same layout.
+
+**User's design choices** (asked before building): Raspberry Pi OS **Lite**
+plus a minimal Wayland stack rather than the Desktop image; the script must
+run **both** natively on a Pi and under qemu in GitHub Actions; and a
+**known default Web password with a forced change at first login** rather
+than a random per-device password or a first-boot wizard.
+
+- **Wayland on a Lite base.** Lite has no graphical environment at all, so
+  the image adds `labwc` (the compositor Raspberry Pi OS Desktop itself
+  uses, so not an unknown quantity), the Mesa/EGL userspace for the V3D
+  GPU, PipeWire for Focus-view audio, NetworkManager for the Réseau tab and
+  Avahi for `.local` resolution. The session is started by autologin on
+  tty1 (a `getty@tty1` drop-in) whose `~/.bash_profile` execs `labwc`,
+  which creates `/run/user/<uid>/wayland-0` — precisely what the existing
+  `pidecoder-wayland.path` already waits for. Going through a real getty
+  matters: it is what opens a logind session, which is what provides the
+  seat labwc needs and the user D-Bus instance PipeWire needs.
+- **Per-device identity is removed from the image**, and regenerated on the
+  device by a new `pidecoder-firstboot.service`: SSH host keys (a shared
+  private key would let any unit impersonate any other), the machine ID
+  (otherwise every card presents the same DHCP DUID), the TLS certificate
+  (its private key would be public, and its SANs would carry the build
+  machine's hostname and IPs), and the hostname, derived from the SoC
+  serial as `pidecoder-xxxxxx` so units don't fight over one `.local` name.
+- **Root filesystem expansion was not reimplemented**: Raspberry Pi OS's own
+  `init=` mechanism in `cmdline.txt` already does it, earlier than anything
+  we could run, and the builder verifies that it is still armed before
+  closing the image.
+- **The build toolchain stays in the image, deliberately.** Removing it
+  would save roughly 1 GB, but the one-click update runs `git pull` then
+  `install.sh`, which recompiles the native engine — a slimmed image would
+  be an image that cannot update itself. For the same reason the image
+  carries a real Git clone with its remote, not a copy of the files.
+- **Forced password change.** The default Web password (`admin` /
+  `pidecoder`) is flagged `must_change` in `web-auth.json`, and the block is
+  enforced server-side: `need()` refuses every API path except
+  `/api/change-password` while the flag is set, so a `curl` or a stale tab
+  cannot walk around the screen. The flag disappears on the first successful
+  change, because the function that writes the new password is the same one,
+  called without that argument. New non-interactive flags make this possible
+  from inside a chroot (`--password-stdin`/`--must-change` on config-web.py,
+  `--web-password-stdin`/`--web-password-must-change` on install.sh), with
+  the password passed on standard input so it never appears in a command
+  line or in the process list.
+
+**Tested here.** The Web half was exercised for real against a running
+`config-web.py`: login on a flagged account, `/api/config` and
+`/api/network/hostname` both correctly refused with 403, too-short change
+rejected, successful change accepted, re-login and normal access restored.
+The image plumbing was exercised against a synthetic image built for the
+purpose (same MBR layout and partition geometry as a real Pi OS image):
+grow, mount, shrink, partition-table rewrite, truncate, compress, and a
+check that the final filesystem passes `e2fsck` with its contents intact
+byte for byte. Those tests found two real bugs before delivery — loop
+devices were never detached (the attach helper was called inside a command
+substitution, i.e. a subshell, so the list the cleanup trap reads stayed
+empty) and the checksum file named the image `-`, which made `sha256sum -c`
+block on standard input — plus one weakness worth hardening: every `e2fsck`
+exit code was being ignored, including the ones that report **uncorrected**
+errors, so a damaged filesystem would have shipped silently.
+
+**Not tested here, and it is the bulk of it.** The actual build needs an
+arm64 chroot, which this sandbox cannot provide (no qemu-user, and apt is
+blocked), so nothing has verified: the package installation inside the
+image, the native engine compiling there, the labwc session actually
+starting on real hardware, or a flashed card booting at all. First run
+should be `sudo ./scripts/build-image.sh` on the Pi, and the first card
+should go into a Pi that is not in production.
 
 ## v1.2.0, part 1 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 

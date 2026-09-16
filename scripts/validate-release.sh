@@ -34,6 +34,8 @@ bash -n \
     "$ROOT/scripts/install.sh" \
     "$ROOT/scripts/manage-tls.sh" \
     "$ROOT/scripts/sync-dev.sh" \
+    "$ROOT/scripts/build-image.sh" \
+    "$ROOT/scripts/image/firstboot.sh" \
     "$ROOT/scripts/validate-release.sh"
 
 echo "[4/8] Vérification de la version CMake"
@@ -54,6 +56,11 @@ required=(
     "scripts/install.sh"
     "scripts/manage-tls.sh"
     "scripts/sync-dev.sh"
+    "scripts/build-image.sh"
+    "scripts/image/firstboot.sh"
+    "scripts/image/pidecoder-firstboot.service"
+    "scripts/image/getty-autologin.conf"
+    "scripts/image/wayland-session.sh"
     "scripts/check-camera-config.py"
     "scripts/ptz-bridge.py"
     "systemd/pidecoder.service.in"

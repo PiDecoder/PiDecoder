@@ -1,0 +1,27 @@
+[Unit]
+Description=PiDecoder first boot setup (unique identity for this device)
+# Le certificat TLS généré par ce service doit contenir les adresses IP
+# réelles de l'appareil dans ses Subject Alternative Names : il faut donc
+# attendre que le réseau soit effectivement configuré, pas seulement que le
+# noyau ait détecté l'interface.
+Wants=network-online.target
+After=network-online.target
+# L'administration Web ne doit pas démarrer avant que le certificat de cet
+# appareil existe, sinon elle démarrerait en HTTP seul et il faudrait un
+# redémarrage manuel pour activer HTTPS.
+Before=pidecoder-config.service
+ConditionPathExists=!/opt/pidecoder/config/.firstboot-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/pidecoder/scripts/image/firstboot.sh
+StandardOutput=journal
+StandardError=journal
+# Un échec ici ne doit jamais empêcher le reste du système de démarrer : le
+# script gère déjà ses propres erreurs non bloquantes, ceci ne couvre que
+# l'imprévu total (script absent, disque en lecture seule...).
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

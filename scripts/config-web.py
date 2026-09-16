@@ -57,6 +57,12 @@ STATIC_FILES={
     '/i18n.js':('i18n.js','application/javascript;charset=utf-8'),
 }
 
+# Seuls points d'API encore autorisés quand le compte est marqué
+# « mot de passe à changer » (images .img préconstruites, voir set_auth).
+# /api/session, /api/login, /api/logout et /api/language n'ont pas besoin
+# d'y figurer : ils sont traités avant l'appel à need().
+ALWAYS_ALLOWED_PATHS={'/api/change-password'}
+
 def owner():
     requested=os.environ.get('PIDECODER_USER','').strip()
 
@@ -105,8 +111,17 @@ def verify(pwd,auth):
     got=hashlib.pbkdf2_hmac('sha256',pwd.encode(),salt,it)
     return hmac.compare_digest(got,exp)
 
-def set_auth(path,user,pwd):
-    write_json(path,{'username':user,**hash_pwd(pwd),'session_secret':secrets.token_hex(32)},admin_owner=False)
+def set_auth(path,user,pwd,must_change=False):
+    # must_change=True : le compte existe mais l'interface Web refusera tout
+    # autre appel API tant que le mot de passe n'a pas été remplacé (voir
+    # need()). Utilisé uniquement par les images .img préconstruites, qui
+    # embarquent forcément un mot de passe par défaut identique sur toutes
+    # les cartes SD — il doit donc être changé avant le premier usage réel.
+    # Un changement réussi via /api/change-password rappelle set_auth() sans
+    # cet argument, ce qui fait disparaître le drapeau du fichier.
+    doc={'username':user,**hash_pwd(pwd),'session_secret':secrets.token_hex(32)}
+    if must_change:doc['must_change']=True
+    write_json(path,doc,admin_owner=False)
     os.chown(path,0,0); os.chmod(path,0o600)
 
 def cpu_percent():
@@ -1129,15 +1144,35 @@ class H(BaseHTTPRequestHandler):
             if SESSIONS.get(t,0)<now: SESSIONS.pop(t,None); return False
             SESSIONS[t]=now+43200
         return True
+    def must_change_password(self):
+        return bool(self.authdoc().get('must_change'))
     def need(self):
-        if self.authed():return True
-        self.j({'ok':False,'error':i18n_t('auth.required',self.lang())},401);return False
+        if not self.authed():
+            self.j({'ok':False,'error':i18n_t('auth.required',self.lang())},401);return False
+        # Mot de passe par défaut d'une image préconstruite : on bloque tout le
+        # reste de l'API côté serveur, pas seulement l'affichage. Sans ça le
+        # blocage ne serait que cosmétique — n'importe quel appel direct
+        # (curl, onglet resté ouvert) contournerait l'écran de changement.
+        # /api/change-password reste évidemment autorisé, sinon on ne pourrait
+        # jamais sortir de cet état.
+        if self.must_change_password() and self.path.split('?',1)[0] not in ALWAYS_ALLOWED_PATHS:
+            self.j({'ok':False,'error':i18n_t('password.change_required',self.lang()),'must_change':True},403);return False
+        return True
     def do_GET(self):
         p=urlparse(self.path).path
         if p in STATIC_FILES:
             name,content_type=STATIC_FILES[p]
             return self.static(name,content_type)
-        if p=='/api/session':return self.j({'authenticated':self.authed(),'version':VERSION})
+        if p=='/api/session':
+            authenticated=self.authed()
+            return self.j({
+                'authenticated':authenticated,
+                'version':VERSION,
+                # Vrai uniquement sur une image préconstruite dont le mot de
+                # passe par défaut n'a pas encore été remplacé : la page
+                # affiche alors directement l'écran de changement.
+                'must_change':authenticated and self.must_change_password(),
+            })
         if not self.need():return
         if p=='/api/config':
             cams=load(self.server.root/'config/cameras.json',{'cameras':[]}).get('cameras',[]); lay=normalize_layout(load(self.server.root/'config/layout.json',{}),len(cams)); return self.j({'cameras':cams,'layout':lay})
@@ -1229,7 +1264,7 @@ class H(BaseHTTPRequestHandler):
                 clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
-                return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/{self.secure_flag()}')
+                return self.j({'ok':True,'must_change':bool(a.get('must_change'))},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/{self.secure_flag()}')
             if p=='/api/logout':
                 with LOCK:SESSIONS.pop(self.token(),None)
                 return self.j({'ok':True})
@@ -1724,11 +1759,19 @@ def _make_server(bind,bind_port,root,auth,repo_path,http_port,https_port,tls):
 
 def main():
     global HTTPS_SERVER
-    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080,help='Port HTTP (défaut : 8080)');ap.add_argument('--https-port',type=int,default=8443,help='Port HTTPS (défaut : 8443)');ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive HTTPS quel que soit l’état du certificat (déconseillé, pour développement uniquement)');ap.add_argument('--repo-path',default=None,help='Chemin du clone Git (ex: ~/PiDecoder), pour la vérification/mise à jour depuis la page Web. Absent sur une installation antérieure à cette fonctionnalité, tant que install.sh n’a pas été relancé une fois.');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
+    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080,help='Port HTTP (défaut : 8080)');ap.add_argument('--https-port',type=int,default=8443,help='Port HTTPS (défaut : 8443)');ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--password-stdin',action='store_true',help='Avec --set-password : lit le mot de passe sur l’entrée standard au lieu de le demander (installation sans console, ex. construction d’image)');ap.add_argument('--must-change',action='store_true',help='Avec --set-password : marque le compte comme devant changer de mot de passe à la première connexion (images .img préconstruites)');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive HTTPS quel que soit l’état du certificat (déconseillé, pour développement uniquement)');ap.add_argument('--repo-path',default=None,help='Chemin du clone Git (ex: ~/PiDecoder), pour la vérification/mise à jour depuis la page Web. Absent sur une installation antérieure à cette fonctionnalité, tant que install.sh n’a pas été relancé une fois.');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
     if a.set_password:
-        p=getpass.getpass('Nouveau mot de passe : ');q=getpass.getpass('Confirmation : ')
-        if p!=q:raise SystemExit('Les mots de passe ne correspondent pas')
-        set_auth(auth,a.username,p);print('Identifiants Web mis à jour.');return
+        if a.password_stdin:
+            # Lecture sur l'entrée standard : seule façon de créer le compte
+            # sans console interactive (construction d'une image .img dans un
+            # chroot). Le mot de passe n'apparaît jamais dans la ligne de
+            # commande, donc jamais dans la liste des processus.
+            p=sys.stdin.readline().rstrip('\n')
+            if not p:raise SystemExit('Aucun mot de passe reçu sur l’entrée standard')
+        else:
+            p=getpass.getpass('Nouveau mot de passe : ');q=getpass.getpass('Confirmation : ')
+            if p!=q:raise SystemExit('Les mots de passe ne correspondent pas')
+        set_auth(auth,a.username,p,must_change=a.must_change);print('Identifiants Web mis à jour.');return
     if not auth.exists():raise SystemExit('Authentification non initialisée. Utiliser --set-password.')
     if a.port==a.https_port:raise SystemExit(f'--port et --https-port doivent être différents (les deux valent {a.port})')
     tls_cert=Path(a.tls_cert) if a.tls_cert else root/'config/tls/cert.pem'

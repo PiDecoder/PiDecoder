@@ -19,6 +19,8 @@ NO_HTTPS=0
 TLS_GENERATED=0
 INSTALL_DEPENDENCIES=1
 START_SERVICES=1
+WEB_PASSWORD_STDIN=0
+WEB_PASSWORD_MUST_CHANGE=0
 CHECK_ONLY=0
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -69,6 +71,13 @@ Options:
                             Mutually exclusive with --tls-cert/--tls-key.
   --skip-deps              Do not run apt-get
   --no-start               Install and enable units without starting them
+  --web-password-stdin     Read the initial Web admin password from standard
+                            input instead of prompting. Required when there is
+                            no interactive console (image build in a chroot).
+  --web-password-must-change
+                           Mark the Web admin account as needing a password
+                            change at first login. Only makes sense for a
+                            prebuilt .img shipping a known default password.
   --check                  Validate the host and source without changing anything
   -h, --help               Show this help
 
@@ -182,6 +191,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-start)
             START_SERVICES=0
+            shift
+            ;;
+        --web-password-stdin)
+            WEB_PASSWORD_STDIN=1
+            shift
+            ;;
+        --web-password-must-change)
+            WEB_PASSWORD_MUST_CHANGE=1
             shift
             ;;
         --check)
@@ -405,8 +422,17 @@ fi
 command -v systemctl >/dev/null || fail "systemd est requis"
 command -v apt-get >/dev/null || fail "apt-get est requis sur la plateforme actuellement prise en charge"
 
-if [[ ! -f "$TARGET/config/web-auth.json" && ! -r /dev/tty ]]; then
-    fail "Une console interactive est nécessaire pour créer le mot de passe Web initial."
+if [[ ! -f "$TARGET/config/web-auth.json" && "$WEB_PASSWORD_STDIN" -eq 0 && ! -r /dev/tty ]]; then
+    fail "Une console interactive est nécessaire pour créer le mot de passe Web initial (ou --web-password-stdin)."
+fi
+
+# Le mot de passe est lu ici, avant la longue phase de compilation, pour que
+# l'appelant (build-image.sh) n'ait pas à garder un tube ouvert pendant tout
+# l'installeur. Il ne transite jamais par une ligne de commande.
+WEB_PASSWORD=""
+if [[ "$WEB_PASSWORD_STDIN" -eq 1 ]]; then
+    IFS= read -r WEB_PASSWORD || true
+    [[ -n "$WEB_PASSWORD" ]] || fail "Aucun mot de passe Web reçu sur l’entrée standard"
 fi
 
 if [[ "$INSTALL_DEPENDENCIES" -eq 1 ]]; then
@@ -606,6 +632,14 @@ chmod 0755 \
 if [[ -f "$TARGET/config/web-auth.json" ]]; then
     chown root:root "$TARGET/config/web-auth.json"
     chmod 0600 "$TARGET/config/web-auth.json"
+elif [[ "$WEB_PASSWORD_STDIN" -eq 1 ]]; then
+    log "Création du compte administrateur Web (mot de passe fourni)"
+    set_password_args=(--root "$TARGET" --set-password --username admin --password-stdin)
+    if [[ "$WEB_PASSWORD_MUST_CHANGE" -eq 1 ]]; then
+        set_password_args+=(--must-change)
+    fi
+    printf '%s\n' "$WEB_PASSWORD" | PIDECODER_USER="$SERVICE_USER" \
+        python3 "$TARGET/scripts/config-web.py" "${set_password_args[@]}"
 else
     log "Création du compte administrateur Web"
     printf 'Choisis maintenant le mot de passe du compte admin (8 caractères minimum).\n'

@@ -1,6 +1,19 @@
 # Installation and updates
 
-This guide covers the public installer included with PiDecoder.
+There are two ways to get PiDecoder onto a Raspberry Pi:
+
+- **[Flash the ready-made SD card image](#ready-made-sd-card-image)** — one
+  download, one flash, no operating system to install first. Recommended for a
+  new unit, and the only practical option when deploying several at once.
+- **[Install on an existing Raspberry Pi OS](#before-installation)** — the
+  manual path described in the numbered steps below. Use it when the Pi is
+  already set up, or when PiDecoder has to share the machine with something
+  else.
+
+Both end up with exactly the same installation: the image is built by running
+the same `scripts/install.sh` inside the image, rather than on the running Pi.
+
+This guide covers both.
 
 > [!IMPORTANT]
 > PiDecoder is currently validated on a Raspberry Pi 5 running Debian 13, AArch64 and Wayland.
@@ -20,6 +33,53 @@ This guide covers the public installer included with PiDecoder.
 | Administration | Python 3 Web service |
 
 Other Debian-based systems may work, but they are not currently part of the validated v1.0 target.
+
+## Ready-made SD card image
+
+Download `PiDecoder-<version>-arm64.img.xz` from the
+[Releases page](https://github.com/PiDecoder/PiDecoder/releases), then write it
+to an SD card (8 GB or larger) with Raspberry Pi Imager — choose "Use custom"
+and select the downloaded file — or with any other flashing tool. Raspberry Pi
+Imager reads `.img.xz` directly, there is nothing to decompress first.
+
+Do **not** apply Raspberry Pi Imager's own customisation options (user,
+Wi-Fi, SSH) to this image: it already contains its user and its own first-boot
+setup, and the Imager's customisation would conflict with it.
+
+Verify the download first if you like:
+
+```bash
+sha256sum -c PiDecoder-<version>-arm64.img.xz.sha256
+```
+
+On first boot the Pi resizes its root partition to fill the card, generates
+its own SSH host keys and TLS certificate, and picks a hostname derived from
+its serial number (`pidecoder-xxxxxx`) so several units can coexist on one
+network. That takes a minute or two; the video engine starts once at least one
+camera is configured.
+
+The screen shows the Pi's IP address, hostname, MAC address and Web ports for
+30 seconds at startup (and again whenever you press **I**), which is the
+easiest way to find the unit. Then open the administration interface as
+described in [step 4](#4-open-the-administration-interface).
+
+| Account | User | Password | Notes |
+|---|---|---|---|
+| PiDecoder Web admin | `admin` | `pidecoder` | Must be changed at first login — the interface refuses everything else until it is |
+| Linux (console/SSH) | `pidecoder` | `pidecoder` | SSH is disabled by default, as on Raspberry Pi OS |
+
+> [!IMPORTANT]
+> Both passwords are the same on every copy of the image, so neither is a
+> secret. The Web one is enforced: the first login lands on a change-password
+> screen, and every other API call is refused by the server until it has been
+> replaced. The Linux one is not enforced — change it with `passwd` on the
+> device if it is reachable by anyone you don't trust. SSH stays off unless you
+> create an empty `ssh` file in the boot partition (mount the card on another
+> machine, or use `sudo raspi-config` on the Pi).
+
+To enable SSH before the first boot, create an empty file named `ssh` in the
+small boot partition of the freshly flashed card — that is the standard
+Raspberry Pi OS mechanism and it works here unchanged.
 
 ## Before installation
 
@@ -368,6 +428,83 @@ Practical notes:
   a second SSH session over a connection that does not depend on the
   address being changed) the first few times you use the IP/DHCP toggle,
   until you are comfortable with how it behaves on your network.
+
+## Building the SD card image yourself
+
+`scripts/build-image.sh` produces the `.img.xz` described at the top of this
+guide. It starts from the official Raspberry Pi OS Lite arm64 image — pinned to
+a specific release and verified against its SHA256 — adds a minimal Wayland
+stack, installs PiDecoder with the ordinary `install.sh`, strips everything
+that has to stay unique per device, then shrinks and compresses the result.
+
+```bash
+sudo ./scripts/build-image.sh
+```
+
+The image lands in `dist/`, next to its `.sha256`. Expect 30 to 60 minutes and
+roughly 10 GB of scratch space; compiling the native engine is the long part.
+
+### When the Pi doesn't have 10 GB free
+
+A Raspberry Pi in service often doesn't have that much room left on its own
+card — and it doesn't need to. Nothing has to be *installed* anywhere: the
+build only needs somewhere to put a few large temporary files. Plug in a USB
+stick or an external drive and point the three locations at it:
+
+```bash
+sudo ./scripts/build-image.sh \
+  --work-dir /media/usb/pidecoder-build \
+  --cache-dir /media/usb/pidecoder-cache \
+  --output /media/usb/PiDecoder.img.xz
+```
+
+All three matter: the work directory holds the decompressed and enlarged image
+(by far the biggest), the cache holds the downloaded base image (~500 MB), and
+the output holds the finished image (~1 GB). They are checked separately before
+anything starts, so a build never dies halfway through for lack of space.
+
+The other way around the problem is to not build locally at all: push a tag and
+let the GitHub Actions workflow below produce the image, then download it from
+the Release. That needs no disk space and no USB stick.
+
+Requirements: root (loop devices and chroot), `sfdisk`, `e2fsck`/`resize2fs`,
+`xz`, `curl` or `wget`, and an arm64 host — a Raspberry Pi is the simplest
+choice, since the chroot then runs natively. On an x86_64 machine the same
+script works through `qemu-user-static` and `binfmt_misc`, just much more
+slowly.
+
+Useful options:
+
+| Option | Effect |
+|---|---|
+| `--web-password PW` | Initial Web admin password baked into the image (always flagged "must change at first login") |
+| `--user NAME` / `--user-password PW` | The Linux account created in the image |
+| `--base-url` / `--base-sha256` | Build on a newer Raspberry Pi OS release than the pinned one |
+| `--base-image PATH` | Reuse an already-downloaded base image, for offline builds |
+| `--no-compress` | Stop at the raw `.img`, useful when flashing straight away |
+| `--no-customize` | Exercise only the partition/resize plumbing, skipping every chroot step |
+
+What the script deliberately removes before closing the image, because an
+image is identical on every card: the SSH host keys, the machine ID, and the
+TLS certificate (whose private key would otherwise be public, and whose
+Subject Alternative Names would carry the build machine's hostname and IP
+addresses). `pidecoder-firstboot.service` regenerates all of it on the device,
+once, at first boot.
+
+What it deliberately keeps: the full build toolchain (`build-essential`,
+`cmake`, the SDL2/mpv headers) and a real Git clone of the repository under
+the image user's home. Both are what the one-click update in the Système tab
+needs — it runs `git pull` then `install.sh`, which recompiles the engine. An
+image stripped of them would be roughly 1 GB smaller and unable to update
+itself.
+
+### Automated builds
+
+`.github/workflows/build-image.yml` runs the same script on every `v*` tag and
+attaches the image and its checksum to the corresponding GitHub Release. It
+can also be started by hand from the Actions tab. The GitHub runner is x86_64,
+so it builds through qemu emulation — slower than a Pi, but nothing else
+differs.
 
 ## Startup architecture
 

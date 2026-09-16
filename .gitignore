@@ -35,6 +35,11 @@ Thumbs.db
 *.tar
 *.tar.gz
 
+# Images de carte SD produites par scripts/build-image.sh (plusieurs Gio)
+/dist/
+*.img
+*.img.xz
+
 # Temporary
 *.tmp
 *~

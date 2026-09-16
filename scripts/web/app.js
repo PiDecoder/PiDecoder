@@ -155,8 +155,52 @@ async function api(path,opt={}){
   return data;
 }
 
-function showLogin(){app.classList.add('hidden');login.classList.remove('hidden')}
-async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');
+function showLogin(message){
+  app.classList.add('hidden');
+  firstRun.classList.add('hidden');
+  login.classList.remove('hidden');
+  le.textContent=message||'';
+}
+
+// Écran imposé quand le compte porte encore le mot de passe par défaut d'une
+// image .img préconstruite (drapeau must_change côté serveur). Ce n'est pas
+// qu'un habillage : tant que le mot de passe n'a pas changé, le serveur
+// refuse tous les autres points d'API (voir need() dans config-web.py), donc
+// afficher l'application normale n'aurait montré que des erreurs.
+function showFirstRun(){
+  login.classList.add('hidden');
+  app.classList.add('hidden');
+  firstRun.classList.remove('hidden');
+  frError.textContent='';
+  frCurrent.focus();
+}
+
+async function firstRunSubmit(e){
+  e.preventDefault();
+  frError.textContent='';
+  frSubmit.disabled=true;
+  try{
+    await api('/api/change-password',{
+      method:'POST',
+      body:JSON.stringify({
+        current_password:frCurrent.value,
+        new_password:frNew.value,
+        confirm_password:frConfirm.value,
+      }),
+    });
+    // Un changement de mot de passe invalide toutes les sessions côté
+    // serveur (SESSIONS.clear()) : il faut donc forcément se reconnecter,
+    // avec le nouveau mot de passe cette fois.
+    frCurrent.value='';frNew.value='';frConfirm.value='';
+    lp.value='';
+    showLogin(t('firstrun.done'));
+  }catch(x){
+    frError.textContent=x.message;
+  }finally{
+    frSubmit.disabled=false;
+  }
+}
+async function showApp(){login.classList.add('hidden');firstRun.classList.add('hidden');app.classList.remove('hidden');
   // Vérifie tout de suite s'il y a un changement réseau en attente de
   // confirmation (ex. : on vient de se reconnecter sur la nouvelle IP
   // après un changement d'adresse) — sans ça, le plein écran de
@@ -173,8 +217,8 @@ function updateVersionLabel(){
   if(loginVersion)loginVersion.textContent=label;
   if(appVersion)appVersion.textContent=label;
 }
-async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();s.authenticated?showApp():showLogin()}
-async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
+async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();if(!s.authenticated){showLogin()}else if(s.must_change){showFirstRun()}else{showApp()}}
+async function doLogin(e){e.preventDefault();le.textContent='';try{const r=await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';r.must_change?showFirstRun():showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
 function tab(id,b){for(let x of ['cams','layout','sys','network','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo();updateStatusRefresh()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}if(id==='network'){networkRefresh()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;audioDefault.checked=!!cfg.layout.focus_audio_default_on;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}

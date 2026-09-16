@@ -1,0 +1,103 @@
+name: Build SD card image
+
+# Fabrique l'image .img.xz flashable directement sur une carte SD.
+#
+# Deux déclenchements :
+#   - sur un tag v* : l'image est fabriquée puis attachée à la Release GitHub
+#     correspondante, prête à être téléchargée ;
+#   - à la main (workflow_dispatch) : utile pour vérifier que la construction
+#     passe toujours sans publier quoi que ce soit.
+#
+# Le coureur GitHub est en x86_64 : le chroot arm64 passe donc par qemu, ce
+# qui rend surtout la compilation du moteur natif nettement plus lente qu'en
+# natif sur un Pi (compter une bonne demi-heure au total). C'est le même
+# scripts/build-image.sh que celui lancé sur un Raspberry Pi, sans variante.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Attacher l'image à une Release (sinon simple artefact)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    # La compilation sous émulation est lente : la valeur par défaut (6 h)
+    # serait dangereuse en cas de blocage, 120 min laisse une marge large.
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        # Le constructeur clone le dépôt dans l'image pour que la mise à jour
+        # en un clic fonctionne : il lui faut donc un vrai clone Git, avec son
+        # historique et son distant, pas une archive aplatie.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install image build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-user-static \
+            binfmt-support \
+            e2fsprogs \
+            dosfstools \
+            xz-utils \
+            util-linux
+
+      - name: Register arm64 binfmt handler
+        # qemu-user-static enregistre normalement le gestionnaire tout seul,
+        # mais pas toujours selon l'image du coureur : cette action rend
+        # l'enregistrement explicite et idempotent.
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Cache the Raspberry Pi OS base image
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pidecoder-image
+          # L'image de base est épinglée dans build-image.sh : la clé suit
+          # donc ce fichier, et le cache est invalidé dès qu'on change de
+          # version de Raspberry Pi OS.
+          key: raspios-base-${{ hashFiles('scripts/build-image.sh') }}
+
+      - name: Build the image
+        run: |
+          sudo --preserve-env=HOME ./scripts/build-image.sh \
+            --cache-dir "$HOME/.cache/pidecoder-image" \
+            --work-dir "$RUNNER_TEMP"
+
+      - name: Collect image name
+        id: image
+        run: |
+          path="$(ls dist/PiDecoder-*.img.xz | head -1)"
+          echo "path=$path" >>"$GITHUB_OUTPUT"
+          echo "name=$(basename "$path")" >>"$GITHUB_OUTPUT"
+
+      - name: Upload as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.image.outputs.name }}
+          path: |
+            dist/PiDecoder-*.img.xz
+            dist/PiDecoder-*.img.xz.sha256
+          # Une image pèse plus d'un gigaoctet : inutile de payer 90 jours de
+          # stockage pour une vérification de construction.
+          retention-days: 14
+
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/PiDecoder-*.img.xz
+            dist/PiDecoder-*.img.xz.sha256

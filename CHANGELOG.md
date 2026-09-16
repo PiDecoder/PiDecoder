@@ -1,5 +1,128 @@
 # Changelog
 
+## 1.3 (nouveau — image SD, testée en bac à sable, pas encore fabriquée pour de vrai)
+
+### Image .img flashable directement sur carte SD (demande explicite)
+
+Jusqu'ici, installer PiDecoder demandait deux étapes : installer Raspberry Pi
+OS, puis cloner le dépôt et lancer `install.sh`. Nouveau
+`scripts/build-image.sh` : il fabrique une image `.img.xz` qu'on écrit
+directement sur une carte SD avec Raspberry Pi Imager, et qui démarre sur le
+mur d'images sans qu'on ait jamais ouvert un terminal.
+
+Le principe est volontairement modeste : **on ne reconstruit pas un système**.
+Le script part de l'image officielle Raspberry Pi OS Lite arm64 (épinglée à
+une version précise et vérifiée par sa somme SHA256), l'ouvre en boucle locale,
+et y lance dans un chroot exactement le même `install.sh` que sur un Pi réel.
+L'alternative aurait été pi-gen, l'outil officiel, qui reconstruit tout depuis
+un debootstrap : des heures de construction et un système complet à maintenir,
+là où on n'a besoin que d'ajouter une application à une base déjà éprouvée. La
+seule différence entre une carte flashée et une installation manuelle, c'est
+qui a tapé les commandes.
+
+- **base Lite plutôt que Desktop** (choix explicite) : Raspberry Pi OS Lite
+  n'a aucun environnement graphique, donc le script ajoute le strict
+  nécessaire — `labwc` (le compositeur Wayland de Raspberry Pi OS Desktop,
+  donc pas un inconnu), la pile Mesa/EGL du GPU V3D, PipeWire pour l'audio de
+  la vue Focus, NetworkManager pour l'onglet Réseau, et Avahi pour la
+  résolution `<nom>.local`. Résultat : une image nettement plus légère qu'avec
+  la base Desktop, sans bureau ni applications dont un mur d'images n'a que
+  faire ;
+- **session graphique** : connexion automatique sur tty1 (extension de
+  `getty@tty1`), puis `~/.bash_profile` lance `labwc`, qui crée le socket
+  `/run/user/<uid>/wayland-0` — exactement ce qu'attend déjà
+  `pidecoder-wayland.path` pour déclencher le moteur vidéo. Passer par un vrai
+  getty n'est pas cosmétique : c'est ce qui ouvre une session logind, donc ce
+  qui fournit le siège dont labwc a besoin et le bus D-Bus utilisateur dont
+  dépend PipeWire ;
+- **tout ce qui doit rester unique par appareil est retiré de l'image** et
+  regénéré au premier démarrage par un nouveau service
+  `pidecoder-firstboot.service` : clés d'hôte SSH (une clé privée partagée
+  permettrait d'usurper n'importe quel autre Pi du parc), identifiant machine
+  (sinon toutes les cartes présentent le même DUID DHCP), certificat TLS — dont
+  la clé privée serait publique, et dont les Subject Alternative Names
+  porteraient le nom d'hôte et les IP de la machine de construction — et le nom
+  d'hôte lui-même, dérivé du numéro de série du SoC (`pidecoder-xxxxxx`) pour
+  que deux appareils ne se disputent pas la même adresse `.local` ;
+- **l'agrandissement de la partition racine n'a pas été réimplémenté** : le
+  mécanisme natif de Raspberry Pi OS (`init=` dans `cmdline.txt`) s'en charge
+  déjà, plus tôt que tout ce qu'on pourrait écrire, et le script vérifie qu'il
+  est toujours armé avant de refermer l'image ;
+- **la chaîne de compilation reste dans l'image**, à dessein. La retirer
+  gagnerait environ 1 Gio, mais la mise à jour en un clic de l'onglet Système
+  fait `git pull` puis `install.sh`, donc recompile le moteur natif : une image
+  allégée serait une image incapable de se mettre à jour. Pour la même raison
+  l'image embarque un vrai clone Git, avec son dépôt distant, et pas une copie
+  des fichiers ;
+- `.github/workflows/build-image.yml` fabrique l'image à chaque tag `v*` et
+  l'attache à la Release GitHub, somme de contrôle comprise. Le coureur GitHub
+  est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
+  le même script, sans variante.
+
+### Contrôle d'espace disque par emplacement
+
+Retour immédiat au premier essai : un Pi en service n'a pas forcément 10 Gio
+libres sur sa propre carte. Rien n'oblige pourtant à construire l'image sur
+cette carte — le script a déjà `--work-dir`, `--cache-dir` et `--output`, et
+une clé USB branchée sur le Pi suffit. Le contrôle d'espace a été revu en
+conséquence : il ne vérifiait que le répertoire de travail, alors que les trois
+emplacements peuvent être sur des systèmes de fichiers différents (le cache et
+la sortie seraient restés sur la carte SD, pour environ 1,5 Gio à eux deux, et
+la construction serait morte en cours de route au lieu d'échouer tout de
+suite). Ils sont désormais vérifiés séparément, avant de commencer, et le
+message d'erreur nomme l'option à utiliser pour déplacer l'emplacement fautif.
+
+### Mot de passe par défaut imposé au premier démarrage
+
+Corollaire de l'image : une image distribuée contient forcément un mot de passe
+identique sur toutes les cartes, donc public. Le compte Web de l'image
+(`admin` / `pidecoder`) est marqué `must_change` dans `web-auth.json`, et ce
+n'est pas qu'un écran :
+
+- côté serveur, `need()` refuse désormais **tous** les points d'API sauf
+  `/api/change-password` tant que le drapeau est présent. Un blocage purement
+  visuel aurait été contournable par un simple `curl`, ou par un onglet resté
+  ouvert ;
+- côté navigateur, la connexion mène directement à un écran dédié
+  (« Premier démarrage »), et pas à l'application ;
+- le drapeau disparaît tout seul au premier changement réussi : la fonction qui
+  écrit le nouveau mot de passe est la même, appelée sans l'argument.
+
+Nouveaux drapeaux pour permettre tout ça sans console interactive, puisque la
+construction se fait dans un chroot : `config-web.py --password-stdin
+--must-change`, et `install.sh --web-password-stdin
+--web-password-must-change`. Le mot de passe transite par l'entrée standard et
+n'apparaît donc jamais dans une ligne de commande, ni dans la liste des
+processus.
+
+**Testé** : toute la partie interface Web a été exercée pour de vrai dans ce
+bac à sable — un `config-web.py` lancé avec un compte marqué, connexion,
+vérification que `/api/config` et `/api/network/hostname` répondent bien 403,
+changement refusé si le mot de passe est trop court, changement accepté, puis
+reconnexion et accès normal retrouvé.
+
+La plomberie de l'image a elle aussi été exercée réellement, sur une fausse
+image fabriquée pour l'occasion (même table MBR, mêmes partitions qu'une vraie
+image Pi OS) : agrandissement, montage, réduction, réécriture de la table,
+troncature, compression, et vérification que le système de fichiers final passe
+`e2fsck` et que son contenu est intact octet pour octet. Ces tests ont trouvé
+deux vrais bugs avant livraison : les périphériques en boucle locale n'étaient
+jamais détachés (la fonction qui les attachait était appelée dans une
+substitution de commande, donc dans un sous-shell, et la liste utilisée par le
+nettoyage restait vide), et le fichier de somme de contrôle contenait `-` au
+lieu du nom de l'image, ce qui faisait attendre `sha256sum -c` sur l'entrée
+standard. Un troisième point a été durci au passage : les codes de retour
+d'`e2fsck` étaient tous ignorés, y compris ceux qui signalent des erreurs **non
+corrigées** — une image au système de fichiers douteux serait partie en
+production sans un mot.
+
+**Pas encore testé** : la construction complète elle-même, qui exige un chroot
+arm64 (impossible ici : pas de qemu-user, et apt est bloqué dans ce bac à
+sable), donc l'installation des paquets, la compilation du moteur dans l'image,
+et évidemment le démarrage réel d'une carte flashée. Le premier essai est à
+faire sur le Pi avec `sudo ./scripts/build-image.sh`, et la première carte à
+tester sur un Pi qui n'est pas en production.
+
 ## 1.2.0 — HTTPS, mise à jour Web, configuration réseau et gestion des ports (2026-09-16)
 
 Version publiée regroupant tout ce qui a été construit depuis la

@@ -106,6 +106,7 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 | | | | | Hostname, IP (DHCP/static), NTP and timezone configuration, with automatic rollback |
 | | | ONVIF/PTZ metadata preserved on camera save | | HTTPS by default, HTTP and HTTPS on two independent ports, each individually enabled/disabled |
 | | | | | HTTP/HTTPS ports editable, and TLS certificate managed, from the Web UI (no SSH needed) |
+| | | | | Ready-to-flash SD card image, with per-device identity generated at first boot |
 | | | | | Link to the [GitHub repository](https://github.com/PiDecoder/PiDecoder) in the header |
 | | | | | systemd sandboxing per service, credential redaction in logs |
 
@@ -180,6 +181,25 @@ The public documentation is currently written in English.
 The Web administration interface is bilingual (French/English) since v1.0.0, with a language toggle on the login screen and in the application header; a few low-level ONVIF and backend diagnostic messages still appear in French regardless of the selected language.
 
 ## Quick start
+
+### The short way: flash the ready-made image
+
+Download `PiDecoder-<version>-arm64.img.xz` from the
+[Releases page](https://github.com/PiDecoder/PiDecoder/releases) and write it
+to an SD card with Raspberry Pi Imager ("Use custom" → the downloaded file).
+No Raspberry Pi OS installation, no build, no terminal: the card boots
+straight into the video wall, resizes itself to the card, and generates its own
+SSH host keys, TLS certificate and hostname on first boot.
+
+The first login to the Web interface (`admin` / `pidecoder`) lands on a
+mandatory password change — the same default is in every copy of the image, so
+the server refuses everything else until it has been replaced. See
+[`docs/installation.md`](docs/installation.md#ready-made-sd-card-image) for the
+details, including how to enable SSH.
+
+The image is built by `scripts/build-image.sh`, which you can also run
+yourself; the manual installation below is the alternative when the Pi is
+already set up.
 
 ### 1. Clone PiDecoder
 

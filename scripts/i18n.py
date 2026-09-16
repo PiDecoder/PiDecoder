@@ -249,6 +249,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Mot de passe modifié',
         'en': 'Password changed',
     },
+    'password.change_required': {
+        'fr': (
+            'Cet appareil utilise encore le mot de passe par défaut de '
+            'l\'image PiDecoder. Il doit être remplacé avant de pouvoir '
+            'utiliser le reste de l\'interface.'
+        ),
+        'en': (
+            'This device is still using the default password from the '
+            'PiDecoder image. It must be replaced before the rest of the '
+            'interface can be used.'
+        ),
+    },
     'server.error': {
         'fr': 'Erreur serveur : {error}',
         'en': 'Server error: {error}',

@@ -251,6 +251,22 @@ sudo ./scripts/install.sh
 
 The installer preserves runtime configuration and creates a timestamped backup under `/var/backups/pidecoder/`.
 
+## Do I have to install Raspberry Pi OS first?
+
+No, not since v1.2.0. A ready-to-flash image is published with each release: write `PiDecoder-<version>-arm64.img.xz` to an SD card with Raspberry Pi Imager and boot it. The card contains Raspberry Pi OS Lite, a minimal Wayland session and PiDecoder, already installed and enabled.
+
+Installing on an existing Raspberry Pi OS with `scripts/install.sh` still works exactly as before, and is the right choice when the Pi already runs something else. See [Installation](installation.md).
+
+## The image is the same on every card — what about keys and passwords?
+
+Everything that must be unique to a device is generated on the device, at first boot, not baked into the image: the SSH host keys, the machine ID, the TLS certificate (its private key and the IP addresses in it), and the hostname, which is derived from the Pi's serial number (`pidecoder-xxxxxx`) so that several units don't collide on the same network.
+
+What the image does ship with is two default passwords, which are therefore public. The Web one (`admin` / `pidecoder`) is enforced: the first login lands on a change-password screen and the server refuses every other request until it has been replaced. The Linux one (`pidecoder` / `pidecoder`) is not enforced, but SSH is disabled by default, as on stock Raspberry Pi OS — change it with `passwd` before enabling SSH on a network you don't control.
+
+## How do I build the SD card image myself?
+
+`sudo ./scripts/build-image.sh`, ideally on a Raspberry Pi so the build runs natively. It takes 30 to 60 minutes and about 10 GB of scratch space, and writes the image plus its checksum to `dist/`. It also runs on an x86_64 machine through qemu emulation, which is what the GitHub Actions workflow does on every tag. See [Building the SD card image yourself](installation.md#building-the-sd-card-image-yourself).
+
 ## Where are the files?
 
 ```text
