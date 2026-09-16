@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     PiDecoder
-    VERSION 1.1.0
+    VERSION 1.2.0
     DESCRIPTION "Low-latency RTSP video decoder for Raspberry Pi"
     LANGUAGES CXX
 )
@@ -36,6 +36,7 @@ add_executable(
     src/Grid.cpp
     src/Layout.cpp
     src/RedactUrl.cpp
+    src/NetworkInfo.cpp
 )
 
 target_include_directories(

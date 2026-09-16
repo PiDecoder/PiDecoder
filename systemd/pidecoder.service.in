@@ -32,11 +32,33 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+#
+# AF_NETLINK ajouté pour l'overlay "IP/MAC/nom d'hôte/port Web" (voir
+# NetworkInfo.cpp) : sous Linux, getifaddrs() interroge le noyau via une
+# socket AF_NETLINK/NETLINK_ROUTE pour énumérer les interfaces — sans
+# cette autorisation, la socket échoue silencieusement (EAFNOSUPPORT),
+# getifaddrs() renvoie -1, et startup_network_info_text() renvoie donc
+# systématiquement une chaîne vide (l'overlay ne s'affiche jamais, ni au
+# démarrage ni via la touche I) sans que rien d'autre ne plante — piégeux
+# à diagnostiquer car strictement identique au comportement "juste vide"
+# déjà géré par le code quand aucune interface active n'est trouvée.
+# Confirmé sur le terrain : le même NetworkInfo.cpp compilé et exécuté
+# hors du service (donc hors de cette restriction) fonctionnait
+# parfaitement sur le même Pi.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 Environment=PIDECODER_USER=@SERVICE_USER@
 Environment=XDG_RUNTIME_DIR=/run/user/@SERVICE_UID@
 Environment=WAYLAND_DISPLAY=@WAYLAND_DISPLAY@
+# Uniquement pour l'overlay "IP/nom d'hôte/port Web" affiché au démarrage
+# du player (voir NetworkInfo.cpp) — ce binaire ne parle jamais lui-même
+# HTTP/HTTPS, il affiche juste ces deux ports pour qu'on sache où joindre
+# pidecoder-config.service depuis un autre poste. Les deux sont publiés
+# même si l'un des deux protocoles est désactivé côté administration Web
+# (voir config-web.py) : le player n'a aucun moyen de savoir lequel est
+# actif à cet instant, ce serait plus trompeur d'en cacher un.
+Environment=PIDECODER_WEB_PORT=@WEB_PORT@
+Environment=PIDECODER_WEB_HTTPS_PORT=@WEB_HTTPS_PORT@
 Environment=PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
 Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
 ExecCondition=/usr/bin/python3 @TARGET@/scripts/check-camera-config.py @TARGET@/config/cameras.json

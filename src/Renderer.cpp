@@ -140,7 +140,8 @@ void Renderer::render(
     const std::vector<
         std::unique_ptr<Player>
     >& players,
-    const LayoutConfig& layout
+    const LayoutConfig& layout,
+    const std::optional<std::string>& startup_info_text
 )
 {
     const int width =
@@ -191,6 +192,17 @@ void Renderer::render(
         }
     }
 
+    if (
+        startup_info_text.has_value() &&
+        !startup_info_text->empty()
+    ) {
+        draw_startup_info_overlay(
+            *startup_info_text,
+            width,
+            height
+        );
+    }
+
     window_.swap_buffers();
 }
 
@@ -207,7 +219,8 @@ void Renderer::render_focus(
     const bool preset_menu_open,
     const bool show_audio_indicator,
     const bool audio_muted,
-    const bool audio_available
+    const bool audio_available,
+    const std::optional<std::string>& startup_info_text
 )
 {
     const int width =
@@ -288,6 +301,17 @@ void Renderer::render_focus(
             active_ptz_command,
             presets,
             preset_menu_open
+        );
+    }
+
+    if (
+        startup_info_text.has_value() &&
+        !startup_info_text->empty()
+    ) {
+        draw_startup_info_overlay(
+            *startup_info_text,
+            width,
+            height
         );
     }
 
@@ -1750,6 +1774,237 @@ void Renderer::draw_audio_indicator(
             1.0F
         );
     }
+}
+
+void Renderer::draw_startup_info_overlay(
+    const std::string& text,
+    const int canvas_width,
+    const int canvas_height
+)
+{
+    /*
+     * Même gabarit de marge que audio_button (bas-droite), une bande
+     * fine plutôt qu'un bouton carré. La hauteur est calculée comme le
+     * reste de l'UI, à partir de la plus petite dimension de l'écran,
+     * pour rester lisible aussi bien en petite fenêtre qu'en 4K.
+     */
+    const int shortest =
+        std::min(
+            canvas_width,
+            canvas_height
+        );
+
+    /*
+     * `text` porte deux lignes séparées par '\n' (voir
+     * NetworkInfo.hpp) : IP + nom d'hôte, puis MAC + port Web.
+     * draw_text() ne sait pas interpréter '\n', donc on coupe ici et on
+     * l'appelle une fois par ligne dans un petit "encart" à deux lignes
+     * plutôt qu'une seule ligne dense — plus lisible, et l'occasion de
+     * lui donner un peu de présentation (bordure colorée, séparateur)
+     * cohérente avec le reste de l'UI (draw_audio_indicator utilise la
+     * même bordure colorée sur fond sombre).
+     */
+    const auto separator = text.find('\n');
+
+    const std::string line1 =
+        separator == std::string::npos
+            ? text
+            : text.substr(0, separator);
+
+    const std::string line2 =
+        separator == std::string::npos
+            ? std::string{}
+            : text.substr(separator + 1);
+
+    const int line_height =
+        std::clamp(
+            shortest / 18,
+            34,
+            46
+        );
+
+    const int border =
+        std::max(
+            3,
+            line_height / 10
+        );
+
+    const int gap =
+        std::max(
+            5,
+            line_height / 6
+        );
+
+    const int margin =
+        std::clamp(
+            line_height / 2,
+            12,
+            18
+        );
+
+    /*
+     * Largeur nécessaire estimée à partir du même calcul de gabarit de
+     * police que draw_text (voir son implémentation), sur la plus
+     * longue des deux lignes. Bornée à la largeur de l'écran moins les
+     * marges au cas où un nom d'hôte serait inhabituellement long —
+     * draw_text tronquera proprement si nécessaire, ce n'est qu'un
+     * garde-fou.
+     *
+     * Même seuil que draw_text (rectangle.height >= 32). Avec le
+     * gabarit ci-dessus (line_height borné entre 34 et 46), ce seuil
+     * est toujours atteint : scale vaut donc systématiquement 2, c'est-
+     * à-dire la police en gros caractères, comme l'ancien encart à une
+     * seule ligne l'utilisait déjà sur les écrans 720p et plus (retour
+     * "un peu trop petit" du 16/09 : la première version à deux lignes
+     * restait bloquée à scale=1 faute de line_height suffisant).
+     * Recopier le même seuil que draw_text (plutôt qu'un seuil
+     * arbitraire différent) garantit que le budget de largeur calculé
+     * ici correspond exactement à ce que draw_text va vraiment
+     * dessiner, sans sur- ni sous-dimensionner la boîte.
+     */
+    const int scale =
+        line_height >= 32
+            ? 2
+            : 1;
+
+    const int character_width =
+        (5 * scale) + scale;
+
+    const int text_padding =
+        std::max(
+            6,
+            line_height / 5
+        );
+
+    const std::size_t longest_line =
+        std::max(
+            line1.size(),
+            line2.size()
+        );
+
+    const int desired_width =
+        text_padding * 2 +
+        border * 2 +
+        static_cast<int>(longest_line) *
+            character_width;
+
+    const int box_width =
+        std::clamp(
+            desired_width,
+            0,
+            std::max(
+                0,
+                canvas_width - margin * 2
+            )
+        );
+
+    const int box_height =
+        line_height * 2 +
+        gap +
+        border * 2;
+
+    const Rect box{
+        canvas_width - margin - box_width,
+        canvas_height - margin - box_height,
+        box_width,
+        box_height
+    };
+
+    /*
+     * Bordure colorée : on remplit d'abord toute la boîte dans la
+     * couleur d'accent, puis un rectangle intérieur (retrait de
+     * `border` de chaque côté) dans le fond sombre habituel par
+     * dessus — ce qui laisse juste le cadre visible tout autour, sans
+     * avoir besoin d'un vrai contour (fill_ui_rect ne sait tracer que
+     * des rectangles pleins, voir son implémentation). Même teinte
+     * d'accent que le bouton son actif (draw_audio_indicator), pour
+     * rester cohérent avec le reste de l'UI.
+     */
+    fill_ui_rect(
+        box.x,
+        box.y,
+        box.width,
+        box.height,
+        canvas_height,
+        0.30F,
+        0.55F,
+        0.95F,
+        1.0F
+    );
+
+    const Rect inner{
+        box.x + border,
+        box.y + border,
+        box.width - border * 2,
+        box.height - border * 2
+    };
+
+    fill_ui_rect(
+        inner.x,
+        inner.y,
+        inner.width,
+        inner.height,
+        canvas_height,
+        0.04F,
+        0.05F,
+        0.07F,
+        1.0F
+    );
+
+    /*
+     * Fin séparateur horizontal entre les deux lignes, dans une teinte
+     * intermédiaire entre le fond et la bordure — juste assez visible
+     * pour structurer l'encart sans attirer l'œil plus que le texte
+     * lui-même.
+     */
+    const int divider_thickness = 1;
+
+    const int divider_inset =
+        std::max(
+            2,
+            text_padding / 2
+        );
+
+    fill_ui_rect(
+        inner.x + divider_inset,
+        inner.y + line_height + (gap - divider_thickness) / 2,
+        std::max(
+            0,
+            inner.width - divider_inset * 2
+        ),
+        divider_thickness,
+        canvas_height,
+        0.16F,
+        0.22F,
+        0.32F,
+        1.0F
+    );
+
+    const Rect line1_box{
+        inner.x,
+        inner.y,
+        inner.width,
+        line_height
+    };
+
+    const Rect line2_box{
+        inner.x,
+        inner.y + line_height + gap,
+        inner.width,
+        line_height
+    };
+
+    draw_text(
+        line1,
+        line1_box,
+        canvas_height
+    );
+
+    draw_text(
+        line2,
+        line2_box,
+        canvas_height
+    );
 }
 
 bool Renderer::audio_button_hit_at(

@@ -100,11 +100,18 @@ On a first installation, the installer asks for the password of the Web account 
 
 ## 4. Open the administration interface
 
-Open:
+Open, over HTTP or HTTPS (both are active by default, on their own port):
 
 ```text
 http://RASPBERRY_PI_IP:8080
+https://RASPBERRY_PI_IP:8443
 ```
+
+The browser will show a certificate warning the first time over HTTPS — see
+[HTTPS and TLS certificates](#https-and-tls-certificates) below. Both ports
+can be changed, or either protocol turned off, from the Security tab once
+logged in (see [Changing the certificate later](#changing-the-certificate-later-without-reinstalling)
+and [Enabling/disabling HTTP or HTTPS from the Web UI](#enablingdisabling-http-or-https-from-the-web-ui)).
 
 Default Web username:
 
@@ -112,12 +119,25 @@ Default Web username:
 admin
 ```
 
+If you don't know the Pi's IP address, connect a screen to it: PiDecoder
+shows its IP, hostname, MAC address and both Web ports as an overlay for
+30 seconds at startup, and again at any time by pressing the **I** key.
+
 > [!WARNING]
-> The current administration interface uses HTTP.
-> Do not expose port 8080 directly to the Internet.
-> Keep it on a trusted management network or behind an appropriate secured reverse proxy.
+> Keep the administration interface on a trusted management network, or
+> behind an appropriate secured reverse proxy, even over HTTPS — the
+> certificate is self-signed by default (see below), which authenticates
+> the Pi to a browser that has already accepted it, but is not equivalent
+> to a certificate from a public authority.
 
 ## Safe updates
+
+Since this version, an equivalent one-click update is also available from
+the Web administration interface — see
+[Software update from the Web UI](#software-update-from-the-web-ui) below.
+The manual steps below still work and remain the only option on an
+installation that predates this feature (identifiable by an "update
+unavailable" message on that page).
 
 Update the repository and run the same installer again:
 
@@ -144,6 +164,29 @@ Before replacing an existing installation, it creates a timestamped backup under
 
 See [Backup and restore](backup.md) for details.
 
+### `git pull` alone does not update a running installation
+
+`pidecoder-config.service` runs the files under `/opt/pidecoder/` — a
+physical copy made by `install.sh` (`cp -a`), separate from the Git
+checkout. Running `git pull` in the checkout only updates the checkout
+itself; it does **not** touch `/opt/pidecoder`, and restarting the
+service afterwards just re-runs the same files that were already there.
+To pick up changes, run `sudo ./scripts/install.sh` again as shown above.
+
+For quick iteration on `scripts/` (Python, Shell, or the Web UI) during
+development, `scripts/sync-dev.sh` copies just those files into
+`/opt/pidecoder/scripts/` and restarts `pidecoder-config.service`,
+without the full installer's native-engine rebuild and service restarts
+(it does not touch the video engine or `config/`):
+
+```bash
+sudo bash scripts/sync-dev.sh
+```
+
+This is a development convenience only — it is not part of the supported
+install/upgrade path and is not a substitute for `install.sh` on a
+production deployment.
+
 ## Installer options
 
 ```text
@@ -151,7 +194,18 @@ See [Backup and restore](backup.md) for details.
 --target PATH            Installation directory (default: /opt/pidecoder)
 --wayland-display NAME   Wayland socket name (default: wayland-0)
 --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
---port PORT              Web administration port (default: 8080)
+--port PORT              Web administration HTTP port (default: 8080)
+--https-port PORT        Web administration HTTPS port (default: 8443).
+                          Must differ from --port.
+--tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
+                          self-signed one. Requires --tls-key.
+--tls-key PATH           Import the matching TLS private key (PEM). Requires
+                          --tls-cert.
+--no-https               Do not install a certificate; serve the Web
+                          administration interface over plain HTTP only at
+                          install time. Mutually exclusive with --tls-cert/--tls-key.
+                          HTTPS can still be turned on later, with a
+                          certificate, from the Security tab.
 --skip-deps              Do not run apt-get
 --no-start               Install and enable units without starting them
 --check                  Validate the host and source without changing anything
@@ -175,6 +229,145 @@ The environment variable below allows installation on a non-Debian host, but tha
 ```bash
 sudo PIDECODER_ALLOW_UNSUPPORTED=1 ./scripts/install.sh
 ```
+
+## HTTPS and TLS certificates
+
+The Web administration interface serves HTTP and HTTPS at the same time,
+each on its own independent port — 8080 and 8443 by default. Either one
+can be turned off on its own (see
+[Enabling/disabling HTTP or HTTPS from the Web UI](#enablingdisabling-http-or-https-from-the-web-ui)
+below), but not both at once, so the interface can never lock itself out.
+
+On a fresh install, if no certificate is imported, `install.sh` generates a
+self-signed one covering the Pi's hostname and its detected local IPv4
+addresses:
+
+```bash
+sudo ./scripts/install.sh
+```
+
+The browser shows a certificate warning the first time — this is expected
+for a self-signed certificate on a device with no public domain/DNS, similar
+to most LAN admin interfaces (router, NAS...). Accept it once to continue.
+
+On an upgrade, an existing certificate is preserved as-is; it is not
+regenerated.
+
+### Installing without HTTPS
+
+```bash
+sudo ./scripts/install.sh --no-https
+```
+
+No certificate is installed and the service starts in plain HTTP. This
+cannot be combined with `--tls-cert`/`--tls-key`.
+
+### Importing your own certificate
+
+```bash
+sudo ./scripts/install.sh \
+  --tls-cert /path/to/cert.pem \
+  --tls-key /path/to/key.pem
+```
+
+Both files must be PEM-encoded and form a matching pair — the installer
+verifies this (certificate validity and a public-key comparison against the
+key) before installing them, and refuses a mismatched pair.
+
+### Changing the certificate later, without reinstalling
+
+`install.sh` rebuilds the native engine and stops every service — not
+practical just to switch a certificate. Use `scripts/manage-tls.sh` instead,
+which only touches `config/tls/` and restarts `pidecoder-config.service`:
+
+```bash
+sudo ./scripts/manage-tls.sh status              # current state
+sudo ./scripts/manage-tls.sh generate [--force]  # new self-signed certificate
+sudo ./scripts/manage-tls.sh import --cert PATH --key PATH
+sudo ./scripts/manage-tls.sh disable             # switch to plain HTTP
+sudo ./scripts/manage-tls.sh enable              # restore/regenerate
+```
+
+`disable` moves the active certificate aside (`cert.pem.disabled` /
+`key.pem.disabled`) instead of deleting it, so `enable` can restore the exact
+same certificate later.
+
+### Enabling/disabling HTTP or HTTPS from the Web UI
+
+The Security tab has two panels, "HTTPS" and "Accès HTTP" (HTTP access),
+mirroring each other: each lets you generate or import a certificate,
+switch the corresponding protocol on or off, and see its current status,
+without leaving the browser or touching SSH. Turning off the last
+remaining protocol is refused with a clear message, since that would cut
+off all access to the interface.
+
+### Changing the HTTP/HTTPS port numbers
+
+A third panel, "Ports de l'administration Web" (Web administration
+ports), lets you change the two port numbers directly, without a full
+reinstall. Applying a change restarts both the Web administration service
+and the video engine — a brief interruption of the on-screen video — so
+the startup overlay (IP/hostname/MAC/ports, see [step 4](#4-open-the-administration-interface))
+reflects the new ports immediately instead of waiting for the next
+natural restart. Unlike the hostname/IP change described below, there is
+no confirmation step or automatic rollback: a wrong port number can never
+lock you out of the Pi's network or SSH access the way a wrong IP address
+can.
+
+## Software update from the Web UI
+
+The Système tab includes an update panel: it checks the Git repository
+against its tracked remote branch and, if a newer commit is available,
+shows a "Update now" button. Clicking it runs the same `git pull` +
+`sudo ./scripts/install.sh` sequence described in
+[Safe updates](#safe-updates) above, in the background, and streams the
+progress and log output back to the page — including through the service
+restart that `install.sh` performs at the end, which briefly interrupts
+the page's connection to the server.
+
+This requires `--repo-path` to have been recorded during installation,
+which happens automatically as of this version. On an installation from
+before this feature, the panel shows a message asking to run
+`sudo ./scripts/install.sh` once from the Git clone to enable it — this is
+a one-time, harmless re-install with no other effect.
+
+If `install.sh` fails partway through (a build error, a missing
+dependency...), its own existing rollback restores the previous
+`/opt/pidecoder` and restarts the services automatically, exactly as it
+would for a manual update — the Web UI update button does not change this
+safety behavior, only how the update is triggered.
+
+## Network configuration from the Web UI
+
+The Réseau tab lets you change the Pi's hostname, switch a network
+connection between DHCP and a manual (static) IP address, configure NTP
+time servers, and set the timezone — without needing SSH access.
+
+Because a mistake in the hostname or IP address could otherwise cut off
+access to the Pi remotely, both of those changes include an automatic
+safety net: the new value is applied immediately, and a full-screen
+overlay with a "Confirm this change" button appears — checked for
+automatically as soon as you log back in, even in a fresh browser tab, so
+you don't need to remember to click back into the Réseau tab. If the
+change isn't confirmed within 120 seconds, the Pi automatically reverts
+to the previous value. This safety net runs on the Pi itself and does not
+depend on your browser successfully reconnecting — it is designed
+specifically for the case where the change makes the page briefly or
+permanently unreachable at its old address.
+
+Practical notes:
+
+- If you change the IP address, the page will likely become unreachable
+  at its old URL; reconnect at the new address within the 120-second
+  window to confirm the change (the overlay gives you a direct link to
+  the new address), or it will revert on its own.
+- NTP and timezone changes are lower-risk (they cannot affect network
+  reachability) and apply immediately without a confirmation step.
+- As with any change to the Pi's network configuration, keep a fallback
+  way to reach the device (a keyboard and monitor connected directly, or
+  a second SSH session over a connection that does not depend on the
+  address being changed) the first few times you use the IP/DHCP toggle,
+  until you are comfortable with how it behaves on your network.
 
 ## Startup architecture
 

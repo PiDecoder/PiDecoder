@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, re, secrets, shutil, subprocess, tempfile, threading, time, getpass
+import argparse, base64, hashlib, hmac, ipaddress, json, os, platform, pwd, re, secrets, shutil, ssl, subprocess, sys, tempfile, threading, time, getpass
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -9,8 +9,17 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_for_ptz_camera, discover, find_ptz_camera, goto_preset, get_stream_uri, identify_device, inspect_device, stop
 from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
+import system_admin as sysadmin
 
-VERSION='1.1.0'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='1.2.0'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+# Le serveur HTTPS, quand il tourne (voir main()) — pas forcément celui qui a
+# reçu la requête en cours : HTTP et HTTPS écoutent maintenant sur deux ports
+# distincts en parallèle (voir "Server" et main()), donc self.server dans un
+# handler ne désigne que le port par lequel CETTE requête est arrivée. Les
+# opérations qui doivent toujours agir sur HTTPS (recharger le certificat à
+# chaud après generate/import, par exemple) passent par cette référence
+# globale plutôt que par self.server.
+HTTPS_SERVER=None
 
 # Anti-bruteforce sur /api/login : au-delà de LOGIN_MAX_ATTEMPTS échecs pour une
 # même adresse IP en LOGIN_WINDOW secondes, l'IP est bloquée LOGIN_LOCKOUT
@@ -942,8 +951,139 @@ def diagnostics_payload(root, log_lines=50):
     return payload
 
 
-class Server(ThreadingHTTPServer): root:Path; auth:Path
+def manage_tls_script():
+    return Path(__file__).resolve().parent/'manage-tls.sh'
+
+
+def run_manage_tls(args,root):
+    # --no-restart : ce process est lui-même pidecoder-config.service, donc
+    # c'est à l'appelant (les handlers /api/tls/* plus bas) de décider quand
+    # et comment redémarrer — jamais à manage-tls.sh, qui bloquerait sur son
+    # propre redémarrage en pleine requête HTTP (voir schedule_self_restart).
+    return subprocess.run(
+        ['bash',str(manage_tls_script()),*args,'--target',str(root),'--no-restart'],
+        capture_output=True,text=True,timeout=30,
+    )
+
+
+def cert_summary(certfile):
+    try:
+        def field(args):
+            r=subprocess.run(['openssl',*args],capture_output=True,text=True,timeout=5)
+            return r.stdout.strip() if r.returncode==0 else ''
+        subject=field(['x509','-in',str(certfile),'-noout','-subject']).split('=',1)[-1].strip()
+        enddate=field(['x509','-in',str(certfile),'-noout','-enddate']).split('=',1)[-1].strip()
+        san_raw=field(['x509','-in',str(certfile),'-noout','-ext','subjectAltName'])
+        san=[]
+        for line in san_raw.splitlines()[1:]:
+            san.extend(part.strip() for part in line.split(',') if part.strip())
+        return {'subject':subject or None,'not_after':enddate or None,'san':san}
+    except Exception:
+        return None
+
+
+def schedule_self_restart(delay_seconds=2):
+    # pidecoder-config.service est le process qui exécute ce code : lui
+    # demander de se redémarrer directement (subprocess bloquant) le ferait
+    # tuer par systemd avant que la requête HTTP en cours ait pu répondre.
+    # systemd-run --on-active crée une unité transitoire indépendante (hors
+    # du cgroup de ce service), qui survit à son arrêt et déclenche le
+    # redémarrage quelques secondes plus tard — le temps que la réponse JSON
+    # atteigne le navigateur.
+    try:
+        subprocess.Popen(
+            ['systemd-run','--collect',f'--on-active={delay_seconds}',
+             'systemctl','restart','pidecoder-config.service'],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+        )
+        return True
+    except OSError:
+        return False
+
+
+class Server(ThreadingHTTPServer): root:Path; auth:Path; tls:bool=False; tls_cert_path:Path; tls_key_path:Path; tls_context:object=None; repo_path:str=None; bind:str='0.0.0.0'; port:int=8080; https_port:int=8443
+
+
+def http_disabled_marker(root):
+    # Pendant de config/tls/cert.pem(.disabled) côté HTTP : présence du
+    # fichier = HTTP désactivé. Pas de contenu, juste un marqueur — même
+    # esprit que cert.pem.disabled dans manage-tls.sh, mais HTTP n'a pas de
+    # certificat à mettre de côté, donc un simple fichier vide suffit.
+    return root/'config/http-disabled'
+
+
+def http_enabled_on_disk(root):
+    return not http_disabled_marker(root).is_file()
+
+
+def https_enabled_on_disk(root):
+    tls_dir=root/'config/tls'
+    return (tls_dir/'cert.pem').is_file() and (tls_dir/'key.pem').is_file()
+
+
 class H(BaseHTTPRequestHandler):
+    def secure_flag(self):
+        # Le drapeau de cookie « Secure » n'a de sens que sur une connexion
+        # chiffrée : un navigateur ignore silencieusement un cookie Secure
+        # reçu en HTTP simple, ce qui casserait la session si TLS n'est pas
+        # actif (ex. secours HTTP quand le certificat est absent).
+        return '; Secure' if getattr(self.server,'tls',False) else ''
+    def reload_tls_if_active(self):
+        # Recharge le certificat sur le contexte TLS déjà en écoute, sans
+        # rien redémarrer : ssl.SSLContext.load_cert_chain() peut être
+        # rappelé sur un contexte déjà utilisé, les connexions déjà ouvertes
+        # ne sont pas affectées et les nouvelles utilisent le nouveau
+        # certificat immédiatement. Ne fait rien si le service ne sert pas
+        # actuellement en HTTPS (le fichier reste « en attente » jusqu'à la
+        # prochaine activation — voir /api/tls/enable).
+        #
+        # Passe par le serveur HTTPS global (HTTPS_SERVER) plutôt que par
+        # self.server : HTTP et HTTPS écoutent maintenant sur deux ports
+        # distincts en parallèle (voir main()), et cette méthode peut très
+        # bien être appelée depuis une requête arrivée sur le port HTTP
+        # (generate/import n'exigent pas d'être déjà en HTTPS) — il faut
+        # quand même recharger le contexte HTTPS, pas celui de la connexion
+        # en cours.
+        https_server=HTTPS_SERVER
+        if https_server is None or not getattr(https_server,'tls',False):
+            return False
+        ctx=getattr(https_server,'tls_context',None)
+        if ctx is None:
+            return False
+        # Toujours le chemin standard <root>/config/tls/ — c'est celui que
+        # manage-tls.sh écrit, indépendamment d'un éventuel --tls-cert/
+        # --tls-key personnalisé passé au démarrage de ce process (non
+        # utilisé par le service systemd en production, qui ne passe jamais
+        # ces options : voir pidecoder-config.service.in).
+        tls_dir=self.server.root/'config/tls'
+        try:
+            ctx.load_cert_chain(
+                certfile=str(tls_dir/'cert.pem'),
+                keyfile=str(tls_dir/'key.pem'),
+            )
+        except (ssl.SSLError,OSError) as exc:
+            raise RuntimeError(i18n_t('tls.reload_failed',self.lang(),error=str(exc)))
+        return True
+    def tls_redirect_url(self,scheme,port):
+        # `port` est désormais explicite : HTTP et HTTPS écoutent sur deux
+        # ports distincts (voir main()), donc un simple changement de
+        # schéma sur le même Host (ancien comportement, un seul port pour
+        # les deux) pointerait vers le mauvais port la moitié du temps.
+        # L'en-tête Host du navigateur porte encore le port de la connexion
+        # EN COURS — on le retire avant de recomposer l'URL avec le bon.
+        host=(self.headers.get('Host') or '').strip()
+        if not host:
+            return ''
+        if host.startswith('['):
+            end=host.find(']')
+            hostname=host[:end+1] if end!=-1 else host
+        elif ':' in host:
+            hostname=host.rsplit(':',1)[0]
+        else:
+            hostname=host
+        default_port=443 if scheme=='https' else 80
+        suffix='' if port==default_port else f':{port}'
+        return f'{scheme}://{hostname}{suffix}/'
     def j(self,data,status=200,cookie=None):
         raw=json.dumps(
             data,
@@ -963,7 +1103,9 @@ class H(BaseHTTPRequestHandler):
             'Cache-Control',
             'no-store',
         )
-        if cookie:self.send_header('Set-Cookie',cookie)
+        if cookie:
+            for c in (cookie if isinstance(cookie,(list,tuple)) else (cookie,)):
+                self.send_header('Set-Cookie',c)
         self.end_headers(); self.wfile.write(raw)
     def static(self,name,content_type):
         try:
@@ -1032,6 +1174,21 @@ class H(BaseHTTPRequestHandler):
                     500,
                 )
         if p=='/api/system':return self.j(system_info())
+        if p=='/api/tls/status':
+            # État disque, pas self.server.tls : cette requête peut très bien
+            # arriver par le port HTTP (les deux tournent en parallèle, voir
+            # main()) sans que ça veuille dire que HTTPS est inactif.
+            tls_dir=self.server.root/'config/tls'
+            cert_file=tls_dir/'cert.pem'
+            disabled_file=tls_dir/'cert.pem.disabled'
+            return self.j({
+                'https_active':https_enabled_on_disk(self.server.root),
+                'https_port':self.server.https_port,
+                'cert':cert_summary(cert_file) if cert_file.is_file() else None,
+                'disabled_present':disabled_file.is_file() and (tls_dir/'key.pem.disabled').is_file(),
+                'http_active':http_enabled_on_disk(self.server.root),
+                'http_port':self.server.port,
+            })
         if p=='/api/service-status':
             active=subprocess.run(['systemctl','is-active','--quiet','pidecoder.service'],check=False).returncode==0
             enabled=subprocess.run(['systemctl','is-enabled','--quiet','pidecoder.service'],check=False).returncode==0
@@ -1041,6 +1198,22 @@ class H(BaseHTTPRequestHandler):
             lay=load(self.server.root/'config/layout.json',{})
             raw=json.dumps({'format':'pidecoder-config','version':VERSION,'exported_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'cameras':cams.get('cameras',[]),'layout':lay},indent=2,ensure_ascii=False).encode('utf-8')
             self.send_response(200);self.send_header('Content-Type','application/json;charset=utf-8');self.send_header('Content-Disposition','attachment; filename=pidecoder-config.json');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
+        if p=='/api/update/check':
+            return self.j(sysadmin.check_update(self.server.repo_path,sysadmin.get_service_user()))
+        if p=='/api/update/status':
+            return self.j(sysadmin.update_status(self.server.root))
+        if p=='/api/network/status':
+            nmcli_ok=sysadmin.nmcli_available()
+            return self.j({
+                'nmcli_available':nmcli_ok,
+                'connections':sysadmin.list_connections() if nmcli_ok else [],
+                'hostname':sysadmin.current_hostname(),
+                'ntp':sysadmin.ntp_config(),
+                'timezone':sysadmin.current_timezone(),
+                'pending':sysadmin.pending_change(self.server.root),
+            })
+        if p=='/api/network/timezones':
+            return self.j({'timezones':sysadmin.list_timezones()})
         self.send_error(404)
     def do_POST(self):
         p=urlparse(self.path).path
@@ -1056,14 +1229,14 @@ class H(BaseHTTPRequestHandler):
                 clear_login_failures(ip)
                 t=secrets.token_urlsafe(32)
                 with LOCK:SESSIONS[t]=time.time()+43200
-                return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/')
+                return self.j({'ok':True},cookie=f'pidecoder_session={t}; HttpOnly; SameSite=Strict; Path=/{self.secure_flag()}')
             if p=='/api/logout':
                 with LOCK:SESSIONS.pop(self.token(),None)
                 return self.j({'ok':True})
             if p=='/api/language':
                 d=self.body();value=str(d.get('lang','')).strip().lower()
                 if value not in SUPPORTED_LANGS:value=DEFAULT_LANG
-                return self.j({'ok':True,'lang':value},cookie=f'pidecoder_lang={value}; SameSite=Lax; Path=/; Max-Age=31536000')
+                return self.j({'ok':True,'lang':value},cookie=f'pidecoder_lang={value}; SameSite=Lax; Path=/; Max-Age=31536000{self.secure_flag()}')
             if not self.need():return
             if p=='/api/onvif/discover':
                 d=self.body();result=discover(float(d.get('timeout',5)))
@@ -1323,20 +1496,327 @@ class H(BaseHTTPRequestHandler):
                     'ok':True,
                     'message':i18n_t('password.changed',lang)
                 })
+            if p=='/api/tls/generate':
+                d=self.body();force=bool(d.get('force',False))
+                args=['generate']
+                if force:args.append('--force')
+                r=run_manage_tls(args,self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.generate_failed',self.lang()))
+                reloaded=self.reload_tls_if_active()
+                return self.j({'ok':True,'reloaded':reloaded})
+            if p=='/api/tls/import':
+                if not getattr(self.server,'tls',False):
+                    raise ValueError(i18n_t('tls.import_requires_https',self.lang()))
+                d=self.body()
+                cert_pem=str(d.get('cert','')).strip()
+                key_pem=str(d.get('key','')).strip()
+                if not cert_pem or not key_pem:
+                    raise ValueError(i18n_t('tls.cert_and_key_required',self.lang()))
+                with tempfile.TemporaryDirectory() as tmp:
+                    cert_tmp=Path(tmp)/'import-cert.pem'
+                    key_tmp=Path(tmp)/'import-key.pem'
+                    cert_tmp.write_text(cert_pem,encoding='utf-8')
+                    key_tmp.write_text(key_pem,encoding='utf-8')
+                    r=run_manage_tls(['import','--cert',str(cert_tmp),'--key',str(key_tmp)],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.import_failed',self.lang()))
+                reloaded=self.reload_tls_if_active()
+                return self.j({'ok':True,'reloaded':reloaded})
+            if p=='/api/tls/enable':
+                # État disque : cette requête peut arriver par le port HTTP
+                # alors que HTTPS tourne déjà en parallèle sur son propre
+                # port (voir main()) — self.server.tls ne reflète que le
+                # port par lequel CETTE requête est arrivée, pas l'état
+                # réel du service.
+                if https_enabled_on_disk(self.server.root):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                r=run_manage_tls(['enable'],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.enable_failed',self.lang()))
+                schedule_self_restart()
+                # Redirection offerte à titre de confort (voir tout de suite
+                # HTTPS fonctionner sur son port dédié) mais pas une
+                # nécessité : contrairement à l'ancien modèle « un seul port,
+                # un seul protocole », la connexion HTTP en cours (si c'est
+                # par elle que cette requête est arrivée) continue de
+                # fonctionner sans interruption après le redémarrage — HTTP
+                # et HTTPS sont deux ports indépendants désormais.
+                return self.j({
+                    'ok':True,'restarting':True,
+                    'redirect_url':self.tls_redirect_url('https',self.server.https_port),
+                })
+            if p=='/api/tls/disable':
+                if not https_enabled_on_disk(self.server.root):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                if not http_enabled_on_disk(self.server.root):
+                    # Ne jamais laisser désactiver les deux à la fois : ça
+                    # couperait tout accès à l'interface Web, sans filet de
+                    # rattrapage possible depuis la page elle-même.
+                    raise ValueError(i18n_t('tls.disable_blocked_no_http',self.lang()))
+                r=run_manage_tls(['disable'],self.server.root)
+                if r.returncode:raise RuntimeError(r.stderr.strip() or i18n_t('tls.disable_failed',self.lang()))
+                schedule_self_restart()
+                # Ne redirige (et ne force l'expiration du cookie Secure) que
+                # si CETTE requête est arrivée par la connexion HTTPS qu'on
+                # est en train de couper — si elle est arrivée par HTTP (les
+                # deux tournaient en parallèle), cette session HTTP n'est pas
+                # affectée du tout par la désactivation de HTTPS.
+                on_https=getattr(self.server,'tls',False)
+                redirect_url=self.tls_redirect_url('http',self.server.port) if on_https else ''
+                cookie=None
+                if on_https:
+                    # Un cookie « Secure » ne peut être écrasé par un cookie
+                    # non Secure émis depuis une connexion non chiffrée : le
+                    # navigateur rejette silencieusement toute tentative une
+                    # fois basculé en HTTP, ce qui bloquerait définitivement
+                    # la reconnexion (le nouveau cookie de session ne serait
+                    # jamais accepté). C'est le dernier moment où on répond
+                    # encore en HTTPS : on expire donc ici, explicitement,
+                    # les cookies Secure existants — le navigateur, lui,
+                    # autorise la suppression d'un cookie Secure par une
+                    # réponse HTTPS.
+                    with LOCK:SESSIONS.pop(self.token(),None)
+                    cookie=[
+                        'pidecoder_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure',
+                        'pidecoder_lang=; SameSite=Lax; Path=/; Max-Age=0; Secure',
+                    ]
+                return self.j(
+                    {'ok':True,'restarting':True,'redirect_url':redirect_url},
+                    cookie=cookie,
+                )
+            if p=='/api/http/enable':
+                if http_enabled_on_disk(self.server.root):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                http_disabled_marker(self.server.root).unlink(missing_ok=True)
+                schedule_self_restart()
+                return self.j({'ok':True,'restarting':True,'redirect_url':''})
+            if p=='/api/http/disable':
+                if not http_enabled_on_disk(self.server.root):
+                    return self.j({'ok':True,'restarting':False,'already':True})
+                if not https_enabled_on_disk(self.server.root):
+                    raise ValueError(i18n_t('http.disable_blocked_no_https',self.lang()))
+                marker=http_disabled_marker(self.server.root)
+                marker.parent.mkdir(parents=True,exist_ok=True)
+                marker.touch()
+                schedule_self_restart()
+                # Symétrique du cas HTTPS ci-dessus : ne redirige que si
+                # cette requête est arrivée par HTTP (le port qu'on coupe) —
+                # sinon (déjà sur HTTPS) rien ne change pour cette session.
+                on_http=not getattr(self.server,'tls',False)
+                redirect_url=self.tls_redirect_url('https',self.server.https_port) if on_http else ''
+                return self.j({'ok':True,'restarting':True,'redirect_url':redirect_url})
+            if p=='/api/tls/set-ports':
+                d=self.body()
+                try:
+                    new_http=sysadmin.validate_port(d.get('http_port'))
+                    new_https=sysadmin.validate_port(d.get('https_port'))
+                except ValueError:
+                    raise ValueError(i18n_t('ports.invalid',self.lang()))
+                if new_http==new_https:
+                    raise ValueError(i18n_t('ports.must_differ',self.lang()))
+                sysadmin.start_port_change(new_http,new_https)
+                # Redirige toujours vers le protocole de la connexion en
+                # cours (pas de changement de protocole ici, seulement de
+                # numéro de port) — inoffensif même si seul l'AUTRE port a
+                # changé (juste un rechargement de la même page).
+                on_https=getattr(self.server,'tls',False)
+                scheme='https' if on_https else 'http'
+                target_port=new_https if on_https else new_http
+                return self.j({
+                    'ok':True,'restarting':True,
+                    'redirect_url':self.tls_redirect_url(scheme,target_port),
+                })
+            if p=='/api/update/start':
+                if not self.server.repo_path:
+                    raise ValueError(i18n_t('update.no_repo_path',self.lang()))
+                status=sysadmin.update_status(self.server.root)
+                if status.get('state')=='running':
+                    raise ValueError(i18n_t('update.already_running',self.lang()))
+                d=self.body()
+                skip_deps=bool(d.get('skip_deps',False))
+                service_user=sysadmin.get_service_user()
+                if not service_user:
+                    raise ValueError(i18n_t('update.no_service_user',self.lang()))
+                sysadmin.start_update(
+                    self.server.root,self.server.repo_path,service_user,
+                    str(self.server.root),self.server.bind,self.server.port,
+                    self.server.https_port,skip_deps,
+                )
+                return self.j({'ok':True,'started':True})
+            if p=='/api/network/hostname':
+                d=self.body()
+                try:
+                    new_hostname=sysadmin.validate_hostname(str(d.get('hostname','')))
+                except ValueError:
+                    raise ValueError(i18n_t('network.invalid_hostname',self.lang()))
+                try:
+                    result=sysadmin.start_hostname_change(self.server.root,new_hostname)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.hostname_change_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True,**result})
+            if p=='/api/network/ip':
+                if not sysadmin.nmcli_available():
+                    raise ValueError(i18n_t('network.nmcli_unavailable',self.lang()))
+                d=self.body()
+                connection=str(d.get('connection',''))
+                known=[c['name'] for c in sysadmin.list_connections()]
+                if connection not in known:
+                    raise ValueError(i18n_t('network.unknown_connection',self.lang()))
+                method=str(d.get('method',''))
+                if method not in ('auto','manual'):
+                    raise ValueError(i18n_t('network.invalid_method',self.lang()))
+                address=gateway=None;dns=[]
+                if method=='manual':
+                    try:
+                        address=sysadmin.validate_cidr(str(d.get('address','')))
+                        gateway=sysadmin.validate_ipv4(str(d.get('gateway','')))
+                        dns=sysadmin.validate_dns_list([str(x) for x in d.get('dns',[])])
+                    except ValueError:
+                        raise ValueError(i18n_t('network.invalid_address',self.lang()))
+                result=sysadmin.start_ip_change(self.server.root,connection,method,address,gateway,dns)
+                return self.j({'ok':True,**result})
+            if p=='/api/network/confirm':
+                d=self.body()
+                token=str(d.get('token',''))
+                ok=sysadmin.confirm_change(self.server.root,token)
+                return self.j({'ok':ok})
+            if p=='/api/network/ntp':
+                d=self.body()
+                enabled=bool(d.get('enabled',True))
+                try:
+                    servers=sysadmin.validate_ntp_servers([str(x) for x in d.get('servers',[])])
+                except ValueError:
+                    raise ValueError(i18n_t('network.invalid_ntp_server',self.lang()))
+                try:
+                    sysadmin.apply_ntp(enabled,servers)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.ntp_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True})
+            if p=='/api/network/timezone':
+                d=self.body()
+                timezone=str(d.get('timezone','')).strip()
+                if timezone not in sysadmin.list_timezones():
+                    raise ValueError(i18n_t('network.invalid_timezone',self.lang()))
+                try:
+                    sysadmin.apply_timezone(timezone)
+                except RuntimeError as exc:
+                    raise ValueError(i18n_t('network.timezone_failed',self.lang(),error=str(exc)))
+                return self.j({'ok':True})
             self.send_error(404)
         except ValueError as e:self.j({'ok':False,'error':str(e)},400)
         except Exception as e:self.j({'ok':False,'error':i18n_t('server.error',self.lang(),error=str(e))},500)
     def log_message(self,fmt,*args):print('[config-web] '+fmt%args)
 
+def _make_server(bind,bind_port,root,auth,repo_path,http_port,https_port,tls):
+    # `bind_port` est le port TCP réellement écouté par CE serveur (celui
+    # passé à Server()/socketserver) ; `http_port`/`https_port` sont les
+    # deux valeurs de configuration fixes (toujours a.port/a.https_port),
+    # identiques sur les deux instances — pour qu'un handler puisse
+    # toujours répondre "le port HTTP c'est X, le port HTTPS c'est Y" quel
+    # que soit le port par lequel la requête est arrivée (voir
+    # /api/tls/status, tls_redirect_url()). Les confondre avec bind_port
+    # ferait par exemple répondre "port HTTP : 8443" à une requête arrivée
+    # par HTTPS.
+    s=Server((bind,bind_port),H);s.root=root;s.auth=auth
+    s.tls_cert_path=None;s.tls_key_path=None;s.tls_context=None
+    s.repo_path=repo_path;s.bind=bind;s.port=http_port;s.https_port=https_port
+    s.tls=tls
+    return s
+
+
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080);ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
+    global HTTPS_SERVER
+    ap=argparse.ArgumentParser();ap.add_argument('--root',default=str(ROOT));ap.add_argument('--bind',default='0.0.0.0');ap.add_argument('--port',type=int,default=8080,help='Port HTTP (défaut : 8080)');ap.add_argument('--https-port',type=int,default=8443,help='Port HTTPS (défaut : 8443)');ap.add_argument('--set-password',action='store_true');ap.add_argument('--username',default='admin');ap.add_argument('--tls-cert',default=None,help='Certificat TLS (PEM). Par défaut : <root>/config/tls/cert.pem');ap.add_argument('--tls-key',default=None,help='Clé privée TLS (PEM). Par défaut : <root>/config/tls/key.pem');ap.add_argument('--no-https',action='store_true',help='Désactive HTTPS quel que soit l’état du certificat (déconseillé, pour développement uniquement)');ap.add_argument('--repo-path',default=None,help='Chemin du clone Git (ex: ~/PiDecoder), pour la vérification/mise à jour depuis la page Web. Absent sur une installation antérieure à cette fonctionnalité, tant que install.sh n’a pas été relancé une fois.');a=ap.parse_args();root=Path(a.root);auth=root/'config/web-auth.json'
     if a.set_password:
         p=getpass.getpass('Nouveau mot de passe : ');q=getpass.getpass('Confirmation : ')
         if p!=q:raise SystemExit('Les mots de passe ne correspondent pas')
         set_auth(auth,a.username,p);print('Identifiants Web mis à jour.');return
     if not auth.exists():raise SystemExit('Authentification non initialisée. Utiliser --set-password.')
-    s=Server((a.bind,a.port),H);s.root=root;s.auth=auth;print(f'PiDecoder Config v{VERSION} : http://{a.bind}:{a.port}')
-    try:s.serve_forever()
-    except KeyboardInterrupt:pass
+    if a.port==a.https_port:raise SystemExit(f'--port et --https-port doivent être différents (les deux valent {a.port})')
+    tls_cert=Path(a.tls_cert) if a.tls_cert else root/'config/tls/cert.pem'
+    tls_key=Path(a.tls_key) if a.tls_key else root/'config/tls/key.pem'
+
+    # HTTP et HTTPS sont deux ports indépendants (demande explicite : pouvoir
+    # les changer séparément, et que l'un ne disparaisse pas quand l'autre
+    # est activé — voir CHANGELOG). Chacun peut être coupé séparément :
+    # HTTPS par présence de config/tls/cert.pem+key.pem (comme avant, piloté
+    # par manage-tls.sh / les boutons Sécurité), HTTP par l'absence du
+    # marqueur config/http-disabled (même mécanisme, symétrique). Un garde-
+    # fou commun aux deux (voir /api/tls/disable et /api/http/disable) refuse
+    # déjà de désactiver le dernier des deux depuis l'interface Web ; celui
+    # ci-dessous est la dernière ligne de défense si, malgré tout, les deux
+    # se retrouvaient désactivés en même temps sur le disque (édition
+    # manuelle, par exemple) — plutôt que de ne plus rien écouter du tout et
+    # couper tout accès, on force HTTP.
+    https_wanted=(not a.no_https) and tls_cert.is_file() and tls_key.is_file()
+    http_wanted=http_enabled_on_disk(root)
+    if not https_wanted and not http_wanted:
+        print('AVERTISSEMENT : HTTP et HTTPS étaient tous les deux désactivés sur le disque — HTTP forcé pour ne pas couper tout accès à l’interface Web.',file=sys.stderr)
+        http_wanted=True
+
+    servers=[]
+
+    if http_wanted:
+        s_http=_make_server(a.bind,a.port,root,auth,a.repo_path,a.port,a.https_port,tls=False)
+        servers.append(('http',a.port,s_http))
+
+    if https_wanted:
+        s_https=_make_server(a.bind,a.https_port,root,auth,a.repo_path,a.port,a.https_port,tls=True)
+        s_https.tls_cert_path=tls_cert;s_https.tls_key_path=tls_key
+        ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version=ssl.TLSVersion.TLSv1_2
+        # Désactive les tickets de session TLS : sans ça, une connexion peut
+        # reprendre une session existante (« resumption ») sans refaire de
+        # poignée de main complète, donc sans jamais représenter le
+        # certificat — un navigateur déjà connecté continuerait de voir
+        # l'ancien certificat après un generate/import à chaud (rechargé
+        # avec load_cert_chain(), voir reload_tls_if_active()), jusqu'à ce
+        # qu'une poignée de main complète se produise par hasard. Ça garantit
+        # à la place qu'une nouvelle connexion présente toujours le
+        # certificat réellement chargé au moment de la connexion.
+        # OP_NO_TICKET seul ne suffit pas : il ne couvre que le mécanisme de
+        # tickets « historique » (TLS ≤ 1.2). En TLS 1.3 — négocié par défaut
+        # avec un navigateur récent — c'est num_tickets qui contrôle l'émission
+        # des tickets de session ; testé dans le bac à sable avec openssl
+        # s_client (-sess_out/-sess_in) : sans num_tickets=0, une reprise de
+        # session en TLS 1.3 réussissait malgré OP_NO_TICKET et continuait de
+        # présenter l'ancien certificat.
+        ctx.options|=ssl.OP_NO_TICKET
+        ctx.num_tickets=0
+        try:
+            ctx.load_cert_chain(certfile=str(tls_cert),keyfile=str(tls_key))
+        except (ssl.SSLError,OSError) as exc:
+            print(f'ERREUR TLS : certificat/clé illisible ou invalide ({exc}) — port HTTPS non démarré.',file=sys.stderr)
+            if not http_wanted:
+                # Même garde-fou qu'au-dessus : si HTTPS était la seule
+                # option prévue et qu'il échoue à charger, il faut quand
+                # même écouter quelque part plutôt que de sortir sans rien
+                # démarrer.
+                print('AVERTISSEMENT : port HTTP forcé pour ne pas couper tout accès.',file=sys.stderr)
+                s_http=_make_server(a.bind,a.port,root,auth,a.repo_path,a.port,a.https_port,tls=False)
+                servers.append(('http',a.port,s_http))
+        else:
+            s_https.socket=ctx.wrap_socket(s_https.socket,server_side=True)
+            s_https.tls_context=ctx
+            servers.append(('https',a.https_port,s_https))
+            HTTPS_SERVER=s_https
+
+    for scheme,port,_ in servers:
+        print(f'PiDecoder Config v{VERSION} : {scheme}://{a.bind}:{port}')
+    if not any(scheme=='https' for scheme,_,_ in servers):
+        print('AVERTISSEMENT : HTTPS désactivé ou certificat introuvable — connexion non chiffrée sur le port HTTP. "sudo ./scripts/manage-tls.sh generate" ou relancer scripts/install.sh pour générer un certificat.',file=sys.stderr)
+
+    # Un seul serveur : comportement historique, aucun thread. Deux
+    # serveurs (le cas courant maintenant, HTTP + HTTPS en parallèle) :
+    # le premier tourne dans un thread démon, le second (dernier de la
+    # liste) reste dans le thread principal pour que Ctrl-C / l'arrêt du
+    # service fonctionnent normalement.
+    threads=[]
+    for _,_,srv in servers[:-1]:
+        th=threading.Thread(target=srv.serve_forever,daemon=True)
+        th.start()
+        threads.append(th)
+    try:
+        servers[-1][2].serve_forever()
+    except KeyboardInterrupt:
+        pass
 
 if __name__=='__main__':main()

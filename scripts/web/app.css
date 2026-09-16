@@ -443,3 +443,36 @@ select{width:100%;padding:9px 10px;background:#0c1015;border:1px solid #353d49;b
 .switch input:focus-visible+.track{
   box-shadow:0 0 0 3px #4c8dff30
 }
+.tls-restart-overlay{
+  position:fixed;
+  inset:0;
+  z-index:200;
+  background:rgba(6,9,14,.94);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  text-align:center
+}
+.tls-restart-overlay.hidden{display:none!important}
+.tls-restart-box{
+  background:var(--p);
+  border:1px solid var(--l);
+  border-radius:20px;
+  padding:40px 34px;
+  max-width:460px;
+  width:100%;
+  box-shadow:0 30px 70px rgba(0,0,0,.55)
+}
+.tls-restart-icon{font-size:42px;margin-bottom:6px}
+.tls-restart-box h2{margin:6px 0 4px;font-size:23px}
+.tls-restart-countdown{
+  font-size:64px;
+  font-weight:900;
+  color:var(--b);
+  margin:12px 0;
+  font-variant-numeric:tabular-nums
+}
+.tls-restart-box .muted{font-size:14px;line-height:1.55;margin-top:8px}
+.tls-restart-box a{color:var(--b);font-weight:700;text-decoration:none}
+.tls-restart-box a:hover{text-decoration:underline}

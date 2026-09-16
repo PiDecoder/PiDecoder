@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly INSTALLER_VERSION="1.1.0"
+readonly INSTALLER_VERSION="1.2.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly UNIT_DIR="/etc/systemd/system"
@@ -12,6 +12,11 @@ SERVICE_USER=""
 WAYLAND_DISPLAY_NAME="wayland-0"
 WEB_BIND="0.0.0.0"
 WEB_PORT="8080"
+WEB_HTTPS_PORT="8443"
+TLS_CERT_PATH=""
+TLS_KEY_PATH=""
+NO_HTTPS=0
+TLS_GENERATED=0
 INSTALL_DEPENDENCIES=1
 START_SERVICES=1
 CHECK_ONLY=0
@@ -48,7 +53,20 @@ Options:
   --target PATH            Installation directory (default: /opt/pidecoder)
   --wayland-display NAME   Wayland socket name (default: wayland-0)
   --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
-  --port PORT              Web administration port (default: 8080)
+  --port PORT              Web administration HTTP port (default: 8080)
+  --https-port PORT        Web administration HTTPS port (default: 8443).
+                            HTTP and HTTPS run at the same time, each on its
+                            own port, as soon as a certificate is present —
+                            either can be turned off independently from the
+                            Web UI's Sécurité tab (or manage-tls.sh for
+                            HTTPS) without changing the other.
+  --tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
+                            self-signed one. Requires --tls-key.
+  --tls-key PATH           Import the matching TLS private key (PEM). Requires
+                            --tls-cert.
+  --no-https               Do not install a certificate; serve the Web
+                            administration interface over plain HTTP only.
+                            Mutually exclusive with --tls-cert/--tls-key.
   --skip-deps              Do not run apt-get
   --no-start               Install and enable units without starting them
   --check                  Validate the host and source without changing anything
@@ -139,6 +157,25 @@ while [[ $# -gt 0 ]]; do
             WEB_PORT="$2"
             shift 2
             ;;
+        --https-port)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --https-port"
+            WEB_HTTPS_PORT="$2"
+            shift 2
+            ;;
+        --tls-cert)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --tls-cert"
+            TLS_CERT_PATH="$2"
+            shift 2
+            ;;
+        --tls-key)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --tls-key"
+            TLS_KEY_PATH="$2"
+            shift 2
+            ;;
+        --no-https)
+            NO_HTTPS=1
+            shift
+            ;;
         --skip-deps)
             INSTALL_DEPENDENCIES=0
             shift
@@ -194,7 +231,27 @@ esac
 
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || fail "Port Web invalide : $WEB_PORT"
 (( WEB_PORT >= 1 && WEB_PORT <= 65535 )) || fail "Port Web hors plage : $WEB_PORT"
+[[ "$WEB_HTTPS_PORT" =~ ^[0-9]+$ ]] || fail "Port Web HTTPS invalide : $WEB_HTTPS_PORT"
+(( WEB_HTTPS_PORT >= 1 && WEB_HTTPS_PORT <= 65535 )) || fail "Port Web HTTPS hors plage : $WEB_HTTPS_PORT"
+[[ "$WEB_PORT" != "$WEB_HTTPS_PORT" ]] || fail "--port et --https-port doivent être différents (les deux valent $WEB_PORT)"
 [[ "$WAYLAND_DISPLAY_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail "Nom de socket Wayland invalide"
+
+if [[ "$NO_HTTPS" -eq 1 && ( -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ) ]]; then
+    fail "--no-https est incompatible avec --tls-cert/--tls-key"
+fi
+
+if [[ -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ]]; then
+    [[ -n "$TLS_CERT_PATH" && -n "$TLS_KEY_PATH" ]] || fail "--tls-cert et --tls-key doivent être fournis ensemble"
+    [[ -r "$TLS_CERT_PATH" ]] || fail "Certificat TLS introuvable ou illisible : $TLS_CERT_PATH"
+    [[ -r "$TLS_KEY_PATH" ]] || fail "Clé TLS introuvable ou illisible : $TLS_KEY_PATH"
+    openssl x509 -in "$TLS_CERT_PATH" -noout >/dev/null 2>&1 || fail "Certificat TLS invalide (PEM attendu) : $TLS_CERT_PATH"
+    # Comparaison par clé publique (fonctionne pour RSA et EC, contrairement à
+    # -modulus qui est spécifique RSA) : évite d'installer un certificat et
+    # une clé qui ne forment pas une paire valide.
+    key_pubkey_digest="$(openssl pkey -in "$TLS_KEY_PATH" -pubout -outform DER 2>/dev/null | openssl dgst -sha256)"
+    cert_pubkey_digest="$(openssl x509 -in "$TLS_CERT_PATH" -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256)"
+    [[ -n "$key_pubkey_digest" && "$cert_pubkey_digest" == "$key_pubkey_digest" ]] || fail "Le certificat et la clé TLS fournis ne correspondent pas"
+fi
 
 [[ -f "$SOURCE_ROOT/CMakeLists.txt" ]] || fail "CMakeLists.txt introuvable dans $SOURCE_ROOT"
 [[ -f "$SOURCE_ROOT/scripts/config-web.py" ]] || fail "Source Web introuvable"
@@ -312,12 +369,16 @@ check_host() {
     printf 'Système       : %s\n' "${PRETTY_NAME:-inconnu}"
     printf 'Architecture  : %s\n' "$(uname -m)"
     if [[ "$(uname -m)" != "aarch64" ]]; then
-        warn "La cible v1.0 validée est Raspberry Pi 5 en aarch64."
+        warn "La cible v1.1 validée est Raspberry Pi 5 en aarch64."
     fi
     printf 'Utilisateur   : %s (uid %s, groupe %s)\n' "$SERVICE_USER" "$SERVICE_UID" "$SERVICE_GROUP"
     printf 'Cible         : %s\n' "$TARGET"
     printf 'Wayland       : /run/user/%s/%s\n' "$SERVICE_UID" "$WAYLAND_DISPLAY_NAME"
-    printf 'Administration: http://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
+    if [[ "$NO_HTTPS" -eq 1 ]]; then
+        printf 'Administration: http://%s:%s (--no-https)\n' "$WEB_BIND" "$WEB_PORT"
+    else
+        printf 'Administration: http://%s:%s + https://%s:%s\n' "$WEB_BIND" "$WEB_PORT" "$WEB_BIND" "$WEB_HTTPS_PORT"
+    fi
 
     if [[ -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
         printf 'Session vidéo : détectée\n'
@@ -427,7 +488,62 @@ if [[ "$HAD_TARGET" -eq 1 ]]; then
     fi
 fi
 
-mkdir -p "$STAGED_ROOT/config/backups"
+mkdir -p "$STAGED_ROOT/config/backups" "$STAGED_ROOT/config/tls"
+
+if [[ "$NO_HTTPS" -eq 1 ]]; then
+    log "HTTPS désactivé (--no-https) : aucun certificat ne sera installé"
+    # config-web.py sert automatiquement en HTTP simple dès qu'aucun
+    # certificat n'est présent sous config/tls/ — rien d'autre à faire ici.
+    # Un certificat conservé d'une précédente installation n'est
+    # délibérément pas repris : --no-https est un choix explicite. Il reste
+    # dans la sauvegarde de $TARGET (voir plus haut) si besoin de revenir en
+    # arrière.
+    if [[ "$HAD_TARGET" -eq 1 && -f "$TARGET/config/tls/cert.pem" ]]; then
+        warn "Un navigateur déjà connecté en HTTPS auparavant a gardé en" \
+             "mémoire un cookie de session « Secure », que la connexion" \
+             "HTTP simple ne pourra pas remplacer (règle de sécurité du" \
+             "navigateur) : la connexion semblera acceptée mais restera" \
+             "bloquée juste après, sans erreur visible. Si ça arrive," \
+             "effacer les cookies du site pour ce Pi dans le navigateur" \
+             "concerné, une seule fois."
+    fi
+elif [[ -n "$TLS_CERT_PATH" ]]; then
+    log "Installation du certificat TLS fourni"
+    install -m 0644 "$TLS_CERT_PATH" "$STAGED_ROOT/config/tls/cert.pem"
+    install -m 0600 "$TLS_KEY_PATH" "$STAGED_ROOT/config/tls/key.pem"
+elif [[ "$HAD_TARGET" -eq 1 && -f "$TARGET/config/tls/cert.pem" && -f "$TARGET/config/tls/key.pem" ]]; then
+    log "Conservation du certificat TLS existant"
+    cp -a "$TARGET/config/tls/cert.pem" "$STAGED_ROOT/config/tls/cert.pem"
+    cp -a "$TARGET/config/tls/key.pem" "$STAGED_ROOT/config/tls/key.pem"
+else
+    log "Génération d'un certificat TLS auto-signé"
+
+    # Un Raspberry Pi de ce type n'a en général ni domaine public ni DNS
+    # stable : le certificat est auto-signé (comme la plupart des interfaces
+    # d'administration réseau — routeur, NAS...) et couvre le nom d'hôte
+    # local ainsi que les adresses IPv4 actuellement configurées, pour que le
+    # navigateur accepte de faire confiance à l'IP utilisée pour se connecter,
+    # une fois l'avertissement initial validé manuellement.
+    cert_cn="$(hostname -f 2>/dev/null || hostname)"
+    san_entries=("DNS:$cert_cn" "DNS:localhost" "IP:127.0.0.1")
+
+    while IFS= read -r ip; do
+        [[ -n "$ip" ]] || continue
+        san_entries+=("IP:$ip")
+    done < <(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+
+    san_list="$(IFS=,; echo "${san_entries[*]}")"
+
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -keyout "$STAGED_ROOT/config/tls/key.pem" \
+        -out "$STAGED_ROOT/config/tls/cert.pem" \
+        -subj "/CN=$cert_cn" \
+        -addext "subjectAltName=$san_list" \
+        >/dev/null 2>&1 \
+        || fail "Échec de la génération du certificat TLS auto-signé"
+
+    TLS_GENERATED=1
+fi
 
 if [[ ! -f "$STAGED_ROOT/config/cameras.json" ]]; then
     cat > "$STAGED_ROOT/config/cameras.json" <<'JSON'
@@ -470,15 +586,22 @@ test -x "$TARGET/bin/pidecoder" || fail "Le binaire installé est introuvable"
 log "Configuration des droits"
 chown -R root:root "$TARGET"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$TARGET/config"
-chmod 0750 "$TARGET/config" "$TARGET/config/backups"
+chmod 0750 "$TARGET/config" "$TARGET/config/backups" "$TARGET/config/tls"
 chmod 0600 "$TARGET/config/cameras.json" "$TARGET/config/layout.json"
+
+if [[ -f "$TARGET/config/tls/cert.pem" && -f "$TARGET/config/tls/key.pem" ]]; then
+    chown root:root "$TARGET/config/tls/cert.pem" "$TARGET/config/tls/key.pem"
+    chmod 0644 "$TARGET/config/tls/cert.pem"
+    chmod 0600 "$TARGET/config/tls/key.pem"
+fi
 chmod 0755 \
     "$TARGET/scripts/install.sh" \
     "$TARGET/scripts/config-web.py" \
     "$TARGET/scripts/onvif_client.py" \
     "$TARGET/scripts/ptz-bridge.py" \
     "$TARGET/scripts/check-camera-config.py" \
-    "$TARGET/scripts/validate-release.sh"
+    "$TARGET/scripts/validate-release.sh" \
+    "$TARGET/scripts/manage-tls.sh"
 
 if [[ -f "$TARGET/config/web-auth.json" ]]; then
     chown root:root "$TARGET/config/web-auth.json"
@@ -512,7 +635,9 @@ python3 - \
     "$TARGET" \
     "$WAYLAND_DISPLAY_NAME" \
     "$WEB_BIND" \
-    "$WEB_PORT" <<'PY_RENDER_UNITS'
+    "$WEB_PORT" \
+    "$WEB_HTTPS_PORT" \
+    "$SOURCE_ROOT" <<'PY_RENDER_UNITS'
 from pathlib import Path
 import sys
 
@@ -535,6 +660,8 @@ import sys
     wayland_display,
     web_bind,
     web_port,
+    web_https_port,
+    repo_path,
 ) = sys.argv[1:]
 
 replacements = {
@@ -546,6 +673,8 @@ replacements = {
     "@WAYLAND_DISPLAY@": wayland_display,
     "@WEB_BIND@": web_bind,
     "@WEB_PORT@": web_port,
+    "@WEB_HTTPS_PORT@": web_https_port,
+    "@REPO_PATH@": repo_path,
 }
 
 for source, destination in (
@@ -617,11 +746,26 @@ HOST_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$HOST_ADDRESS" ]] || HOST_ADDRESS="ADRESSE_DU_RASPBERRY_PI"
 
 printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
-printf 'Administration Web : http://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
+if [[ "$NO_HTTPS" -eq 1 ]]; then
+    printf 'Administration Web : http://%s:%s (HTTPS désactivé, --no-https)\n' "$HOST_ADDRESS" "$WEB_PORT"
+else
+    printf 'Administration Web : http://%s:%s et https://%s:%s (HTTP désactivable\n' "$HOST_ADDRESS" "$WEB_PORT" "$HOST_ADDRESS" "$WEB_HTTPS_PORT"
+    printf '                     séparément depuis l'"'"'onglet Sécurité si besoin)\n'
+fi
 printf 'Utilisateur Web     : admin\n'
 printf 'Utilisateur vidéo   : %s\n' "$SERVICE_USER"
 printf 'Installation        : %s\n' "$TARGET"
 printf 'Sauvegarde          : %s\n' "$BACKUP_DIR"
+
+if [[ "$TLS_GENERATED" -eq 1 ]]; then
+    printf '\nLe certificat TLS est auto-signé : le navigateur affichera un avertissement\n'
+    printf 'la première fois — valider/accepter le certificat pour continuer.\n'
+fi
+
+if [[ "$NO_HTTPS" -eq 0 ]]; then
+    printf '\nPour changer de certificat ou désactiver HTTPS sans réinstaller :\n'
+    printf '  sudo ./scripts/manage-tls.sh --help\n'
+fi
 
 if [[ ! -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
     printf '\nLe socket Wayland n’est pas présent actuellement. Connecte la session graphique de %s avant de lancer le mur vidéo.\n' "$SERVICE_USER"

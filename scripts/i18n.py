@@ -88,6 +88,135 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Configuration appliquée. PiDecoder a redémarré.',
         'en': 'Configuration applied. PiDecoder restarted.',
     },
+    'tls.generate_failed': {
+        'fr': 'Échec de la génération du certificat',
+        'en': 'Certificate generation failed',
+    },
+    'tls.import_failed': {
+        'fr': 'Échec de l\'import du certificat',
+        'en': 'Certificate import failed',
+    },
+    'tls.import_requires_https': {
+        'fr': (
+            'Import possible uniquement en HTTPS : la clé privée transiterait '
+            'en clair en HTTP. Active d\'abord HTTPS, ou utilise '
+            'scripts/manage-tls.sh en SSH.'
+        ),
+        'en': (
+            'Import only available over HTTPS: the private key would '
+            'otherwise be sent in the clear over HTTP. Enable HTTPS first, '
+            'or use scripts/manage-tls.sh over SSH.'
+        ),
+    },
+    'tls.cert_and_key_required': {
+        'fr': 'Certificat et clé requis',
+        'en': 'Certificate and key are required',
+    },
+    'tls.enable_failed': {
+        'fr': 'Échec de l\'activation de HTTPS',
+        'en': 'Failed to enable HTTPS',
+    },
+    'tls.disable_failed': {
+        'fr': 'Échec de la désactivation de HTTPS',
+        'en': 'Failed to disable HTTPS',
+    },
+    'tls.reload_failed': {
+        'fr': 'Certificat installé mais rechargement TLS échoué : {error}',
+        'en': 'Certificate installed but the TLS reload failed: {error}',
+    },
+    'tls.disable_blocked_no_http': {
+        'fr': (
+            'Impossible de désactiver HTTPS : l\'accès HTTP est lui aussi '
+            'désactivé, ça couperait tout accès à l\'interface Web. '
+            'Réactive HTTP d\'abord.'
+        ),
+        'en': (
+            'Cannot disable HTTPS: HTTP access is also disabled, which '
+            'would cut off all access to the Web interface. Re-enable '
+            'HTTP first.'
+        ),
+    },
+    'http.disable_blocked_no_https': {
+        'fr': (
+            'Impossible de désactiver l\'accès HTTP : HTTPS est lui aussi '
+            'désactivé, ça couperait tout accès à l\'interface Web. Active '
+            'HTTPS d\'abord (génère un certificat si besoin).'
+        ),
+        'en': (
+            'Cannot disable HTTP access: HTTPS is also disabled, which '
+            'would cut off all access to the Web interface. Enable HTTPS '
+            'first (generate a certificate if needed).'
+        ),
+    },
+    'ports.invalid': {
+        'fr': 'Ports invalides (doivent être des nombres entre 1 et 65535)',
+        'en': 'Invalid ports (must be numbers between 1 and 65535)',
+    },
+    'ports.must_differ': {
+        'fr': 'Le port HTTP et le port HTTPS doivent être différents',
+        'en': 'The HTTP port and the HTTPS port must be different',
+    },
+    'update.no_repo_path': {
+        'fr': (
+            'Mise à jour indisponible : cette installation ne connaît pas '
+            'l\'emplacement du dépôt Git. Relance sudo ./scripts/install.sh '
+            'depuis ton clone Git une première fois pour activer cette '
+            'fonctionnalité.'
+        ),
+        'en': (
+            'Update unavailable: this installation does not know where the '
+            'Git clone is. Run sudo ./scripts/install.sh from your Git '
+            'clone once to enable this feature.'
+        ),
+    },
+    'update.already_running': {
+        'fr': 'Une mise à jour est déjà en cours',
+        'en': 'An update is already in progress',
+    },
+    'update.no_service_user': {
+        'fr': 'Impossible de déterminer l\'utilisateur du service vidéo',
+        'en': 'Unable to determine the video service user',
+    },
+    'network.invalid_hostname': {
+        'fr': 'Nom d\'hôte invalide (lettres, chiffres et tirets, 63 caractères maximum)',
+        'en': 'Invalid hostname (letters, digits and hyphens, 63 characters max)',
+    },
+    'network.hostname_change_failed': {
+        'fr': 'Échec du changement de nom d\'hôte : {error}',
+        'en': 'Hostname change failed: {error}',
+    },
+    'network.nmcli_unavailable': {
+        'fr': 'NetworkManager (nmcli) est introuvable sur ce système',
+        'en': 'NetworkManager (nmcli) was not found on this system',
+    },
+    'network.unknown_connection': {
+        'fr': 'Connexion réseau inconnue',
+        'en': 'Unknown network connection',
+    },
+    'network.invalid_method': {
+        'fr': 'Mode d\'adressage invalide',
+        'en': 'Invalid addressing mode',
+    },
+    'network.invalid_address': {
+        'fr': 'Adresse IP, passerelle ou DNS invalide',
+        'en': 'Invalid IP address, gateway or DNS server',
+    },
+    'network.invalid_ntp_server': {
+        'fr': 'Adresse de serveur NTP invalide',
+        'en': 'Invalid NTP server address',
+    },
+    'network.ntp_failed': {
+        'fr': 'Échec de la configuration NTP : {error}',
+        'en': 'NTP configuration failed: {error}',
+    },
+    'network.invalid_timezone': {
+        'fr': 'Fuseau horaire invalide',
+        'en': 'Invalid timezone',
+    },
+    'network.timezone_failed': {
+        'fr': 'Échec du changement de fuseau horaire : {error}',
+        'en': 'Timezone change failed: {error}',
+    },
     'import.invalid_file': {
         'fr': 'Fichier PiDecoder invalide',
         'en': 'Invalid PiDecoder file',

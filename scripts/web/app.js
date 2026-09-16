@@ -156,7 +156,16 @@ async function api(path,opt={}){
 }
 
 function showLogin(){app.classList.add('hidden');login.classList.remove('hidden')}
-async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');await loadCfg();sysInfo()}
+async function showApp(){login.classList.add('hidden');app.classList.remove('hidden');
+  // Vérifie tout de suite s'il y a un changement réseau en attente de
+  // confirmation (ex. : on vient de se reconnecter sur la nouvelle IP
+  // après un changement d'adresse) — sans ça, le plein écran de
+  // confirmation restait invisible tant que l'utilisateur n'allait pas
+  // cliquer manuellement sur l'onglet Réseau, et le compte à rebours
+  // pouvait déjà être écoulé le temps qu'il y pense. Ne bloque pas
+  // l'affichage du reste de l'appli (pas de await).
+  networkRefresh();
+  await loadCfg();sysInfo()}
 let currentVersion='';
 function updateVersionLabel(){
   if(!currentVersion)return;
@@ -167,7 +176,7 @@ function updateVersionLabel(){
 async function boot(){let s=await api('/api/session');currentVersion=s.version||'';updateVersionLabel();s.authenticated?showApp():showLogin()}
 async function doLogin(e){e.preventDefault();le.textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({username:lu.value,password:lp.value})});lp.value='';le.textContent='';showApp()}catch(x){le.textContent=x.message}}
 async function logout(){await api('/api/logout',{method:'POST',body:'{}'});showLogin()}
-function tab(id,b){for(let x of ['cams','layout','sys','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo()}if(id==='layout'){sync();renderMosaic()}}
+function tab(id,b){for(let x of ['cams','layout','sys','network','sec','backup','onvif'])document.getElementById(x).classList.toggle('hidden',x!==id);document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='sys'){refreshDiagnostics();sysInfo();updateStatusRefresh()}if(id==='layout'){sync();renderMosaic()}if(id==='sec'){tlsRefreshStatus()}if(id==='network'){networkRefresh()}}
 async function loadCfg(){cfg=await api('/api/config');cols.value=cfg.layout.columns||3;rows.value=cfg.layout.rows||3;fs.checked=!!cfg.layout.fullscreen_on_start;audioDefault.checked=!!cfg.layout.focus_audio_default_on;let o=cfg.layout.camera_order||[],active=cfg.cameras.filter(c=>c.enabled!==false),ordered=[];for(let i of o)if(active[i])ordered.push(active[i]);active.forEach((c,i)=>{if(!o.includes(i))ordered.push(c)});let cursor=0;cfg.cameras=cfg.cameras.map(c=>c.enabled===false?c:ordered[cursor++]);ensurePlacements();render();renderMosaic()}
 function esc(v){let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
 function parse(u){let r={user:'',pwd:'',host:'',port:'554',path:'/axis-media/media.amp',w:'',h:'',fps:''};try{let x=new URL(u),res=(x.searchParams.get('resolution')||'').split('x');r={user:decodeURIComponent(x.username||''),pwd:decodeURIComponent(x.password||''),host:x.hostname,port:x.port||'554',path:x.pathname||'/',w:res[0]||'',h:res[1]||'',fps:x.searchParams.get('fps')||''}}catch{}return r}
@@ -1158,6 +1167,208 @@ async function changePwd(){
   }
 }
 
+function renderTlsStatus(r){
+  const active=!!r.https_active;
+  tlsToggleButton.textContent=active?t('sec.tls_disable_button'):t('sec.tls_enable_button');
+  tlsToggleButton.dataset.action=active?'disable':'enable';
+  // Toujours réactivé ici plutôt que dans tlsToggle()/httpToggle() : le cas
+  // "redémarrage sans redirection" (le port par lequel on est déjà
+  // connecté n'est pas affecté) relit l'état via ce même rendu au lieu de
+  // recharger la page — sans ça le bouton resterait désactivé pour de bon.
+  tlsToggleButton.disabled=false;
+  tlsImportButton.disabled=!active;
+  tlsImportHint.classList.toggle('hidden',active);
+  tlsToggleWarning.classList.remove('hidden');
+  let html=`<strong>${esc(active?t('sec.tls_status_active',{port:r.https_port}):t('sec.tls_status_inactive'))}</strong>`;
+  if(active && r.cert){
+    html+=`<br>${esc(t('sec.tls_subject'))} : ${esc(r.cert.subject||'?')}`;
+    html+=`<br>${esc(t('sec.tls_expires'))} : ${esc(r.cert.not_after||'?')}`;
+    html+=`<br>${esc(t('sec.tls_san'))} : ${esc((r.cert.san||[]).join(', ')||'—')}`;
+  }else if(!active && r.disabled_present){
+    html+=`<br>${esc(t('sec.tls_disabled_present'))}`;
+  }
+  tlsStatus.innerHTML=html;
+}
+
+function renderHttpStatus(r){
+  const active=!!r.http_active;
+  httpToggleButton.textContent=active?t('sec.http_disable_button'):t('sec.http_enable_button');
+  httpToggleButton.dataset.action=active?'disable':'enable';
+  httpToggleButton.disabled=false;
+  httpToggleWarning.classList.remove('hidden');
+  httpStatus.innerHTML=`<strong>${esc(active?t('sec.http_status_active',{port:r.http_port}):t('sec.http_status_inactive'))}</strong>`;
+}
+
+async function tlsRefreshStatus(){
+  // Une seule requête : /api/tls/status renvoie l'état des deux ports
+  // (HTTP et HTTPS écoutent en parallèle, voir config-web.py) — pas besoin
+  // de deux allers-retours pour peupler les deux panneaux de l'onglet
+  // Sécurité.
+  try{
+    const r=await api('/api/tls/status');
+    renderTlsStatus(r);
+    renderHttpStatus(r);
+    renderPortsStatus(r);
+  }catch(e){
+    tlsStatus.textContent=e.message;
+  }
+}
+
+function renderPortsStatus(r){
+  // Ne jamais écraser une valeur en cours de frappe : cette fonction est
+  // aussi appelée par les rafraîchissements automatiques après un toggle
+  // HTTP/HTTPS, pas seulement à l'ouverture de l'onglet.
+  if(document.activeElement!==portsHttpInput){portsHttpInput.value=r.http_port}
+  if(document.activeElement!==portsHttpsInput){portsHttpsInput.value=r.https_port}
+}
+
+async function portsApply(){
+  const httpPort=parseInt(portsHttpInput.value,10);
+  const httpsPort=parseInt(portsHttpsInput.value,10);
+  if(!Number.isInteger(httpPort)||httpPort<1||httpPort>65535||!Number.isInteger(httpsPort)||httpsPort<1||httpsPort>65535){
+    toast(t('sec.ports_invalid'),true);
+    return;
+  }
+  if(httpPort===httpsPort){
+    toast(t('sec.ports_must_differ'),true);
+    return;
+  }
+  portsApplyButton.disabled=true;
+  try{
+    const r=await api('/api/tls/set-ports',{method:'POST',body:JSON.stringify({http_port:httpPort,https_port:httpsPort})});
+    toast(t('sec.ports_restarting'));
+    tlsRestartCountdown(r.redirect_url,t('sec.ports_restart_overlay_title'));
+  }catch(e){
+    toast(e.message,true);
+    portsApplyButton.disabled=false;
+  }
+}
+
+async function tlsToggle(){
+  const action=tlsToggleButton.dataset.action;
+  tlsToggleButton.disabled=true;
+  try{
+    const r=await api(`/api/tls/${action}`,{method:'POST',body:'{}'});
+    if(r.restarting){
+      toast(t('sec.tls_restarting'));
+      if(r.redirect_url){
+        tlsRestartCountdown(r.redirect_url,t('sec.tls_restart_overlay_title'));
+      }else{
+        // Le port par lequel on est déjà connecté n'est pas affecté (HTTP
+        // et HTTPS tournent en parallèle sur des ports distincts) : pas de
+        // redirection nécessaire, juste attendre la fin du redémarrage et
+        // relire l'état.
+        tlsStatus.innerHTML=`<strong>${esc(t('sec.tls_restarting'))}</strong>`;
+        setTimeout(tlsRefreshStatus,4000);
+      }
+    }else{
+      tlsRefreshStatus();
+      tlsToggleButton.disabled=false;
+    }
+  }catch(e){
+    toast(e.message,true);
+    tlsToggleButton.disabled=false;
+  }
+}
+
+async function httpToggle(){
+  const action=httpToggleButton.dataset.action;
+  httpToggleButton.disabled=true;
+  try{
+    const r=await api(`/api/http/${action}`,{method:'POST',body:'{}'});
+    if(r.restarting){
+      toast(t('sec.http_restarting'));
+      if(r.redirect_url){
+        tlsRestartCountdown(r.redirect_url,t('sec.http_restart_overlay_title'));
+      }else{
+        httpStatus.innerHTML=`<strong>${esc(t('sec.http_restarting'))}</strong>`;
+        setTimeout(tlsRefreshStatus,4000);
+      }
+    }else{
+      tlsRefreshStatus();
+      httpToggleButton.disabled=false;
+    }
+  }catch(e){
+    toast(e.message,true);
+    httpToggleButton.disabled=false;
+  }
+}
+
+function tlsRestartCountdown(url,title){
+  // Rediriger tout de suite (ou après un délai court fixe) tombe souvent
+  // sur une page inaccessible : redémarrer pidecoder-config.service prend
+  // quelques secondes (arrêt de l'ancien processus, rechargement du
+  // certificat, nouvelle écoute), pendant lesquelles la nouvelle URL ne
+  // répond pas encore. On affiche donc un compte à rebours généreux (30s,
+  // largement suffisant en pratique) en plein écran — impossible à
+  // manquer ou à fermer par erreur — avec le message d'avertissement sur
+  // les cookies déjà visible dedans, puis on redirige une seule fois à la
+  // fin plutôt que de laisser le navigateur afficher une erreur de
+  // connexion pendant l'attente.
+  let remaining=30;
+
+  tlsRestartOverlay.classList.remove('hidden');
+  if(title){tlsRestartOverlayTitle.textContent=title}
+
+  const render=()=>{
+    tlsRestartCountdownValue.textContent=remaining;
+    tlsStatus.innerHTML=
+      `<strong>${esc(t('sec.tls_restarting'))}</strong>`+
+      `<br>${esc(t('sec.tls_restart_countdown',{seconds:remaining}))}`;
+  };
+
+  render();
+
+  const iv=setInterval(()=>{
+    remaining-=1;
+    if(remaining<=0){
+      clearInterval(iv);
+      window.location.href=url;
+      return;
+    }
+    render();
+  },1000);
+}
+
+async function tlsGenerate(){
+  tlsGenerateButton.disabled=true;
+  try{
+    const r=await api('/api/tls/generate',{method:'POST',body:JSON.stringify({force:true})});
+    toast(r.reloaded?t('sec.tls_generated_active'):t('sec.tls_generated_staged'));
+    tlsRefreshStatus();
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    tlsGenerateButton.disabled=false;
+  }
+}
+
+function readFileAsText(input){
+  return new Promise((resolve,reject)=>{
+    const file=input.files && input.files[0];
+    if(!file){reject(new Error(t('sec.tls_import_missing_file')));return}
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||''));
+    reader.onerror=()=>reject(new Error(t('sec.tls_import_missing_file')));
+    reader.readAsText(file);
+  });
+}
+
+async function tlsImport(){
+  tlsImportButton.disabled=true;
+  try{
+    const [cert,key]=await Promise.all([readFileAsText(tlsCertFile),readFileAsText(tlsKeyFile)]);
+    const r=await api('/api/tls/import',{method:'POST',body:JSON.stringify({cert,key})});
+    toast(r.reloaded?t('sec.tls_imported_active'):t('sec.tls_generated_staged'));
+    tlsCertFile.value='';
+    tlsKeyFile.value='';
+    await tlsRefreshStatus();
+  }catch(e){
+    toast(e.message,true);
+    tlsImportButton.disabled=false;
+  }
+}
+
 async function serviceStatus(){
   if(app.classList.contains('hidden'))return;
   try{
@@ -2080,6 +2291,379 @@ manualOnvifIp.addEventListener('input',setIpv4Validation);
 manualOnvifPort.addEventListener('change',rememberManualOnvif);
 manualOnvifPath.addEventListener('change',rememberManualOnvif);
 restoreManualOnvif();
+
+// --------------------------------------------------------------------------
+// Mise à jour logicielle (onglet Système)
+// --------------------------------------------------------------------------
+
+async function updateStatusRefresh(){
+  try{
+    const s=await api('/api/update/status');
+    if(s.state!=='idle'){
+      renderUpdateStatus(s);
+      if(s.state==='running'){
+        updateDoneOrError=false;
+        pollUpdateStatus();
+      }
+    }
+  }catch(e){/* silencieux : ne pas gêner l'ouverture de l'onglet */}
+}
+
+async function updateCheck(){
+  updateCheckButton.disabled=true;
+  updateActions.classList.add('hidden');
+  updateStatus.textContent=t('update.checking');
+  try{
+    renderUpdateCheck(await api('/api/update/check'));
+  }catch(e){
+    updateStatus.textContent=e.message;
+  }finally{
+    updateCheckButton.disabled=false;
+  }
+}
+
+function renderUpdateCheck(r){
+  if(!r.supported){
+    updateStatus.textContent=
+      r.reason==='not_a_git_repo'
+        ?t('update.not_a_repo')+(r.error?' ('+r.error+')':'')
+        :t('update.no_repo_path');
+    return;
+  }
+  if(r.available===null){
+    updateStatus.textContent=t('update.check_failed',{error:r.error||''});
+    return;
+  }
+  if(r.error==='no_upstream'){
+    updateStatus.textContent=t('update.no_upstream');
+    return;
+  }
+  if(r.available){
+    updateStatus.innerHTML=
+      `<strong>${esc(t('update.available',{count:r.commits_behind??'?'}))}</strong>`+
+      (r.latest_summary?`<br>${esc(r.latest_summary)}`:'');
+    updateActions.classList.remove('hidden');
+  }else{
+    updateStatus.textContent=t('update.up_to_date');
+  }
+}
+
+let updatePollTimer=null;
+
+async function updateStart(){
+  updateStartButton.disabled=true;
+  try{
+    await api('/api/update/start',{method:'POST',body:'{}'});
+    updateDoneOrError=false;
+    updateProgress.classList.remove('hidden');
+    updateActions.classList.add('hidden');
+    updateProgressText.textContent=t('update.step_git_pull');
+    pollUpdateStatus();
+  }catch(e){
+    toast(e.message,true);
+    updateStartButton.disabled=false;
+  }
+}
+
+async function pollUpdateStatus(){
+  clearTimeout(updatePollTimer);
+  try{
+    renderUpdateStatus(await api('/api/update/status'));
+  }catch(e){
+    // pidecoder-config.service redémarre en fin d'installation : la requête
+    // échoue brièvement pendant la bascule, on continue simplement d'essayer.
+  }
+  if(!updateDoneOrError)updatePollTimer=setTimeout(pollUpdateStatus,2000);
+}
+
+let updateDoneOrError=false;
+
+function renderUpdateStatus(s){
+  if(s.state==='idle')return;
+  updateProgress.classList.remove('hidden');
+  const stepLabel=s.step==='git_pull'?t('update.step_git_pull'):s.step==='install'?t('update.step_install'):'';
+  updateDoneOrError=(s.state==='done'||s.state==='error');
+  if(s.state==='running'){
+    updateProgressText.textContent=stepLabel;
+  }else if(s.state==='done'){
+    updateProgressText.textContent=t('update.done');
+    updateStartButton.disabled=false;
+    toast(t('update.done'));
+  }else if(s.state==='error'){
+    updateProgressText.textContent=t('update.failed',{step:stepLabel});
+    updateStartButton.disabled=false;
+    updateActions.classList.remove('hidden');
+    toast(t('update.failed',{step:stepLabel}),true);
+  }
+  updateLog.textContent=s.log_tail||'';
+  updateLog.scrollTop=updateLog.scrollHeight;
+}
+
+// --------------------------------------------------------------------------
+// Réseau (onglet Réseau) : nom d'hôte, adresse IP, NTP, fuseau horaire
+// --------------------------------------------------------------------------
+
+let networkConnections=[];
+
+async function networkRefresh(){
+  try{
+    renderNetworkStatus(await api('/api/network/status'));
+  }catch(e){
+    networkStatus.textContent=e.message;
+  }
+}
+
+function renderNetworkStatus(s){
+  networkStatus.textContent=s.nmcli_available?'':t('network.nmcli_unavailable');
+  networkHostnameInput.value=s.hostname||'';
+
+  networkConnections=s.connections||[];
+  const previousSelection=networkConnectionSelect.value;
+  networkConnectionSelect.innerHTML=networkConnections.map(c=>
+    `<option value="${esc(c.name)}">${esc(c.name)}${c.active?' ✓':''}</option>`
+  ).join('');
+  const hasConnections=networkConnections.length>0;
+  networkConnectionSelect.disabled=!s.nmcli_available||!hasConnections;
+  networkMethodSelect.disabled=networkConnectionSelect.disabled;
+  networkIpButton.disabled=networkConnectionSelect.disabled;
+
+  if(hasConnections){
+    const toSelect=networkConnections.find(c=>c.name===previousSelection)?previousSelection:networkConnections[0].name;
+    networkConnectionSelect.value=toSelect;
+    networkLoadConnectionFields(toSelect);
+  }
+
+  networkNtpEnabled.checked=!!(s.ntp&&s.ntp.enabled);
+  networkNtpServersInput.value=((s.ntp&&s.ntp.servers)||[]).join(', ');
+
+  if(!networkTimezoneSelect.dataset.loaded){
+    networkLoadTimezones(s.timezone);
+  }else if(s.timezone){
+    networkTimezoneSelect.value=s.timezone;
+  }
+
+  renderNetworkPending(s.pending);
+}
+
+function networkLoadConnectionFields(name){
+  const conn=networkConnections.find(c=>c.name===name);
+  if(!conn)return;
+  networkMethodSelect.value=conn.method;
+  networkAddressInput.value=conn.address||'';
+  networkGatewayInput.value=conn.gateway||'';
+  networkDnsInput.value=(conn.dns||[]).join(', ');
+  networkManualFields.classList.toggle('hidden',conn.method!=='manual');
+}
+
+function networkConnectionChanged(){
+  networkLoadConnectionFields(networkConnectionSelect.value);
+}
+
+function networkMethodChanged(){
+  networkManualFields.classList.toggle('hidden',networkMethodSelect.value!=='manual');
+}
+
+async function networkLoadTimezones(current){
+  try{
+    const r=await api('/api/network/timezones');
+    networkTimezoneSelect.innerHTML=(r.timezones||[]).map(z=>
+      `<option value="${esc(z)}">${esc(z)}</option>`
+    ).join('');
+    networkTimezoneSelect.dataset.loaded='1';
+    if(current)networkTimezoneSelect.value=current;
+  }catch(e){
+    toast(e.message,true);
+  }
+}
+
+async function networkChangeHostname(){
+  const hostname=networkHostnameInput.value.trim();
+  networkHostnameButton.disabled=true;
+  try{
+    const r=await api('/api/network/hostname',{method:'POST',body:JSON.stringify({hostname})});
+    // On affiche tout de suite le plein écran à partir de la réponse de la
+    // requête plutôt que d'attendre un prochain /api/network/status : le
+    // script détaché a un délai de grâce de 2s avant de faire basculer son
+    // fichier de statut de "pending" à "applied" (le temps que cette
+    // réponse HTTP parte), pendant lequel /api/network/status ne
+    // renverrait encore rien — inutile d'attendre pour prévenir l'utilisateur.
+    renderNetworkPending({
+      kind:'hostname',token:r.token,delay_seconds:r.delay_seconds,
+      started_at:Date.now()/1000,new_value:hostname,
+    });
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    networkHostnameButton.disabled=false;
+  }
+}
+
+async function networkChangeIp(){
+  networkIpButton.disabled=true;
+  networkIpStatus.textContent='';
+  try{
+    const manual=networkMethodSelect.value==='manual';
+    const body={
+      connection:networkConnectionSelect.value,
+      method:networkMethodSelect.value,
+      address:manual?networkAddressInput.value.trim():'',
+      gateway:manual?networkGatewayInput.value.trim():'',
+      dns:manual?networkDnsInput.value.split(',').map(x=>x.trim()).filter(Boolean):[],
+    };
+    const r=await api('/api/network/ip',{method:'POST',body:JSON.stringify(body)});
+    renderNetworkPending({
+      kind:'ip',token:r.token,delay_seconds:r.delay_seconds,
+      started_at:Date.now()/1000,
+      new_value:{method:body.method,address:body.address,gateway:body.gateway,dns:body.dns},
+    });
+  }catch(e){
+    networkIpStatus.textContent=e.message;
+  }finally{
+    networkIpButton.disabled=false;
+  }
+}
+
+// --------------------------------------------------------------------------
+// Changement réseau en attente : simple popup à cliquer (« Confirmer ») +
+// lien de bascule vers la nouvelle adresse. Pas de compte à rebours affiché
+// — le changement (nmcli/hostnamectl) est en pratique instantané, un timer
+// qui défile n'apportait rien et donnait l'impression trompeuse qu'il
+// fallait attendre. Le rétablissement automatique en cas de non-confirmation
+// reste actif en arrière-plan (filet de sécurité), juste sans affichage
+// seconde par seconde.
+// --------------------------------------------------------------------------
+
+let networkPendingToken=null;
+let networkPendingDeadline=0;
+let networkPendingSetAt=0;
+let networkPendingRevertTimer=null;
+
+function stopNetworkPendingUI(){
+  clearTimeout(networkPendingRevertTimer);
+  networkPendingRevertTimer=null;
+  networkPendingToken=null;
+  networkPendingOverlay.classList.add('hidden');
+}
+
+function renderNetworkPending(pending){
+  if(!pending){
+    // Ignore un "rien en attente" qui arriverait dans les toutes premières
+    // secondes suivant une soumission côté client : le script détaché n'a
+    // pas encore eu le temps de faire passer son fichier de statut de
+    // "pending" à "applied" (délai de grâce de 2s), et /api/network/status
+    // ne verrait donc rien pendant cette fenêtre — un changement d'onglet
+    // rapide ne doit pas faire disparaître le popup qu'on vient tout juste
+    // d'afficher.
+    if(networkPendingToken&&Date.now()-networkPendingSetAt<5000)return;
+    stopNetworkPendingUI();
+    return;
+  }
+
+  const isNewChange=pending.token!==networkPendingToken;
+  networkPendingToken=pending.token;
+  networkPendingSetAt=Date.now();
+  const anchor=pending.applied_at||pending.started_at||(Date.now()/1000);
+  networkPendingDeadline=(anchor+pending.delay_seconds)*1000;
+
+  if(!isNewChange){
+    // Déjà affiché pour ce changement (ex. : nouvel appel à networkRefresh
+    // pendant qu'il est toujours en attente) — juste se resynchroniser sur
+    // la nouvelle échéance sans rien réafficher, et réarmer le filet de
+    // sécurité sur la bonne échéance.
+    scheduleNetworkPendingRevertCheck();
+    return;
+  }
+
+  const kindLabel=pending.kind==='hostname'?t('network.pending_kind_hostname'):t('network.pending_kind_ip');
+  networkPendingOverlayTitle.textContent=t('network.pending_title',{kind:kindLabel});
+  networkPendingOverlayHint.textContent=t('network.pending_hint');
+  networkPendingOverlay.classList.remove('hidden');
+  renderNetworkPendingRedirectHint(pending);
+
+  scheduleNetworkPendingRevertCheck();
+}
+
+function scheduleNetworkPendingRevertCheck(){
+  clearTimeout(networkPendingRevertTimer);
+  const resolvedToken=networkPendingToken;
+  // Pas de compte à rebours visible : un seul minuteur silencieux, armé sur
+  // l'échéance réelle (calculée côté serveur), avec une marge pour laisser
+  // le script détaché finir sa propre boucle de rétablissement.
+  const delay=Math.max(0,networkPendingDeadline-Date.now())+3000;
+  networkPendingRevertTimer=setTimeout(()=>{
+    if(networkPendingToken!==resolvedToken)return; // déjà confirmé entre-temps
+    stopNetworkPendingUI();
+    toast(t('network.pending_auto_reverted'),true);
+    networkRefresh();
+  },delay);
+}
+
+function buildSameOriginUrl(host){
+  return `${location.protocol}//${host}${location.port?':'+location.port:''}${location.pathname}`;
+}
+
+function renderNetworkPendingRedirectHint(pending){
+  let url=null,label='';
+  if(pending.kind==='ip'&&pending.new_value&&pending.new_value.method==='manual'&&pending.new_value.address){
+    const host=pending.new_value.address.split('/')[0];
+    url=buildSameOriginUrl(host);
+    label=t('network.pending_try_ip',{address:host});
+  }else if(pending.kind==='hostname'&&pending.new_value){
+    const host=pending.new_value+'.local';
+    url=buildSameOriginUrl(host);
+    label=t('network.pending_try_hostname',{hostname:host});
+  }
+  if(url){
+    networkPendingRedirectHint.innerHTML=`<a href="${esc(url)}">${esc(label)}</a>`;
+    networkPendingRedirectHint.classList.remove('hidden');
+  }else{
+    networkPendingRedirectHint.classList.add('hidden');
+    networkPendingRedirectHint.innerHTML='';
+  }
+}
+
+async function networkConfirmPending(){
+  if(!networkPendingToken)return;
+  const token=networkPendingToken;
+  networkPendingConfirmButton.disabled=true;
+  try{
+    await api('/api/network/confirm',{method:'POST',body:JSON.stringify({token})});
+    toast(t('network.pending_confirmed'));
+    stopNetworkPendingUI();
+    networkRefresh();
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    networkPendingConfirmButton.disabled=false;
+  }
+}
+
+async function networkApplyNtp(){
+  networkNtpButton.disabled=true;
+  networkNtpStatus.textContent='';
+  try{
+    const servers=networkNtpServersInput.value.split(',').map(x=>x.trim()).filter(Boolean);
+    await api('/api/network/ntp',{method:'POST',body:JSON.stringify({enabled:networkNtpEnabled.checked,servers})});
+    toast(t('network.ntp_applied'));
+    networkRefresh();
+  }catch(e){
+    networkNtpStatus.textContent=e.message;
+  }finally{
+    networkNtpButton.disabled=false;
+  }
+}
+
+async function networkApplyTimezone(){
+  networkTimezoneButton.disabled=true;
+  try{
+    await api('/api/network/timezone',{method:'POST',body:JSON.stringify({timezone:networkTimezoneSelect.value})});
+    toast(t('network.timezone_applied'));
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    networkTimezoneButton.disabled=false;
+  }
+}
 
 setInterval(serviceStatus,3000);serviceStatus();
 setInterval(sysInfo,3000);boot().catch(e=>{toast(e.message,true);showLogin()});

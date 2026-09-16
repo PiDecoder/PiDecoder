@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace pidecoder {
@@ -98,6 +99,11 @@ private:
     void show_audio_indicator() noexcept;
     [[nodiscard]] bool audio_indicator_visible() const noexcept;
 
+    void show_startup_info_overlay() noexcept;
+
+    [[nodiscard]] std::optional<std::string>
+    startup_info_overlay_text() const;
+
     [[nodiscard]] std::optional<std::size_t>
     camera_index_at(
         int mouse_x,
@@ -156,6 +162,27 @@ private:
     std::chrono::steady_clock::time_point
         audio_indicator_until_{};
 
+    /*
+     * Adresse IP/MAC/nom d'hôte/port Web affichés par l'overlay de
+     * démarrage — voir NetworkInfo.hpp. Recalculé à chaque appel de
+     * show_startup_info_overlay() (démarrage et raccourci clavier I),
+     * PAS une seule fois pour toutes à la construction : sinon, si le
+     * réseau n'était pas encore prêt pile à cet instant (juste après
+     * initialize_players() dans run(), avant que network-online.target
+     * ne soit une garantie absolue selon la configuration
+     * NetworkManager), ce champ restait vide pour le reste de
+     * l'exécution — y compris pour le raccourci clavier, censé pouvoir
+     * le rappeler à tout moment. Recalculer permet aussi de refléter un
+     * changement d'IP fait depuis la page Web sans redémarrer le player.
+     * Vide si aucune interface réseau active n'a été trouvée au moment
+     * de l'appel, auquel cas l'overlay ne s'affiche pas plutôt que
+     * d'afficher une chaîne vide.
+     */
+    std::string startup_info_text_;
+
+    std::chrono::steady_clock::time_point
+        startup_info_until_{};
+
     bool inspection_animation_active_{false};
     bool inspection_dragging_{false};
 
@@ -181,6 +208,9 @@ private:
 
     static constexpr std::chrono::seconds
         ptz_overlay_timeout_{5};
+
+    static constexpr std::chrono::seconds
+        startup_info_duration_{30};
 };
 
 } // namespace pidecoder

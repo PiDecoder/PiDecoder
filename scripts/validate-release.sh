@@ -32,11 +32,13 @@ fi
 echo "[3/8] Vérification des scripts Shell"
 bash -n \
     "$ROOT/scripts/install.sh" \
+    "$ROOT/scripts/manage-tls.sh" \
+    "$ROOT/scripts/sync-dev.sh" \
     "$ROOT/scripts/validate-release.sh"
 
 echo "[4/8] Vérification de la version CMake"
 grep -Eq \
-    '^[[:space:]]*VERSION[[:space:]]+1\.1\.0([[:space:]]|$)' \
+    '^[[:space:]]*VERSION[[:space:]]+1\.2\.0([[:space:]]|$)' \
     "$ROOT/CMakeLists.txt"
 
 echo "[5/8] Vérification des fichiers essentiels"
@@ -50,6 +52,8 @@ required=(
     "scripts/onvif_client.py"
     "scripts/i18n.py"
     "scripts/install.sh"
+    "scripts/manage-tls.sh"
+    "scripts/sync-dev.sh"
     "scripts/check-camera-config.py"
     "scripts/ptz-bridge.py"
     "systemd/pidecoder.service.in"
@@ -107,4 +111,4 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
 fi
 
 echo "[8/8] Validation terminée"
-echo "PiDecoder v1.1.0 : paquet cohérent."
+echo "PiDecoder v1.2.0 : paquet cohérent."
