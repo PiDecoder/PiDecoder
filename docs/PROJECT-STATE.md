@@ -49,7 +49,12 @@
   (`showApp()` now checks for a pending change on login instead of
   waiting for a manual tab click, and the auto-revert delay was raised
   from 45 to 120s) — see "Follow-up after second field feedback" under
-  that section.
+  that section. A third round dropped the visible ticking countdown
+  entirely (the change is applied near-instantly in practice, so a timer
+  that visibly counted down was misleading) in favor of a static popup
+  with just a "Confirm" button; the 120s auto-revert safety net is
+  unchanged, only the UI display was simplified — see "Follow-up after
+  third field feedback" under that section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -608,6 +613,24 @@ made the real cause visible this time.
   `app.js` syntax) — the actual login-then-overlay timing still needs a
   real-world check on the Pi, this sandbox has no browser/cookie
   environment to reproduce that with.
+
+### Follow-up after third field feedback: dropped the visible countdown
+
+Even with the fixes above, the user reported the confirmation popup still
+showed a ticking seconds counter after reconnecting on the new address —
+and since the underlying `nmcli` change is applied essentially instantly
+in practice, a counter that visibly ticks down was misleading (it implied
+waiting was needed) rather than reassuring. Removed the live countdown
+display entirely: the overlay now shows a static message and the
+"Confirm" button only, no number. The automatic-revert safety net is
+unchanged (still 120s, still fires if `/api/network/confirm` is never
+called) — only the UI's `setInterval`-based per-second redraw was replaced
+with a single silent `setTimeout` armed on the real server-computed
+deadline (`renderNetworkPending`/`scheduleNetworkPendingRevertCheck` in
+`app.js`); the `networkPendingCountdownValue` element was removed from
+`index.html`. Verified via `node --check` syntax validation and i18n key
+parity (294 keys, FR/EN) — same testing-limit caveat as above applies to
+the actual on-Pi timing/UX.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

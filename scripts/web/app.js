@@ -2444,19 +2444,23 @@ async function networkChangeIp(){
 }
 
 // --------------------------------------------------------------------------
-// Changement réseau en attente : plein écran + compte à rebours + lien de
-// bascule vers la nouvelle adresse, sur le même modèle que le redémarrage
-// HTTPS (tlsRestartOverlay/tlsRestartCountdown) déjà utilisé ailleurs.
+// Changement réseau en attente : simple popup à cliquer (« Confirmer ») +
+// lien de bascule vers la nouvelle adresse. Pas de compte à rebours affiché
+// — le changement (nmcli/hostnamectl) est en pratique instantané, un timer
+// qui défile n'apportait rien et donnait l'impression trompeuse qu'il
+// fallait attendre. Le rétablissement automatique en cas de non-confirmation
+// reste actif en arrière-plan (filet de sécurité), juste sans affichage
+// seconde par seconde.
 // --------------------------------------------------------------------------
 
 let networkPendingToken=null;
 let networkPendingDeadline=0;
 let networkPendingSetAt=0;
-let networkPendingTickTimer=null;
+let networkPendingRevertTimer=null;
 
 function stopNetworkPendingUI(){
-  clearInterval(networkPendingTickTimer);
-  networkPendingTickTimer=null;
+  clearTimeout(networkPendingRevertTimer);
+  networkPendingRevertTimer=null;
   networkPendingToken=null;
   networkPendingOverlay.classList.add('hidden');
 }
@@ -2468,8 +2472,8 @@ function renderNetworkPending(pending){
     // pas encore eu le temps de faire passer son fichier de statut de
     // "pending" à "applied" (délai de grâce de 2s), et /api/network/status
     // ne verrait donc rien pendant cette fenêtre — un changement d'onglet
-    // rapide ne doit pas faire disparaître le plein écran qu'on vient tout
-    // juste d'afficher.
+    // rapide ne doit pas faire disparaître le popup qu'on vient tout juste
+    // d'afficher.
     if(networkPendingToken&&Date.now()-networkPendingSetAt<5000)return;
     stopNetworkPendingUI();
     return;
@@ -2481,16 +2485,37 @@ function renderNetworkPending(pending){
   const anchor=pending.applied_at||pending.started_at||(Date.now()/1000);
   networkPendingDeadline=(anchor+pending.delay_seconds)*1000;
 
-  if(!isNewChange)return; // déjà affiché, seul le tick local doit continuer
+  if(!isNewChange){
+    // Déjà affiché pour ce changement (ex. : nouvel appel à networkRefresh
+    // pendant qu'il est toujours en attente) — juste se resynchroniser sur
+    // la nouvelle échéance sans rien réafficher, et réarmer le filet de
+    // sécurité sur la bonne échéance.
+    scheduleNetworkPendingRevertCheck();
+    return;
+  }
 
   const kindLabel=pending.kind==='hostname'?t('network.pending_kind_hostname'):t('network.pending_kind_ip');
   networkPendingOverlayTitle.textContent=t('network.pending_title',{kind:kindLabel});
+  networkPendingOverlayHint.textContent=t('network.pending_hint');
   networkPendingOverlay.classList.remove('hidden');
   renderNetworkPendingRedirectHint(pending);
 
-  clearInterval(networkPendingTickTimer);
-  tickNetworkPendingCountdown();
-  networkPendingTickTimer=setInterval(tickNetworkPendingCountdown,1000);
+  scheduleNetworkPendingRevertCheck();
+}
+
+function scheduleNetworkPendingRevertCheck(){
+  clearTimeout(networkPendingRevertTimer);
+  const resolvedToken=networkPendingToken;
+  // Pas de compte à rebours visible : un seul minuteur silencieux, armé sur
+  // l'échéance réelle (calculée côté serveur), avec une marge pour laisser
+  // le script détaché finir sa propre boucle de rétablissement.
+  const delay=Math.max(0,networkPendingDeadline-Date.now())+3000;
+  networkPendingRevertTimer=setTimeout(()=>{
+    if(networkPendingToken!==resolvedToken)return; // déjà confirmé entre-temps
+    stopNetworkPendingUI();
+    toast(t('network.pending_auto_reverted'),true);
+    networkRefresh();
+  },delay);
 }
 
 function buildSameOriginUrl(host){
@@ -2515,29 +2540,6 @@ function renderNetworkPendingRedirectHint(pending){
     networkPendingRedirectHint.classList.add('hidden');
     networkPendingRedirectHint.innerHTML='';
   }
-}
-
-function tickNetworkPendingCountdown(){
-  const remaining=Math.max(0,Math.round((networkPendingDeadline-Date.now())/1000));
-  networkPendingCountdownValue.textContent=remaining;
-  networkPendingOverlayHint.textContent=t('network.pending_hint',{seconds:remaining});
-
-  if(remaining>0)return;
-
-  clearInterval(networkPendingTickTimer);
-  networkPendingTickTimer=null;
-
-  // Le compte à rebours local est indicatif ; on laisse quelques secondes
-  // de marge au script détaché (sa propre boucle d'1s côté serveur, plus
-  // la commande nmcli/hostnamectl de rétablissement) avant de considérer
-  // que c'est bien réglé et de rafraîchir l'affichage.
-  const resolvedToken=networkPendingToken;
-  setTimeout(()=>{
-    if(networkPendingToken!==resolvedToken)return; // déjà confirmé entre-temps
-    stopNetworkPendingUI();
-    toast(t('network.pending_auto_reverted'),true);
-    networkRefresh();
-  },3000);
 }
 
 async function networkConfirmPending(){

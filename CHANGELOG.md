@@ -100,6 +100,22 @@ premier correctif a justement permis de voir le vrai problème.
   automatique est passé de 45 à 120 secondes ; le lien vers la nouvelle
   adresse précise maintenant qu'une reconnexion sera nécessaire.
 
+### Corrections après troisième retour terrain : suppression du compte à rebours affiché
+
+Même après les correctifs ci-dessus, le popup de confirmation réseau
+continuait à afficher un compte à rebours en secondes une fois reconnecté
+sur la nouvelle adresse — alors qu'en pratique, le changement (`nmcli`)
+est appliqué quasi instantanément, donc ce timer qui défilait n'apportait
+rien et laissait penser à tort qu'il fallait attendre. Le plein écran
+n'affiche désormais plus aucun nombre qui défile : juste un message fixe
+et le bouton « Confirmer ce changement » à cliquer, sur une page qui
+répond déjà. Le filet de sécurité (rétablissement automatique de l'ancien
+réglage si la confirmation n'arrive jamais, toujours à 120 secondes) reste
+actif en arrière-plan exactement comme avant — un seul minuteur silencieux
+programmé sur l'échéance réelle a remplacé la boucle d'affichage seconde
+par seconde ; rien n'a changé côté sécurité, seul l'affichage a été
+simplifié.
+
 ### Mise à jour en un clic et configuration réseau depuis la page Web
 
 Demande explicite de l'utilisateur : un bouton de vérification/installation
