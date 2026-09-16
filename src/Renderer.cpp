@@ -7,7 +7,6 @@
 #include <cctype>
 #include <cstdint>
 #include <cmath>
-#include <iostream>
 #include <string>
 
 namespace pidecoder {
@@ -1795,30 +1794,73 @@ void Renderer::draw_startup_info_overlay(
             canvas_height
         );
 
-    const int box_height =
+    /*
+     * `text` porte deux lignes séparées par '\n' (voir
+     * NetworkInfo.hpp) : IP + nom d'hôte, puis MAC + port Web.
+     * draw_text() ne sait pas interpréter '\n', donc on coupe ici et on
+     * l'appelle une fois par ligne dans un petit "encart" à deux lignes
+     * plutôt qu'une seule ligne dense — plus lisible, et l'occasion de
+     * lui donner un peu de présentation (bordure colorée, séparateur)
+     * cohérente avec le reste de l'UI (draw_audio_indicator utilise la
+     * même bordure colorée sur fond sombre).
+     */
+    const auto separator = text.find('\n');
+
+    const std::string line1 =
+        separator == std::string::npos
+            ? text
+            : text.substr(0, separator);
+
+    const std::string line2 =
+        separator == std::string::npos
+            ? std::string{}
+            : text.substr(separator + 1);
+
+    const int line_height =
         std::clamp(
-            shortest / 22,
-            22,
-            34
+            shortest / 26,
+            20,
+            30
+        );
+
+    const int border =
+        std::max(
+            2,
+            line_height / 12
+        );
+
+    const int gap =
+        std::max(
+            4,
+            line_height / 6
         );
 
     const int margin =
         std::clamp(
-            box_height / 2,
+            line_height / 2,
             10,
             16
         );
 
     /*
      * Largeur nécessaire estimée à partir du même calcul de gabarit de
-     * police que draw_text (voir son implémentation) : c'est ce qui lui
-     * permet ensuite de ne pas tronquer le texte. Bornée à la largeur de
-     * l'écran moins les marges au cas où un nom d'hôte serait
-     * inhabituellement long — draw_text tronquera proprement si
-     * nécessaire, ce n'est qu'un garde-fou.
+     * police que draw_text (voir son implémentation), sur la plus
+     * longue des deux lignes. Bornée à la largeur de l'écran moins les
+     * marges au cas où un nom d'hôte serait inhabituellement long —
+     * draw_text tronquera proprement si nécessaire, ce n'est qu'un
+     * garde-fou.
+     *
+     * Même seuil que draw_text (rectangle.height >= 32) — et pas celui
+     * qu'utilisait l'ancien encart à une seule ligne (>= 32 contre
+     * l'ancien box_height, potentiellement plus grand) : line_height
+     * est borné à 30 ci-dessus, donc scale vaut toujours 1 ici en
+     * pratique, mais recopier le même seuil que draw_text (plutôt qu'un
+     * seuil arbitraire différent) garantit que le budget de largeur
+     * calculé ici correspond exactement à ce que draw_text va vraiment
+     * dessiner, sans sur- ni sous-dimensionner la boîte.
      */
     const int scale =
-        box_height >= 32
+        line_height >= 32
             ? 2
             : 1;
 
@@ -1828,12 +1870,19 @@ void Renderer::draw_startup_info_overlay(
     const int text_padding =
         std::max(
             6,
-            box_height / 5
+            line_height / 5
+        );
+
+    const std::size_t longest_line =
+        std::max(
+            line1.size(),
+            line2.size()
         );
 
     const int desired_width =
         text_padding * 2 +
-        static_cast<int>(text.size()) *
+        border * 2 +
+        static_cast<int>(longest_line) *
             character_width;
 
     const int box_width =
@@ -1846,6 +1895,11 @@ void Renderer::draw_startup_info_overlay(
             )
         );
 
+    const int box_height =
+        line_height * 2 +
+        gap +
+        border * 2;
+
     const Rect box{
         canvas_width - margin - box_width,
         canvas_height - margin - box_height,
@@ -1854,45 +1908,14 @@ void Renderer::draw_startup_info_overlay(
     };
 
     /*
-     * Diagnostic temporaire (retour terrain : ce texte, pourtant non
-     * vide, ne s'affichait pas à l'écran) — trace la géométrie calculée
-     * une seule fois par activation (pas à chaque frame pendant 30s,
-     * via ce `static` qui ne réagit qu'à un changement de texte) plutôt
-     * que de deviner à l'aveugle si le problème vient d'un
-     * canvas_width/canvas_height inattendu ou d'une boîte hors écran /
-     * de taille nulle. À retirer une fois le bug identifié.
-     */
-    static std::string last_logged_text;
-
-    if (text != last_logged_text) {
-        std::cerr
-            << "draw_startup_info_overlay: canvas="
-            << canvas_width
-            << "x"
-            << canvas_height
-            << " box=("
-            << box.x
-            << ","
-            << box.y
-            << ","
-            << box.width
-            << ","
-            << box.height
-            << ") texte="
-            << text.size()
-            << " caracteres"
-            << std::endl;
-
-        last_logged_text = text;
-    }
-
-    /*
-     * fill_ui_rect() écrit directement dans le tampon couleur via
-     * glClear (voir son implémentation) : il n'y a pas de fondu réel,
-     * l'alpha passé n'a donc aucun effet visuel de transparence — un
-     * fond plein sombre, cohérent avec le reste de l'UI (draw_ptz_overlay,
-     * draw_audio_indicator), est utilisé ici plutôt qu'une valeur
-     * d'alpha qui suggérerait à tort une vraie translucidité.
+     * Bordure colorée : on remplit d'abord toute la boîte dans la
+     * couleur d'accent, puis un rectangle intérieur (retrait de
+     * `border` de chaque côté) dans le fond sombre habituel par
+     * dessus — ce qui laisse juste le cadre visible tout autour, sans
+     * avoir besoin d'un vrai contour (fill_ui_rect ne sait tracer que
+     * des rectangles pleins, voir son implémentation). Même teinte
+     * d'accent que le bouton son actif (draw_audio_indicator), pour
+     * rester cohérent avec le reste de l'UI.
      */
     fill_ui_rect(
         box.x,
@@ -1900,15 +1923,83 @@ void Renderer::draw_startup_info_overlay(
         box.width,
         box.height,
         canvas_height,
+        0.30F,
+        0.55F,
+        0.95F,
+        1.0F
+    );
+
+    const Rect inner{
+        box.x + border,
+        box.y + border,
+        box.width - border * 2,
+        box.height - border * 2
+    };
+
+    fill_ui_rect(
+        inner.x,
+        inner.y,
+        inner.width,
+        inner.height,
+        canvas_height,
         0.04F,
         0.05F,
         0.07F,
         1.0F
     );
 
+    /*
+     * Fin séparateur horizontal entre les deux lignes, dans une teinte
+     * intermédiaire entre le fond et la bordure — juste assez visible
+     * pour structurer l'encart sans attirer l'œil plus que le texte
+     * lui-même.
+     */
+    const int divider_thickness = 1;
+
+    const int divider_inset =
+        std::max(
+            2,
+            text_padding / 2
+        );
+
+    fill_ui_rect(
+        inner.x + divider_inset,
+        inner.y + line_height + (gap - divider_thickness) / 2,
+        std::max(
+            0,
+            inner.width - divider_inset * 2
+        ),
+        divider_thickness,
+        canvas_height,
+        0.16F,
+        0.22F,
+        0.32F,
+        1.0F
+    );
+
+    const Rect line1_box{
+        inner.x,
+        inner.y,
+        inner.width,
+        line_height
+    };
+
+    const Rect line2_box{
+        inner.x,
+        inner.y + line_height + gap,
+        inner.width,
+        line_height
+    };
+
     draw_text(
-        text,
-        box,
+        line1,
+        line1_box,
+        canvas_height
+    );
+
+    draw_text(
+        line2,
+        line2_box,
         canvas_height
     );
 }

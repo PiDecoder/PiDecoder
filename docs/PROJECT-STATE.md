@@ -761,8 +761,29 @@ unrestricted shell. The exact same class of bug as the `runuser`/
 pre-existing hardening directive, written before this feature existed,
 that never explicitly allowed what the new feature needs. Fixed by adding
 `AF_NETLINK` to `RestrictAddressFamilies` in `systemd/pidecoder.service.in`.
-The two diagnostic logs (`Application.cpp` and `Renderer.cpp`) are kept
-for now, to be removed once the fix is confirmed working on the Pi.
+
+**Confirmed working on the Pi.** The two diagnostic logs added in
+`Application.cpp` and `Renderer.cpp` while chasing this were removed
+accordingly.
+
+**Overlay presentation reworked** (explicit follow-up request, now that
+it's visible): went from one dense line to a small two-line card with a
+colored border (same accent hue as the active audio button in Focus
+view, for visual consistency) and a thin divider between the lines — line
+1 is IP + hostname (what you need most), line 2 is MAC + Web port (more
+technical). `NetworkInfo.cpp` now returns the two lines separated by
+`\n`; `Renderer::draw_startup_info_overlay` splits on that before calling
+`draw_text()` twice (which doesn't interpret `\n` itself). Still built
+from the same solid-rectangle-only primitives as the rest of the UI — no
+real alpha blending or rounded corners available (see the comments on
+`fill_ui_rect`/`draw_text`); the "border" is a solid accent-colored
+rectangle with a smaller dark rectangle drawn on top of it, not a real
+outline. Box geometry (position/width/height) was checked by hand-running
+the same arithmetic in Python across several common resolutions
+(640×480 through 4K) with the real text the user's Pi produced — always
+on-screen, never zero or negative size. The actual on-screen rendering
+still couldn't be verified in this sandbox (still no SDL2/mpv here); to
+confirm visually on the Pi.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

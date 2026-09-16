@@ -238,24 +238,33 @@ std::string startup_network_info_text()
         return {};
     }
 
-    std::string text = "IP " + network.address;
-
-    const std::string mac =
-        mac_address_for_interface(network.interface_name);
-
-    if (!mac.empty()) {
-        text += "  MAC " + mac;
-    }
+    /*
+     * Deux lignes séparées par '\n' — pas pour draw_text() lui-même
+     * (qui ne sait pas interpréter '\n', voir glyph_for() dans
+     * Renderer.cpp : un caractère non reconnu s'afficherait comme un
+     * symbole "?"), mais pour Renderer::draw_startup_info_overlay(),
+     * qui coupe sur ce séparateur avant d'appeler draw_text() une fois
+     * par ligne. Répartition pensée pour la lecture : ligne 1 ce qui
+     * permet de retrouver le Pi sur le réseau (IP, nom d'hôte), ligne 2
+     * les informations plus techniques (MAC, port Web).
+     */
+    std::string line1 = "IP " + network.address;
 
     const std::string hostname = local_hostname_uppercase();
 
     if (!hostname.empty()) {
-        text += "  HOTE " + hostname;
+        line1 += "  HOTE " + hostname;
     }
 
-    text += "  WEB :" + web_admin_port();
+    const std::string mac =
+        mac_address_for_interface(network.interface_name);
 
-    return text;
+    const std::string line2 =
+        mac.empty()
+            ? ("WEB :" + web_admin_port())
+            : ("MAC " + mac + "  WEB :" + web_admin_port());
+
+    return line1 + "\n" + line2;
 }
 
 } // namespace pidecoder

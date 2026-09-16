@@ -16,6 +16,11 @@ namespace pidecoder {
  * Application::show_startup_info_overlay() — pour rester à jour si
  * l'adresse a changé depuis le démarrage (via la page Web, par exemple).
  *
+ * Renvoie deux lignes séparées par '\n' (IP + nom d'hôte, puis MAC + port
+ * Web) — c'est Renderer::draw_startup_info_overlay() qui coupe sur ce
+ * séparateur pour dessiner un petit encart à deux lignes plutôt qu'une
+ * seule ligne dense ; draw_text() lui-même ne sait pas interpréter '\n'.
+ *
  * Renvoie une chaîne vide si aucune adresse IPv4 utilisable n'a pu être
  * déterminée (aucune interface active, par exemple juste après le
  * démarrage réseau) ; l'appelant doit alors simplement ne pas afficher

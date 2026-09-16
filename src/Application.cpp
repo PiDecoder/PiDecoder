@@ -1416,20 +1416,6 @@ void Application::show_startup_info_overlay() noexcept
     startup_info_text_ = startup_network_info_text();
 
     /*
-     * Tracé côté journal (StandardOutput=journal dans
-     * pidecoder.service.in, donc visible via `journalctl -u pidecoder`)
-     * pour pouvoir diagnostiquer sans recompiler si ce texte est vide
-     * (aucune interface détectée par NetworkInfo.cpp) ou non vide mais
-     * que l'overlay ne s'affiche quand même pas à l'écran — deux causes
-     * très différentes à distinguer facilement.
-     */
-    std::cout
-        << "Overlay info reseau (touche I / demarrage) : ["
-        << startup_info_text_
-        << "]"
-        << std::endl;
-
-    /*
      * Rien à afficher si aucune adresse IPv4 n'a pu être déterminée
      * (voir NetworkInfo.hpp) — inutile de faire clignoter un encart
      * vide, y compris quand la touche I est pressée à la main.

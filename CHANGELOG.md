@@ -123,10 +123,37 @@ parfaitement fonctionnel). Exactement la même famille de bug que le
 restriction systemd légitime, écrite avant l'existence de cette
 fonctionnalité, qui ne l'autorisait pas explicitement. Corrigé en
 ajoutant `AF_NETLINK` à `RestrictAddressFamilies` dans
-`systemd/pidecoder.service.in`. Les deux traces de diagnostic ajoutées
-dans les deux entrées précédentes sont conservées pour l'instant, le
-temps de confirmer sur le Pi que ce correctif résout bien le problème —
-elles seront retirées ensuite.
+`systemd/pidecoder.service.in`.
+
+**Confirmé fonctionnel sur le Pi.** Les deux traces de diagnostic
+ajoutées dans les deux entrées précédentes ont donc été retirées
+(`Application.cpp` et `Renderer.cpp`).
+
+### Présentation de l'overlay retravaillée (demande explicite)
+
+Maintenant que ça s'affiche, un peu de mise en forme : l'encart passe
+d'une seule ligne dense à un petit cadre à deux lignes avec une bordure
+colorée (même teinte d'accent que le bouton son actif en vue Focus, pour
+rester cohérent avec le reste de l'interface) et un fin séparateur entre
+les deux lignes.
+
+- ligne 1 : adresse IP + nom d'hôte (l'essentiel pour retrouver le Pi) ;
+- ligne 2 : adresse MAC + port Web (informations plus techniques) ;
+- `NetworkInfo.cpp` renvoie désormais ces deux lignes séparées par `\n`
+  (`Renderer::draw_startup_info_overlay` coupe dessus avant de dessiner,
+  `draw_text()` lui-même ne les interprète pas) ;
+- toujours dessiné avec les mêmes primitives que le reste de l'UI
+  (rectangles pleins uniquement, pas de vraie transparence ni de coins
+  arrondis possibles avec `fill_ui_rect`/`draw_text`, voir leurs
+  commentaires) — la bordure colorée est en fait un rectangle plein sous
+  un rectangle intérieur plus sombre, pas un vrai contour.
+
+**Testé** : géométrie de la boîte (position, largeur, hauteur) vérifiée
+par calcul pour plusieurs résolutions courantes (640×480 à 4K) avec le
+texte réel remonté par l'utilisateur — toujours à l'écran, jamais de
+taille nulle ni négative. Le rendu à l'écran lui-même n'a pas pu être
+vérifié dans cet environnement (toujours pas de SDL2/mpv disponibles
+ici) : à confirmer visuellement sur le Pi.
 
 ### Corrections après premier retour terrain
 
