@@ -89,7 +89,24 @@ affiche désormais le texte calculé, ou `[]` s'il est vide, dans le journal
 du service — visible via `journalctl -u pidecoder`, aucun outil
 supplémentaire nécessaire) pour trancher sans deviner à l'aveugle.
 
-### Corrections après premier retour terrain
+### Le texte n'est pas vide — diagnostic étendu côté rendu
+
+Un test autonome de `NetworkInfo.cpp` compilé et exécuté directement sur
+le Pi réel confirme que `startup_network_info_text()` renvoie bien un
+texte correct et non vide (`IP ... MAC ... HOTE ... WEB :8080`) — la
+détection réseau elle-même n'est donc pas en cause, contrairement à
+l'hypothèse de l'entrée précédente. Le problème est forcément plus loin,
+côté dessin (`Renderer::draw_startup_info_overlay` ou le choix entre
+`render()`/`render_focus()` selon la vue mosaïque/Focus). Relu en détail
+sans rien trouver d'évident par la seule lecture du code (position,
+taille de boîte, ordre de dessin — tout paraît cohérent avec les autres
+overlays qui, eux, s'affichent bien). Ajout d'une seconde trace, cette
+fois dans `Renderer::draw_startup_info_overlay` (log une seule fois par
+activation, pas à chaque frame) : dimensions du canvas et géométrie
+exacte de la boîte calculée, pour voir directement si le souci vient
+d'un canvas inattendu, d'une boîte hors écran ou de taille nulle, plutôt
+que de continuer à deviner sans preuve.
+
 
 - **« Update unavailable: this folder is not a Git repository »** alors que
   le dépôt est bien un clone Git valide : `check_update()` ne testait que

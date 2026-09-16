@@ -719,6 +719,25 @@ computed text (or `[]` if empty) to stdout, which lands in the systemd
 journal (`journalctl -u pidecoder`) since the unit already has
 `StandardOutput=journal` — the next round depends on what that shows.
 
+**Text confirmed non-empty on the real Pi**: a standalone compile of
+`NetworkInfo.cpp` (zero SDL2/mpv dependency) run directly on
+`olympus-vss-mon1` over SSH returned a correct, populated string (`IP
+10.0.0.217  MAC 88:A2:9E:B3:CC:F7  HOTE OLYMPUS-VSS-MON1  WEB :8080`) —
+ruling out the network-detection theory above. The bug is further down,
+in the drawing path (`Renderer::draw_startup_info_overlay` or the
+mosaic/Focus render selection) — re-reviewed in detail without finding
+anything definitively wrong by inspection alone (box geometry, draw
+order, and coordinate conventions all match the other overlays that do
+work). Added a second, render-side diagnostic log in
+`Renderer::draw_startup_info_overlay` (throttled to log once per
+activation via a `static` last-logged-text guard, not every frame):
+canvas dimensions and the exact computed box rectangle, to see directly
+whether the box ends up off-screen or zero-sized rather than continuing
+to guess from code alone. Next round depends on what both logs show, and
+on whether the user was testing in mosaic or Focus view (only Focus view
+is confirmed working for the *other* overlays, since zoom/PTZ/audio only
+ever render there).
+
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 
 Per the roadmap, v1.1 adds audio playback. Scope decided with the user

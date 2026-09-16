@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cmath>
+#include <iostream>
 #include <string>
 
 namespace pidecoder {
@@ -1851,6 +1852,39 @@ void Renderer::draw_startup_info_overlay(
         box_width,
         box_height
     };
+
+    /*
+     * Diagnostic temporaire (retour terrain : ce texte, pourtant non
+     * vide, ne s'affichait pas à l'écran) — trace la géométrie calculée
+     * une seule fois par activation (pas à chaque frame pendant 30s,
+     * via ce `static` qui ne réagit qu'à un changement de texte) plutôt
+     * que de deviner à l'aveugle si le problème vient d'un
+     * canvas_width/canvas_height inattendu ou d'une boîte hors écran /
+     * de taille nulle. À retirer une fois le bug identifié.
+     */
+    static std::string last_logged_text;
+
+    if (text != last_logged_text) {
+        std::cerr
+            << "draw_startup_info_overlay: canvas="
+            << canvas_width
+            << "x"
+            << canvas_height
+            << " box=("
+            << box.x
+            << ","
+            << box.y
+            << ","
+            << box.width
+            << ","
+            << box.height
+            << ") texte="
+            << text.size()
+            << " caracteres"
+            << std::endl;
+
+        last_logged_text = text;
+    }
 
     /*
      * fill_ui_rect() écrit directement dans le tampon couleur via
