@@ -54,11 +54,59 @@ deux protocoles dans tous les ordres, y compris les cas qui doivent être
 refusés (désactiver le dernier protocole restant). Un bug a d'ailleurs été
 trouvé et corrigé par ce test (le port HTTP affiché était parfois confondu
 avec le port HTTPS selon par où arrivait la requête). Ce qui n'a **pas** pu
-être testé ici : le redémarrage réel du service via systemd (`systemd-run`
-n'existe pas dans ce bac à sable, seul le comportement autour — avant/après
-— a été vérifié), et bien sûr tout le rendu de l'onglet Sécurité dans un
-vrai navigateur. Premier test réel recommandé avec un seul appareil sous la
-main au départ, pas en plein remplacement d'écrans, au cas où.
+être testé ici : le redémarrage réel des services via systemd (le binaire
+`systemd-run` est présent dans ce bac à sable mais n'y pilote pas de vrais
+services — seul le comportement autour, avant/après l'appel, a pu être
+vérifié), et bien sûr tout le rendu de l'onglet Sécurité dans un vrai
+navigateur. Premier test réel recommandé avec un seul appareil sous la main
+au départ, pas en plein remplacement d'écrans, au cas où.
+
+**Confirmé fonctionnel sur le Pi** — bascule HTTP/HTTPS testée depuis
+l'onglet Sécurité ("c'est bien").
+
+### Changer les numéros de port sans réinstaller (demande explicite)
+
+Jusqu'ici, changer le port HTTP ou HTTPS voulait dire relancer
+`install.sh` (qui recompile aussi le moteur vidéo — bien plus que
+nécessaire pour un simple numéro de port). Nouveau panneau **Ports de
+l'administration Web** dans l'onglet Sécurité, à côté des panneaux
+HTTP/HTTPS : deux champs pré-remplis avec les ports actuels, un bouton
+Appliquer.
+
+- côté serveur (`system_admin.start_port_change`), édite directement les
+  deux unités systemd déjà installées plutôt que de les regénérer depuis
+  leurs gabarits `.in` (les autres valeurs — utilisateur, groupe, uid...
+  — ne sont conservées nulle part après l'installation pour être
+  réutilisées ici ; les re-dériver dupliquerait la logique de détection
+  d'`install.sh` pour un gain nul puisque seuls les deux ports changent) :
+  le `--port`/`--https-port` de l'`ExecStart` de `pidecoder-config.service`,
+  et les variables d'environnement `PIDECODER_WEB_PORT`/
+  `PIDECODER_WEB_HTTPS_PORT` de `pidecoder.service` (celles que l'overlay
+  IP du player affiche, voir `NetworkInfo.cpp`) ;
+- **par choix explicite** : `pidecoder.service` (le moteur vidéo) est aussi
+  redémarré, pas seulement `pidecoder-config.service` — coupure de
+  quelques secondes de l'affichage vidéo à chaque changement de port, pour
+  que l'overlay du player reflète le nouveau port tout de suite plutôt que
+  d'attendre son prochain redémarrage naturel ;
+- contrairement au changement d'IP/nom d'hôte, **pas de filet de
+  rattrapage à 120s** : un mauvais numéro de port ne coupe jamais l'accès
+  réseau au Pi (l'accès SSH reste disponible, ou on relance `install.sh`
+  avec les bons `--port`/`--https-port`) — le risque est nettement
+  moindre, la confirmation différée n'apportait donc rien ici ;
+- validation : ports entre 1 et 65535, HTTP et HTTPS obligatoirement
+  différents (vérifié côté serveur, pas seulement dans le formulaire).
+
+**Testé** : la substitution qui édite les fichiers d'unité a été vérifiée
+de bout en bout dans ce bac à sable — de vraies unités générées par
+`install.sh` (mêmes gabarits que sur le Pi), la même édition que celle
+lancée par `start_port_change` appliquée dessus, résultat comparé ligne à
+ligne (`--port`/`--https-port` et les deux variables d'environnement
+correctement changés, rien d'autre touché). Le point de terminaison
+`/api/tls/set-ports` a aussi été testé en conditions réelles (serveur
+lancé, ports invalides/identiques refusés avec le bon message, ports
+valides acceptés, serveur toujours réactif ensuite). Comme pour le reste
+de cette section, le redémarrage réel des deux services via systemd n'a
+pas pu être vérifié ici — à confirmer sur le Pi.
 
 ### Rappel : la « perte » de l'IP fixe après une mise à jour n'est pas liée à la mise à jour
 

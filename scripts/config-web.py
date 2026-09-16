@@ -1603,6 +1603,27 @@ class H(BaseHTTPRequestHandler):
                 on_http=not getattr(self.server,'tls',False)
                 redirect_url=self.tls_redirect_url('https',self.server.https_port) if on_http else ''
                 return self.j({'ok':True,'restarting':True,'redirect_url':redirect_url})
+            if p=='/api/tls/set-ports':
+                d=self.body()
+                try:
+                    new_http=sysadmin.validate_port(d.get('http_port'))
+                    new_https=sysadmin.validate_port(d.get('https_port'))
+                except ValueError:
+                    raise ValueError(i18n_t('ports.invalid',self.lang()))
+                if new_http==new_https:
+                    raise ValueError(i18n_t('ports.must_differ',self.lang()))
+                sysadmin.start_port_change(new_http,new_https)
+                # Redirige toujours vers le protocole de la connexion en
+                # cours (pas de changement de protocole ici, seulement de
+                # numéro de port) — inoffensif même si seul l'AUTRE port a
+                # changé (juste un rechargement de la même page).
+                on_https=getattr(self.server,'tls',False)
+                scheme='https' if on_https else 'http'
+                target_port=new_https if on_https else new_http
+                return self.j({
+                    'ok':True,'restarting':True,
+                    'redirect_url':self.tls_redirect_url(scheme,target_port),
+                })
             if p=='/api/update/start':
                 if not self.server.repo_path:
                     raise ValueError(i18n_t('update.no_repo_path',self.lang()))

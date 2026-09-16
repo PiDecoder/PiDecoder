@@ -457,6 +457,16 @@ def validate_hostname(value: str) -> str:
     return value
 
 
+def validate_port(value) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('invalid_port') from exc
+    if not (1 <= port <= 65535):
+        raise ValueError('invalid_port')
+    return port
+
+
 def validate_cidr(value: str) -> str:
     value = value.strip()
     if '/' not in value:
@@ -711,6 +721,74 @@ write_status '{{"kind":"ip","state":"reverted","token":"{token}"}}'
 '''
     run_detached(script, 'pidecoder network change')
     return {'token': token, 'delay_seconds': PENDING_DELAY_SECONDS}
+
+
+def start_port_change(http_port: int, https_port: int) -> None:
+    """Change les ports HTTP/HTTPS de l'administration Web en éditant
+    directement les deux unités systemd déjà installées, sans repasser par
+    install.sh (qui recompile le moteur vidéo et coupe beaucoup plus de
+    choses que nécessaire pour un simple changement de numéro de port) :
+
+    - pidecoder-config.service : le `--port`/`--https-port` de son
+      ExecStart (voir systemd/pidecoder-config.service.in) ;
+    - pidecoder.service : les variables d'environnement
+      PIDECODER_WEB_PORT/PIDECODER_WEB_HTTPS_PORT que le player affiche
+      dans son overlay IP (voir NetworkInfo.cpp) — et qui ne sont lues
+      qu'au démarrage du process, d'où le redémarrage de ce service aussi
+      ci-dessous (coupure de quelques secondes de l'affichage vidéo),
+      demandé explicitement plutôt que de laisser l'overlay afficher un
+      ancien numéro jusqu'au prochain redémarrage naturel.
+
+    Édite les fichiers déjà rendus plutôt que de les regénérer depuis
+    leurs gabarits .in comme le fait install.sh : les autres valeurs
+    (utilisateur, groupe, uid, cible d'installation...) ne sont conservées
+    nulle part après l'installation pour être réutilisées ici, les
+    re-dériver dupliquerait la logique de détection d'install.sh pour un
+    gain nul puisque seuls les deux numéros de port changent — une simple
+    substitution ciblée suffit, le format est déterministe (toujours
+    généré par le même gabarit, voir install.sh).
+
+    Comme pour la mise à jour logicielle et les autres opérations
+    privilégiées de ce module, tout se passe dans une unité systemd-run
+    indépendante (voir run_detached) : redémarrer pidecoder-config.service
+    tuerait sinon ce process en pleine réponse HTTP.
+
+    Aucun filet de rattrapage façon start_ip_change/start_hostname_change
+    ici (pas de confirmation à 120s) : contrairement à un changement
+    d'adresse IP ou de nom d'hôte, un mauvais numéro de port ne coupe
+    jamais l'accès réseau au Pi — l'accès SSH reste disponible pour
+    corriger, ou relancer install.sh avec les bons --port/--https-port.
+    """
+    script = f'''#!/bin/bash
+set -u
+
+# Laisse le temps à la réponse HTTP de partir en premier (elle contient la
+# nouvelle URL à essayer ensuite côté navigateur).
+sleep 2
+
+python3 - <<'PY_EDIT_PORTS'
+import re
+from pathlib import Path
+
+config_unit = Path('/etc/systemd/system/pidecoder-config.service')
+player_unit = Path('/etc/systemd/system/pidecoder.service')
+
+content = config_unit.read_text(encoding='utf-8')
+content = re.sub(r'--port \\S+', '--port {http_port}', content)
+content = re.sub(r'--https-port \\S+', '--https-port {https_port}', content)
+config_unit.write_text(content, encoding='utf-8')
+
+content = player_unit.read_text(encoding='utf-8')
+content = re.sub(r'^Environment=PIDECODER_WEB_PORT=.*$', 'Environment=PIDECODER_WEB_PORT={http_port}', content, flags=re.MULTILINE)
+content = re.sub(r'^Environment=PIDECODER_WEB_HTTPS_PORT=.*$', 'Environment=PIDECODER_WEB_HTTPS_PORT={https_port}', content, flags=re.MULTILINE)
+player_unit.write_text(content, encoding='utf-8')
+PY_EDIT_PORTS
+
+systemctl daemon-reload
+systemctl restart pidecoder.service
+systemctl restart pidecoder-config.service
+'''
+    run_detached(script, 'pidecoder port change')
 
 
 def apply_ntp(enabled: bool, servers: list[str]) -> None:

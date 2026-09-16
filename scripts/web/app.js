@@ -1208,8 +1208,39 @@ async function tlsRefreshStatus(){
     const r=await api('/api/tls/status');
     renderTlsStatus(r);
     renderHttpStatus(r);
+    renderPortsStatus(r);
   }catch(e){
     tlsStatus.textContent=e.message;
+  }
+}
+
+function renderPortsStatus(r){
+  // Ne jamais écraser une valeur en cours de frappe : cette fonction est
+  // aussi appelée par les rafraîchissements automatiques après un toggle
+  // HTTP/HTTPS, pas seulement à l'ouverture de l'onglet.
+  if(document.activeElement!==portsHttpInput){portsHttpInput.value=r.http_port}
+  if(document.activeElement!==portsHttpsInput){portsHttpsInput.value=r.https_port}
+}
+
+async function portsApply(){
+  const httpPort=parseInt(portsHttpInput.value,10);
+  const httpsPort=parseInt(portsHttpsInput.value,10);
+  if(!Number.isInteger(httpPort)||httpPort<1||httpPort>65535||!Number.isInteger(httpsPort)||httpsPort<1||httpsPort>65535){
+    toast(t('sec.ports_invalid'),true);
+    return;
+  }
+  if(httpPort===httpsPort){
+    toast(t('sec.ports_must_differ'),true);
+    return;
+  }
+  portsApplyButton.disabled=true;
+  try{
+    const r=await api('/api/tls/set-ports',{method:'POST',body:JSON.stringify({http_port:httpPort,https_port:httpsPort})});
+    toast(t('sec.ports_restarting'));
+    tlsRestartCountdown(r.redirect_url,t('sec.ports_restart_overlay_title'));
+  }catch(e){
+    toast(e.message,true);
+    portsApplyButton.disabled=false;
   }
 }
 

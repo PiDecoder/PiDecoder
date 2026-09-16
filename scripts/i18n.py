@@ -148,6 +148,14 @@ MESSAGES: dict[str, dict[str, str]] = {
             'first (generate a certificate if needed).'
         ),
     },
+    'ports.invalid': {
+        'fr': 'Ports invalides (doivent être des nombres entre 1 et 65535)',
+        'en': 'Invalid ports (must be numbers between 1 and 65535)',
+    },
+    'ports.must_differ': {
+        'fr': 'Le port HTTP et le port HTTPS doivent être différents',
+        'en': 'The HTTP port and the HTTPS port must be different',
+    },
     'update.no_repo_path': {
         'fr': (
             'Mise à jour indisponible : cette installation ne connaît pas '
