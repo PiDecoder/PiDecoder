@@ -107,6 +107,28 @@ exacte de la boîte calculée, pour voir directement si le souci vient
 d'un canvas inattendu, d'une boîte hors écran ou de taille nulle, plutôt
 que de continuer à deviner sans preuve.
 
+### Trouvé : `RestrictAddressFamilies` du service bloquait `getifaddrs()`
+
+Cause réelle, confirmée par le journal (`[]` à chaque appel, alors que le
+même `NetworkInfo.cpp` compilé et exécuté hors du service fonctionnait
+parfaitement sur ce même Pi) : sous Linux, `getifaddrs()` interroge le
+noyau via une socket `AF_NETLINK`/`NETLINK_ROUTE` pour énumérer les
+interfaces réseau. `pidecoder.service.in` restreint les familles
+d'adresses autorisées à `AF_UNIX AF_INET AF_INET6` — sans `AF_NETLINK`,
+cette socket échoue silencieusement, `getifaddrs()` renvoie -1, et
+`startup_network_info_text()` renvoie donc systématiquement une chaîne
+vide, sans rien faire planter par ailleurs (d'où un service par ailleurs
+parfaitement fonctionnel). Exactement la même famille de bug que le
+`runuser` bloqué par `SystemCallFilter` pour la mise à jour : une
+restriction systemd légitime, écrite avant l'existence de cette
+fonctionnalité, qui ne l'autorisait pas explicitement. Corrigé en
+ajoutant `AF_NETLINK` à `RestrictAddressFamilies` dans
+`systemd/pidecoder.service.in`. Les deux traces de diagnostic ajoutées
+dans les deux entrées précédentes sont conservées pour l'instant, le
+temps de confirmer sur le Pi que ce correctif résout bien le problème —
+elles seront retirées ensuite.
+
+### Corrections après premier retour terrain
 
 - **« Update unavailable: this folder is not a Git repository »** alors que
   le dépôt est bien un clone Git valide : `check_update()` ne testait que

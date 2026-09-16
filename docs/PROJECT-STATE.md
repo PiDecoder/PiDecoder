@@ -738,6 +738,32 @@ on whether the user was testing in mosaic or Focus view (only Focus view
 is confirmed working for the *other* overlays, since zoom/PTZ/audio only
 ever render there).
 
+**User confirmed both views fail identically** (mosaic and Focus both
+show nothing), which — since `draw_startup_info_overlay` is a single
+shared function called from both `render()` and `render_focus()` — rules
+out a mosaic/Focus-specific divergence and points at that shared function
+(or the shared timing state) itself.
+
+**Root cause found**: the journal showed `Overlay info reseau (touche I /
+demarrage) : []` on every single call from the real running service —
+empty, even though the standalone `NetworkInfo.cpp` test moments earlier,
+run over plain SSH on the same Pi, returned a correct populated string.
+Same function, same Pi, different result — the difference is the systemd
+sandbox. `pidecoder.service.in` sets `RestrictAddressFamilies=AF_UNIX
+AF_INET AF_INET6`; on Linux, `getifaddrs()` enumerates interfaces via an
+`AF_NETLINK`/`NETLINK_ROUTE` socket, which isn't in that allowlist. The
+socket call fails silently (no crash — `getifaddrs()` just returns -1,
+already handled gracefully as "no interfaces found"), so
+`startup_network_info_text()` deterministically returns empty whenever
+called from inside the sandboxed service, while working fine from an
+unrestricted shell. The exact same class of bug as the `runuser`/
+`SystemCallFilter` issue found for `check_update()` earlier — a
+pre-existing hardening directive, written before this feature existed,
+that never explicitly allowed what the new feature needs. Fixed by adding
+`AF_NETLINK` to `RestrictAddressFamilies` in `systemd/pidecoder.service.in`.
+The two diagnostic logs (`Application.cpp` and `Renderer.cpp`) are kept
+for now, to be removed once the fix is confirmed working on the Pi.
+
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 
 Per the roadmap, v1.1 adds audio playback. Scope decided with the user
