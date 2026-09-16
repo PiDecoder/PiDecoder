@@ -466,6 +466,26 @@ EOF
     # de Raspberry Pi OS) : on passe par sudo.
     in_chroot passwd -l root >/dev/null 2>&1 || true
 
+    # Assistant « premier utilisateur » de Raspberry Pi OS : à neutraliser
+    # impérativement, et c'est tout sauf cosmétique. Sur une image Lite, il
+    # s'accapare tty1 au premier démarrage pour demander un nom d'utilisateur
+    # et un mot de passe, puis **renomme l'utilisateur d'uid 1000** — donc
+    # celui qu'on vient de créer. Tout ce qui le désigne par son nom casse
+    # alors d'un coup : la connexion automatique ci-dessous (qui pointe sur un
+    # utilisateur devenu inexistant, donc plus de labwc, donc plus de socket
+    # Wayland, donc plus de moteur vidéo) et le « User= » des unités rendues
+    # par install.sh. Constaté sur la première carte réellement flashée :
+    # l'utilisateur pidecoder y était devenu « admin ».
+    #
+    # Le démasquage ne suffit pas : sur ces images, userconfig.service prend
+    # la place de getty@tty1, qui est désactivé. Il faut donc aussi le
+    # réactiver explicitement, sinon tty1 n'ouvre plus aucune session du tout.
+    log "Neutralisation de l'assistant de premier démarrage de Raspberry Pi OS"
+    for wizard_unit in userconfig.service userconf.service; do
+        in_chroot systemctl mask "$wizard_unit" >/dev/null 2>&1 || true
+    done
+    in_chroot systemctl enable getty@tty1.service >/dev/null 2>&1 || true
+
     log "Configuration de la session Wayland (connexion automatique + labwc)"
     in_chroot mkdir -p /etc/systemd/system/getty@tty1.service.d
     sed "s/@IMAGE_USER@/$IMAGE_USER/g" "$SCRIPT_DIR/image/getty-autologin.conf" \
@@ -584,6 +604,14 @@ EOF
 
     # Vérifications de cohérence avant de refermer l'image : il vaut bien
     # mieux échouer ici que livrer une carte qui ne démarre pas.
+    # L'assistant de Raspberry Pi OS doit être hors d'état de nuire : s'il
+    # tournait au premier démarrage, il renommerait l'utilisateur de l'image
+    # et casserait à la fois la connexion automatique et les unités systemd.
+    [[ -L "$MNT/etc/systemd/system/userconfig.service" ]] \
+        || warn "userconfig.service n'a pas pu être masqué : vérifier qu'il n'existe pas sous un autre nom dans cette version de Raspberry Pi OS"
+    in_chroot id "$IMAGE_USER" >/dev/null 2>&1 \
+        || fail "L'utilisateur $IMAGE_USER n'existe pas dans l'image"
+
     [[ -x "$MNT/opt/pidecoder/bin/pidecoder" ]] || fail "Le moteur vidéo n'a pas été compilé dans l'image"
     [[ -f "$MNT/opt/pidecoder/config/web-auth.json" ]] || fail "Le compte administrateur Web n'a pas été créé dans l'image"
     [[ -f "$MNT/etc/systemd/system/pidecoder-config.service" ]] || fail "Les unités systemd n'ont pas été installées dans l'image"
