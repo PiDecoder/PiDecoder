@@ -59,6 +59,31 @@ qui a tapé les commandes.
   est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
   le même script, sans variante.
 
+### Le certificat n'est plus généré pendant la construction de l'image
+
+Deuxième échec en CI, après 11 minutes cette fois : `install.sh` s'arrêtait sur
+« Échec de la génération du certificat TLS auto-signé ». Dans un chroot,
+`hostname -f` et `hostname -I` ne décrivent pas la machine cible mais la
+machine de construction — et quand le nom d'hôte remonte vide, le SAN devient
+`DNS:,DNS:localhost,...`, qu'openssl refuse (« invalid null value »).
+Reproduit à l'identique en bac à sable pour confirmer.
+
+La correction n'est pas de rafistoler la détection du nom d'hôte : c'est de ne
+pas générer de certificat du tout à la construction. Celui-ci était de toute
+façon supprimé quelques lignes plus loin (clé privée identique sur toutes les
+cartes, SAN portant l'identité de la machine de build) — on payait donc une
+génération de clé RSA sous émulation pour jeter le résultat, avec un point de
+panne en prime. `build-image.sh` passe désormais `--no-https` à `install.sh`,
+et c'est `pidecoder-firstboot.service` qui crée le certificat sur l'appareil,
+avec les bonnes valeurs. HTTPS s'active tout seul dès que le certificat existe,
+il n'y avait rien d'autre à prévoir. La suppression du certificat reste en
+place à la fin de la construction, comme filet.
+
+Au passage, un défaut qui a coûté ce cycle de 11 minutes pour rien :
+l'erreur d'openssl partait dans `/dev/null` avec le reste, et l'échec ne disait
+donc rien de sa cause. Elle est maintenant capturée et remontée, avec le nom
+et les SAN qui ont été refusés.
+
 ### Bit exécutable des scripts, perdu au passage par Windows
 
 Premier déclenchement réel du workflow : échec en une seconde, code 1, sans

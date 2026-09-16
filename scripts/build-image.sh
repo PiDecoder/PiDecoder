@@ -516,11 +516,26 @@ EOF
     log "Installation de PiDecoder (compilation du moteur natif — c'est la partie longue)"
     # --no-start : rien ne peut démarrer dans un chroot. Les unités sont
     # installées et activées, elles démarreront au premier vrai démarrage.
+    #
+    # --no-https : aucun certificat n'est généré ici, et c'est voulu. Celui
+    # qu'install.sh fabriquerait serait de toute façon supprimé quelques
+    # lignes plus bas (sa clé privée serait identique sur toutes les cartes,
+    # et ses Subject Alternative Names porteraient le nom d'hôte et les IP de
+    # la machine de construction). Le générer pour le jeter coûtait une
+    # génération de clé RSA sous émulation — et surtout, c'était un point de
+    # panne : dans un chroot, « hostname -f » et « hostname -I » ne décrivent
+    # pas la machine cible, et openssl refusait le certificat. C'est
+    # pidecoder-firstboot.service qui le crée sur l'appareil, avec les bonnes
+    # valeurs. HTTPS s'active tout seul dès que le certificat existe (voir
+    # https_enabled_on_disk dans config-web.py), il n'y a donc rien d'autre à
+    # faire ici.
+    #
     # Le mot de passe arrive par l'entrée standard et n'apparaît donc jamais
     # dans la ligne de commande.
     printf '%s\n' "$WEB_PASSWORD" | in_chroot bash -c "cd '$REPO_IN_IMAGE' && ./scripts/install.sh \
         --user '$IMAGE_USER' \
         --no-start \
+        --no-https \
         --web-password-stdin \
         --web-password-must-change" \
         || fail "L'installation de PiDecoder dans l'image a échoué"
@@ -535,9 +550,10 @@ EOF
     # --- Retrait de tout ce qui doit rester unique à chaque appareil --------
     log "Retrait de l'identité de la machine de construction"
 
-    # Certificat TLS : sa clé privée serait identique sur toutes les cartes,
-    # et ses SAN contiendraient le nom d'hôte et les IP de la machine de
-    # build. Regénéré par le service de premier démarrage.
+    # Certificat TLS : normalement aucun n'existe (install.sh est lancé avec
+    # --no-https, voir plus haut), mais on ne s'en remet pas à ça — un
+    # certificat qui survivrait à cette étape aurait sa clé privée publiée
+    # dans chaque copie de l'image. Le filet reste donc en place.
     rm -f "$MNT/opt/pidecoder/config/tls/cert.pem" \
           "$MNT/opt/pidecoder/config/tls/key.pem" \
           "$MNT/opt/pidecoder/config/tls/cert.pem.disabled" \

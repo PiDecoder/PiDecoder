@@ -560,13 +560,17 @@ else
 
     san_list="$(IFS=,; echo "${san_entries[*]}")"
 
-    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+    # L'erreur d'openssl est capturée et remontée : elle était auparavant
+    # envoyée dans /dev/null avec le reste, et un échec ne disait donc
+    # strictement rien sur sa cause. Le « 2>&1 >/dev/null » (dans cet ordre)
+    # garde la sortie d'erreur et jette la sortie normale.
+    cert_error="$(openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
         -keyout "$STAGED_ROOT/config/tls/key.pem" \
         -out "$STAGED_ROOT/config/tls/cert.pem" \
         -subj "/CN=$cert_cn" \
         -addext "subjectAltName=$san_list" \
-        >/dev/null 2>&1 \
-        || fail "Échec de la génération du certificat TLS auto-signé"
+        2>&1 >/dev/null)" \
+        || fail "Échec de la génération du certificat TLS auto-signé (nom : « $cert_cn », SAN : « $san_list ») : ${cert_error:-aucun message d’openssl}"
 
     TLS_GENERATED=1
 fi
