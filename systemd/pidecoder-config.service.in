@@ -32,7 +32,7 @@ MemoryDenyWriteExecute=true
 ReadWritePaths=@TARGET@/config @REPO_PATH@
 
 Environment=PIDECODER_USER=@SERVICE_USER@
-ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@ --repo-path @REPO_PATH@
+ExecStart=/usr/bin/python3 @TARGET@/scripts/config-web.py --root @TARGET@ --bind @WEB_BIND@ --port @WEB_PORT@ --https-port @WEB_HTTPS_PORT@ --repo-path @REPO_PATH@
 Restart=on-failure
 RestartSec=2
 StandardOutput=journal

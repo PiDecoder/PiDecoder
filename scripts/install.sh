@@ -12,6 +12,7 @@ SERVICE_USER=""
 WAYLAND_DISPLAY_NAME="wayland-0"
 WEB_BIND="0.0.0.0"
 WEB_PORT="8080"
+WEB_HTTPS_PORT="8443"
 TLS_CERT_PATH=""
 TLS_KEY_PATH=""
 NO_HTTPS=0
@@ -52,13 +53,19 @@ Options:
   --target PATH            Installation directory (default: /opt/pidecoder)
   --wayland-display NAME   Wayland socket name (default: wayland-0)
   --bind ADDRESS           Web administration bind address (default: 0.0.0.0)
-  --port PORT              Web administration port (default: 8080)
+  --port PORT              Web administration HTTP port (default: 8080)
+  --https-port PORT        Web administration HTTPS port (default: 8443).
+                            HTTP and HTTPS run at the same time, each on its
+                            own port, as soon as a certificate is present —
+                            either can be turned off independently from the
+                            Web UI's Sécurité tab (or manage-tls.sh for
+                            HTTPS) without changing the other.
   --tls-cert PATH          Import a TLS certificate (PEM) instead of generating a
                             self-signed one. Requires --tls-key.
   --tls-key PATH           Import the matching TLS private key (PEM). Requires
                             --tls-cert.
   --no-https               Do not install a certificate; serve the Web
-                            administration interface over plain HTTP instead.
+                            administration interface over plain HTTP only.
                             Mutually exclusive with --tls-cert/--tls-key.
   --skip-deps              Do not run apt-get
   --no-start               Install and enable units without starting them
@@ -150,6 +157,11 @@ while [[ $# -gt 0 ]]; do
             WEB_PORT="$2"
             shift 2
             ;;
+        --https-port)
+            [[ $# -ge 2 ]] || fail "Valeur manquante après --https-port"
+            WEB_HTTPS_PORT="$2"
+            shift 2
+            ;;
         --tls-cert)
             [[ $# -ge 2 ]] || fail "Valeur manquante après --tls-cert"
             TLS_CERT_PATH="$2"
@@ -219,6 +231,9 @@ esac
 
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] || fail "Port Web invalide : $WEB_PORT"
 (( WEB_PORT >= 1 && WEB_PORT <= 65535 )) || fail "Port Web hors plage : $WEB_PORT"
+[[ "$WEB_HTTPS_PORT" =~ ^[0-9]+$ ]] || fail "Port Web HTTPS invalide : $WEB_HTTPS_PORT"
+(( WEB_HTTPS_PORT >= 1 && WEB_HTTPS_PORT <= 65535 )) || fail "Port Web HTTPS hors plage : $WEB_HTTPS_PORT"
+[[ "$WEB_PORT" != "$WEB_HTTPS_PORT" ]] || fail "--port et --https-port doivent être différents (les deux valent $WEB_PORT)"
 [[ "$WAYLAND_DISPLAY_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail "Nom de socket Wayland invalide"
 
 if [[ "$NO_HTTPS" -eq 1 && ( -n "$TLS_CERT_PATH" || -n "$TLS_KEY_PATH" ) ]]; then
@@ -362,7 +377,7 @@ check_host() {
     if [[ "$NO_HTTPS" -eq 1 ]]; then
         printf 'Administration: http://%s:%s (--no-https)\n' "$WEB_BIND" "$WEB_PORT"
     else
-        printf 'Administration: https://%s:%s\n' "$WEB_BIND" "$WEB_PORT"
+        printf 'Administration: http://%s:%s + https://%s:%s\n' "$WEB_BIND" "$WEB_PORT" "$WEB_BIND" "$WEB_HTTPS_PORT"
     fi
 
     if [[ -S "/run/user/$SERVICE_UID/$WAYLAND_DISPLAY_NAME" ]]; then
@@ -621,6 +636,7 @@ python3 - \
     "$WAYLAND_DISPLAY_NAME" \
     "$WEB_BIND" \
     "$WEB_PORT" \
+    "$WEB_HTTPS_PORT" \
     "$SOURCE_ROOT" <<'PY_RENDER_UNITS'
 from pathlib import Path
 import sys
@@ -644,6 +660,7 @@ import sys
     wayland_display,
     web_bind,
     web_port,
+    web_https_port,
     repo_path,
 ) = sys.argv[1:]
 
@@ -656,6 +673,7 @@ replacements = {
     "@WAYLAND_DISPLAY@": wayland_display,
     "@WEB_BIND@": web_bind,
     "@WEB_PORT@": web_port,
+    "@WEB_HTTPS_PORT@": web_https_port,
     "@REPO_PATH@": repo_path,
 }
 
@@ -731,7 +749,8 @@ printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
 if [[ "$NO_HTTPS" -eq 1 ]]; then
     printf 'Administration Web : http://%s:%s (HTTPS désactivé, --no-https)\n' "$HOST_ADDRESS" "$WEB_PORT"
 else
-    printf 'Administration Web : https://%s:%s\n' "$HOST_ADDRESS" "$WEB_PORT"
+    printf 'Administration Web : http://%s:%s et https://%s:%s (HTTP désactivable\n' "$HOST_ADDRESS" "$WEB_PORT" "$HOST_ADDRESS" "$WEB_HTTPS_PORT"
+    printf '                     séparément depuis l'"'"'onglet Sécurité si besoin)\n'
 fi
 printf 'Utilisateur Web     : admin\n'
 printf 'Utilisateur vidéo   : %s\n' "$SERVICE_USER"

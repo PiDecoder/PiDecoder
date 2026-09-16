@@ -1171,10 +1171,15 @@ function renderTlsStatus(r){
   const active=!!r.https_active;
   tlsToggleButton.textContent=active?t('sec.tls_disable_button'):t('sec.tls_enable_button');
   tlsToggleButton.dataset.action=active?'disable':'enable';
+  // Toujours réactivé ici plutôt que dans tlsToggle()/httpToggle() : le cas
+  // "redémarrage sans redirection" (le port par lequel on est déjà
+  // connecté n'est pas affecté) relit l'état via ce même rendu au lieu de
+  // recharger la page — sans ça le bouton resterait désactivé pour de bon.
+  tlsToggleButton.disabled=false;
   tlsImportButton.disabled=!active;
   tlsImportHint.classList.toggle('hidden',active);
   tlsToggleWarning.classList.remove('hidden');
-  let html=`<strong>${esc(active?t('sec.tls_status_active'):t('sec.tls_status_inactive'))}</strong>`;
+  let html=`<strong>${esc(active?t('sec.tls_status_active',{port:r.https_port}):t('sec.tls_status_inactive'))}</strong>`;
   if(active && r.cert){
     html+=`<br>${esc(t('sec.tls_subject'))} : ${esc(r.cert.subject||'?')}`;
     html+=`<br>${esc(t('sec.tls_expires'))} : ${esc(r.cert.not_after||'?')}`;
@@ -1185,9 +1190,24 @@ function renderTlsStatus(r){
   tlsStatus.innerHTML=html;
 }
 
+function renderHttpStatus(r){
+  const active=!!r.http_active;
+  httpToggleButton.textContent=active?t('sec.http_disable_button'):t('sec.http_enable_button');
+  httpToggleButton.dataset.action=active?'disable':'enable';
+  httpToggleButton.disabled=false;
+  httpToggleWarning.classList.remove('hidden');
+  httpStatus.innerHTML=`<strong>${esc(active?t('sec.http_status_active',{port:r.http_port}):t('sec.http_status_inactive'))}</strong>`;
+}
+
 async function tlsRefreshStatus(){
+  // Une seule requête : /api/tls/status renvoie l'état des deux ports
+  // (HTTP et HTTPS écoutent en parallèle, voir config-web.py) — pas besoin
+  // de deux allers-retours pour peupler les deux panneaux de l'onglet
+  // Sécurité.
   try{
-    renderTlsStatus(await api('/api/tls/status'));
+    const r=await api('/api/tls/status');
+    renderTlsStatus(r);
+    renderHttpStatus(r);
   }catch(e){
     tlsStatus.textContent=e.message;
   }
@@ -1201,9 +1221,14 @@ async function tlsToggle(){
     if(r.restarting){
       toast(t('sec.tls_restarting'));
       if(r.redirect_url){
-        tlsRestartCountdown(r.redirect_url);
+        tlsRestartCountdown(r.redirect_url,t('sec.tls_restart_overlay_title'));
       }else{
+        // Le port par lequel on est déjà connecté n'est pas affecté (HTTP
+        // et HTTPS tournent en parallèle sur des ports distincts) : pas de
+        // redirection nécessaire, juste attendre la fin du redémarrage et
+        // relire l'état.
         tlsStatus.innerHTML=`<strong>${esc(t('sec.tls_restarting'))}</strong>`;
+        setTimeout(tlsRefreshStatus,4000);
       }
     }else{
       tlsRefreshStatus();
@@ -1215,7 +1240,30 @@ async function tlsToggle(){
   }
 }
 
-function tlsRestartCountdown(url){
+async function httpToggle(){
+  const action=httpToggleButton.dataset.action;
+  httpToggleButton.disabled=true;
+  try{
+    const r=await api(`/api/http/${action}`,{method:'POST',body:'{}'});
+    if(r.restarting){
+      toast(t('sec.http_restarting'));
+      if(r.redirect_url){
+        tlsRestartCountdown(r.redirect_url,t('sec.http_restart_overlay_title'));
+      }else{
+        httpStatus.innerHTML=`<strong>${esc(t('sec.http_restarting'))}</strong>`;
+        setTimeout(tlsRefreshStatus,4000);
+      }
+    }else{
+      tlsRefreshStatus();
+      httpToggleButton.disabled=false;
+    }
+  }catch(e){
+    toast(e.message,true);
+    httpToggleButton.disabled=false;
+  }
+}
+
+function tlsRestartCountdown(url,title){
   // Rediriger tout de suite (ou après un délai court fixe) tombe souvent
   // sur une page inaccessible : redémarrer pidecoder-config.service prend
   // quelques secondes (arrêt de l'ancien processus, rechargement du
@@ -1229,6 +1277,7 @@ function tlsRestartCountdown(url){
   let remaining=30;
 
   tlsRestartOverlay.classList.remove('hidden');
+  if(title){tlsRestartOverlayTitle.textContent=title}
 
   const render=()=>{
     tlsRestartCountdownValue.textContent=remaining;

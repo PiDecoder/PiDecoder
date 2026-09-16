@@ -208,14 +208,22 @@ std::string local_hostname_uppercase()
 }
 
 /*
- * Le player n'a par ailleurs aucune connaissance du port de
+ * Le player n'a par ailleurs aucune connaissance des ports de
  * l'administration Web (processus Python séparé, voir
- * scripts/config-web.py) : install.sh le publie dans
- * PIDECODER_WEB_PORT via systemd/pidecoder.service.in pour que ce
- * binaire puisse l'afficher sans dupliquer sa propre configuration.
- * 8080 par défaut si la variable est absente (ancienne installation pas
- * encore mise à jour), pour rester cohérent avec le port par défaut de
- * config-web.py.
+ * scripts/config-web.py, qui écoute désormais HTTP et HTTPS en parallèle
+ * sur deux ports distincts) : install.sh les publie dans
+ * PIDECODER_WEB_PORT/PIDECODER_WEB_HTTPS_PORT via
+ * systemd/pidecoder.service.in pour que ce binaire puisse les afficher
+ * sans dupliquer sa propre configuration. 8080/8443 par défaut si les
+ * variables sont absentes (ancienne installation pas encore mise à
+ * jour), pour rester cohérent avec les ports par défaut de
+ * config-web.py/install.sh.
+ *
+ * Les deux sont toujours affichés, que l'un des deux protocoles soit
+ * actuellement désactivé côté administration Web ou non (voir
+ * config-web.py, /api/tls/*, /api/http/*) : ce binaire n'a aucun moyen de
+ * savoir lequel des deux est réellement actif à cet instant précis, et
+ * essayer l'un ou l'autre depuis un navigateur suffit à le savoir.
  */
 std::string web_admin_port()
 {
@@ -226,6 +234,17 @@ std::string web_admin_port()
         (env_port != nullptr && env_port[0] != '\0')
             ? std::string{env_port}
             : std::string{"8080"};
+}
+
+std::string web_admin_https_port()
+{
+    const char* env_port =
+        std::getenv("PIDECODER_WEB_HTTPS_PORT");
+
+    return
+        (env_port != nullptr && env_port[0] != '\0')
+            ? std::string{env_port}
+            : std::string{"8443"};
 }
 
 } // namespace
@@ -259,10 +278,13 @@ std::string startup_network_info_text()
     const std::string mac =
         mac_address_for_interface(network.interface_name);
 
+    const std::string web_ports =
+        "WEB " + web_admin_port() + "/" + web_admin_https_port();
+
     const std::string line2 =
         mac.empty()
-            ? ("WEB :" + web_admin_port())
-            : ("MAC " + mac + "  WEB :" + web_admin_port());
+            ? web_ports
+            : ("MAC " + mac + "  " + web_ports);
 
     return line1 + "\n" + line2;
 }

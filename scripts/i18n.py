@@ -124,6 +124,30 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Certificat installé mais rechargement TLS échoué : {error}',
         'en': 'Certificate installed but the TLS reload failed: {error}',
     },
+    'tls.disable_blocked_no_http': {
+        'fr': (
+            'Impossible de désactiver HTTPS : l\'accès HTTP est lui aussi '
+            'désactivé, ça couperait tout accès à l\'interface Web. '
+            'Réactive HTTP d\'abord.'
+        ),
+        'en': (
+            'Cannot disable HTTPS: HTTP access is also disabled, which '
+            'would cut off all access to the Web interface. Re-enable '
+            'HTTP first.'
+        ),
+    },
+    'http.disable_blocked_no_https': {
+        'fr': (
+            'Impossible de désactiver l\'accès HTTP : HTTPS est lui aussi '
+            'désactivé, ça couperait tout accès à l\'interface Web. Active '
+            'HTTPS d\'abord (génère un certificat si besoin).'
+        ),
+        'en': (
+            'Cannot disable HTTP access: HTTPS is also disabled, which '
+            'would cut off all access to the Web interface. Enable HTTPS '
+            'first (generate a certificate if needed).'
+        ),
+    },
     'update.no_repo_path': {
         'fr': (
             'Mise à jour indisponible : cette installation ne connaît pas '

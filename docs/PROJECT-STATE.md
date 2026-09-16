@@ -69,8 +69,13 @@
   the Pi; the overlay was then redesigned as a small bordered two-line
   card, and a follow-up round fixed that card rendering too small on
   the real screen (the line-height range was too low to ever reach the
-  bitmap font's "large" size) — see "Follow-up after fifth field
-  feedback" under that section.
+  bitmap font's "large" size), confirmed good on the Pi — see
+  "Follow-up after fifth field feedback" under that section. Right
+  after, two more requests: HTTP and HTTPS now run on two independent,
+  separately configurable ports instead of one port that used to switch
+  protocol (see the same section, and "v1.2 — HTTPS" below), and a
+  suspected "update reverts static IP to DHCP" bug turned out not to be
+  caused by the update at all — same section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -806,6 +811,69 @@ Re-verified with the same Python geometry check across 640×480, 1280×720,
 1920×1080 and 3840×2160 with the user's real text — always fully on-screen,
 large font (`scale = 2`) reached in every case. Real on-screen rendering
 still to be reconfirmed on the Pi.
+
+**Confirmed good on the Pi** ("Ah la c'est bien"). Two follow-up requests
+came in right after:
+
+1. **HTTP and HTTPS on two independent ports.** Until now the Web admin
+   interface only ever listened on one port (8080 by default), serving
+   either HTTP or HTTPS depending on whether a certificate was active —
+   toggling HTTPS from the Sécurité tab made the other protocol disappear
+   rather than coexist with it. Per explicit request, `config-web.py` now
+   runs two `ThreadingHTTPServer` instances in parallel (one per thread):
+   HTTP on `--port` (default 8080, unchanged) whenever
+   `config/http-disabled` is absent, HTTPS on the new `--https-port`
+   (default 8443) whenever a certificate is present — the same
+   presence/absence mechanism HTTPS already used, now made symmetric for
+   HTTP too. A shared guard on both `/api/tls/disable` and
+   `/api/http/disable` refuses to turn off the last remaining protocol
+   (would lock out the Web UI entirely), and `main()` has one more
+   fallback layer: if both ever ended up disabled on disk at once (manual
+   edit, for instance), HTTP is forced on rather than binding nothing.
+   `install.sh` gained `--https-port`; the update flow
+   (`system_admin.start_update`) now re-passes both `--port` and
+   `--https-port` to the re-invoked `install.sh`, to avoid a custom HTTPS
+   port silently resetting to the 8443 default on every update — the same
+   class of bug as the static-IP concern below, just for ports instead of
+   network config, and actually prevented here rather than found after the
+   fact. The Sécurité tab gained a second panel ("Accès HTTP") mirroring
+   the HTTPS one; the player's startup overlay now shows both ports
+   (`WEB 8080/8443`, see `NetworkInfo.cpp`) since it has no way to know
+   which protocol is actually active at any given moment.
+
+   **Tested**: unlike most other backend work in this sandbox, the bulk of
+   this change (all of it, except the actual systemd service restart) is
+   pure Python with no SDL2/mpv dependency, so it was exercised directly —
+   a real `config-web.py` process was started here with both ports bound,
+   logged into over both HTTP and HTTPS, and every enable/disable
+   combination was driven through curl, including the cases that must be
+   refused (turning off the last remaining protocol) and a cert
+   regenerate/reload requested over HTTP while confirming the *HTTPS*
+   listener picked up the new certificate (cross-port state, the trickiest
+   part of this change). This test caught and fixed a real bug before
+   delivery: the HTTP port reported by `/api/tls/status` was sometimes the
+   HTTPS port's value instead, depending on which port the request arrived
+   through (`_make_server()` was conflating "port this instance binds to"
+   with "the configured HTTP port constant"). What remains untested here:
+   the actual `systemctl restart` triggered by the Sécurité tab toggles
+   (`systemd-run` doesn't exist in this sandbox) and the real browser UX
+   across two ports/self-signed certs. First real test recommended with a
+   single unit on hand before rolling out further, just in case.
+
+2. **Static IP "reverting to DHCP after an update" — not actually caused
+   by the update.** Re-read all of `start_update`/`install.sh`: neither
+   touches network configuration at all. The only thing in PiDecoder that
+   ever reverts a static IP to DHCP is the IP-change safety net itself
+   (auto-revert if `/api/network/confirm` isn't called within ~120s — see
+   "Follow-up after third/fourth field feedback" above), unrelated to
+   updates. The user confirmed they weren't sure they'd seen/clicked the
+   confirm popup at the time — most likely explanation: an earlier,
+   unconfirmed IP change quietly auto-reverted, and the coincidence with a
+   later, unrelated update created the impression of a link. The three
+   fixes already shipped earlier in this section (proactive check on
+   login, no more misleadingly-fast visible countdown, race-condition fix
+   on confirm) should already prevent a missed confirmation going forward;
+   to be reconfirmed the next time a static IP is set.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

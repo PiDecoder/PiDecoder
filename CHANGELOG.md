@@ -2,6 +2,86 @@
 
 ## 1.3 (nouveau — testé en bac à sable, jamais sur le Pi réel)
 
+### HTTP et HTTPS sur deux ports distincts (demande explicite)
+
+Jusqu'ici, l'interface d'administration Web n'écoutait que sur **un seul
+port** (8080 par défaut), qui servait soit HTTP soit HTTPS selon qu'un
+certificat était actif — activer/désactiver HTTPS depuis l'onglet Sécurité
+faisait donc *disparaître* l'autre protocole plutôt que de coexister avec
+lui. Sur demande explicite : HTTP et HTTPS écoutent désormais **en
+parallèle, chacun sur son propre port** (8080 pour HTTP, 8443 pour HTTPS
+par défaut), tous les deux configurables séparément.
+
+- `scripts/install.sh` : nouvelle option `--https-port PORT` (défaut
+  8443), à côté de `--port` (HTTP, défaut 8080, inchangé) — les deux
+  doivent être différents (vérifié). Rappel du port HTTP : `--port` reste
+  le nom historique, pas renommé pour ne pas casser les installations qui
+  le passent déjà ;
+- `scripts/config-web.py` fait maintenant tourner **deux serveurs HTTP en
+  parallèle** (un thread chacun) : le port HTTP est actif tant que le
+  marqueur `config/http-disabled` est absent, le port HTTPS tant qu'un
+  certificat (`config/tls/cert.pem`+`key.pem`) est présent — exactement le
+  même mécanisme que la présence/absence de certificat gérait déjà pour
+  HTTPS seul, maintenant symétrique des deux côtés. Garde-fou : impossible
+  de désactiver le second si le premier est déjà coupé (ça couperait tout
+  accès à l'interface Web) — refusé avec un message clair côté API ; et si,
+  malgré tout, les deux se retrouvaient désactivés sur le disque en même
+  temps (édition manuelle, par exemple), le port HTTP est forcé au
+  démarrage plutôt que de ne rien écouter du tout ;
+- onglet **Sécurité** : le panneau HTTPS existant affiche maintenant son
+  port, et un nouveau panneau **Accès HTTP** permet de l'activer/désactiver
+  indépendamment, avec le même mécanisme de redémarrage (~30s) et de
+  redirection automatique que HTTPS — la redirection ne se déclenche que si
+  le navigateur est connecté par le port qu'on vient justement de couper
+  (sinon rien ne change pour la session en cours, HTTP et HTTPS étant
+  désormais deux ports indépendants) ;
+- l'overlay IP du player (voir plus bas) affiche maintenant les deux ports
+  (`WEB 8080/8443`) plutôt qu'un seul, puisque le player n'a aucun moyen de
+  savoir lequel des deux est actif à cet instant ;
+- **mise à jour logicielle** : `install.sh` est réinvoqué avec `--port` ET
+  `--https-port` repris de la configuration en cours (pas seulement
+  `--port` comme avant) — sans ça, un port HTTPS personnalisé aurait été
+  silencieusement réinitialisé à 8443 par défaut à chaque mise à jour,
+  exactement le genre de piège qui a été signalé pour l'adresse IP fixe
+  (voir juste en dessous).
+
+**Testé** : la partie Python (le plus gros du changement — double serveur,
+bascule HTTP/HTTPS indépendante, garde-fous, rechargement du certificat
+quel que soit le port d'où arrive la requête) a été testée pour de vrai
+dans ce bac à sable — un vrai `config-web.py` lancé avec les deux ports,
+requêtes HTTP et HTTPS en parallèle, activation/désactivation croisée des
+deux protocoles dans tous les ordres, y compris les cas qui doivent être
+refusés (désactiver le dernier protocole restant). Un bug a d'ailleurs été
+trouvé et corrigé par ce test (le port HTTP affiché était parfois confondu
+avec le port HTTPS selon par où arrivait la requête). Ce qui n'a **pas** pu
+être testé ici : le redémarrage réel du service via systemd (`systemd-run`
+n'existe pas dans ce bac à sable, seul le comportement autour — avant/après
+— a été vérifié), et bien sûr tout le rendu de l'onglet Sécurité dans un
+vrai navigateur. Premier test réel recommandé avec un seul appareil sous la
+main au départ, pas en plein remplacement d'écrans, au cas où.
+
+### Rappel : la « perte » de l'IP fixe après une mise à jour n'est pas liée à la mise à jour
+
+Un utilisateur a signalé qu'après avoir mis à jour PiDecoder, l'IP fixe
+configurée semblait être repassée en DHCP. Relecture complète du code de
+mise à jour (`git pull` + `install.sh`, voir `system_admin.start_update`) :
+**aucune de ces deux étapes ne touche à la configuration réseau** — la
+seule chose dans PiDecoder qui repasse une IP fixe en DHCP, c'est le filet
+de sécurité du changement d'IP lui-même (annulation automatique si `/api/
+network/confirm` n'est pas appelé dans les ~120s, voir "Corrections après
+troisième/quatrième retour terrain" plus bas), pas la mise à jour. Le
+timing a probablement coïncidé : le changement d'IP n'avait pas été
+confirmé (popup manqué), puis la mise à jour est arrivée après coup — sans
+lien de cause à effet entre les deux.
+
+Les trois correctifs déjà livrés plus bas dans cette section (popup
+vérifié dès la connexion au lieu d'attendre un clic sur l'onglet, plus de
+minuteur visible qui expire trop vite, correction de la course qui faisait
+réapparaître le popup juste après confirmation) devraient déjà avoir réglé
+ce qui causait un changement d'IP manqué. À reconfirmer lors du prochain
+changement d'IP fixe : bien surveiller le popup de confirmation et cliquer
+Confirmer.
+
 ### Affichage de l'IP sur l'écran du player au démarrage
 
 Demande explicite de l'utilisateur : pouvoir retrouver l'adresse du Pi sur

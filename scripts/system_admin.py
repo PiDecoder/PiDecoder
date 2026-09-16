@@ -234,6 +234,7 @@ def start_update(
     target: str,
     bind: str,
     port: int,
+    https_port: int,
     skip_deps: bool,
 ) -> None:
     """Déclenche git pull + install.sh en tâche de fond détachée.
@@ -247,6 +248,15 @@ def start_update(
     continuer à suivre la progression sans interruption perceptible côté
     utilisateur (à part le rechargement de page habituel après un
     redémarrage du service).
+
+    `port`/`https_port` sont repris tels quels de la configuration
+    actuellement en cours d'exécution (self.server.port/https_port côté
+    config-web.py) et explicitement transmis à install.sh ci-dessous : sans
+    ça, install.sh reprendrait ses valeurs par défaut (8080/8443) à chaque
+    mise à jour, et un port personnalisé serait silencieusement écrasé — le
+    même genre de piège que l'adresse IP qui repasserait en DHCP si elle
+    n'était pas explicitement reprise (voir start_ip_change plus bas ;
+    install.sh, lui, ne touche jamais au réseau, seulement aux ports Web).
 
     Rappel de sécurité déjà en place côté install.sh : en cas d'échec
     (compilation, dépendance manquante...), install.sh restaure
@@ -287,7 +297,8 @@ write_status '{{"state":"running","step":"install","started_at":{time.time()}}}'
         --user {shlex.quote(service_user)} \\
         --target {shlex.quote(target)} \\
         --bind {shlex.quote(bind)} \\
-        --port {shlex.quote(str(port))}{skip_flag}
+        --port {shlex.quote(str(port))} \\
+        --https-port {shlex.quote(str(https_port))}{skip_flag}
 }} >>"$LOG" 2>&1
 rc=$?
 if [ $rc -ne 0 ]; then

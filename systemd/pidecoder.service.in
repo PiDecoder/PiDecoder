@@ -52,9 +52,13 @@ Environment=XDG_RUNTIME_DIR=/run/user/@SERVICE_UID@
 Environment=WAYLAND_DISPLAY=@WAYLAND_DISPLAY@
 # Uniquement pour l'overlay "IP/nom d'hôte/port Web" affiché au démarrage
 # du player (voir NetworkInfo.cpp) — ce binaire ne parle jamais lui-même
-# HTTP, il affiche juste ce port pour qu'on sache où joindre
-# pidecoder-config.service depuis un autre poste.
+# HTTP/HTTPS, il affiche juste ces deux ports pour qu'on sache où joindre
+# pidecoder-config.service depuis un autre poste. Les deux sont publiés
+# même si l'un des deux protocoles est désactivé côté administration Web
+# (voir config-web.py) : le player n'a aucun moyen de savoir lequel est
+# actif à cet instant, ce serait plus trompeur d'en cacher un.
 Environment=PIDECODER_WEB_PORT=@WEB_PORT@
+Environment=PIDECODER_WEB_HTTPS_PORT=@WEB_HTTPS_PORT@
 Environment=PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
 Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
 ExecCondition=/usr/bin/python3 @TARGET@/scripts/check-camera-config.py @TARGET@/config/cameras.json
