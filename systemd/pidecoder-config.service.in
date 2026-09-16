@@ -26,7 +26,19 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 RestrictNamespaces=true
 LockPersonality=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+#
+# AF_NETLINK ajouté pour la découverte ONVIF (voir onvif_client.py,
+# _ipv4_interfaces()) : cette fonction énumère les interfaces IPv4 actives
+# en lançant `ip -j -4 addr show up`, et `ip` interroge le noyau via une
+# socket AF_NETLINK/NETLINK_ROUTE — sans cette autorisation, la socket
+# échoue silencieusement (EAFNOSUPPORT), la commande sort en erreur,
+# _ipv4_interfaces() renvoie une liste vide, et discover() s'arrête
+# immédiatement avec 0 interface détectée : c'est exactement le symptôme
+# observé (« Interfaces : Aucune », 0 caméra), alors que le même appel à
+# discover() lancé hors service (donc hors de cette restriction) trouve
+# les caméras sans problème. Même défaut, même cause, déjà rencontré et
+# corrigé pour l'overlay réseau du player natif (voir pidecoder.service.in).
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 SystemCallFilter=@system-service
 MemoryDenyWriteExecute=true
 ReadWritePaths=@TARGET@/config @REPO_PATH@

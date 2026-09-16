@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3 (nouveau — image SD, testée en bac à sable, pas encore fabriquée pour de vrai)
+## 1.3 (nouveau — image SD, en cours de validation sur matériel réel)
 
 ### Image .img flashable directement sur carte SD (demande explicite)
 
@@ -58,6 +58,91 @@ qui a tapé les commandes.
   l'attache à la Release GitHub, somme de contrôle comprise. Le coureur GitHub
   est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
   le même script, sans variante.
+
+### Retour terrain : l'assistant de Raspberry Pi OS renommait l'utilisateur de l'image
+
+Première carte réellement flashée, et un seul défaut expliquait tous les
+symptômes : la console demandait de créer un mot de passe au premier
+démarrage, l'écran restait noir, et l'ajout d'une caméra échouait avec
+« Job for pidecoder.service failed ».
+
+Cause : sur une image Lite, `userconfig.service` s'accapare tty1 au premier
+démarrage pour demander un nom d'utilisateur, puis **renomme l'utilisateur
+d'uid 1000** — c'est-à-dire celui que l'image venait de créer. Sur le Pi de
+test, `pidecoder` était devenu `admin` (`getent passwd 1000` ne renvoyait plus
+que `admin`). Tout ce qui le désignait par son nom cassait alors en cascade :
+la connexion automatique de tty1 pointait sur un utilisateur inexistant, donc
+labwc ne démarrait pas, donc aucun socket Wayland n'existait, donc
+`pidecoder.service` échouait à son `ExecStartPre` — d'où l'erreur au moment
+d'appliquer une configuration caméra. Le `User=` des unités rendues par
+`install.sh` était cassé pour la même raison.
+
+Corrigé dans `build-image.sh` : l'assistant est masqué, et `getty@tty1` est
+réactivé explicitement — sans ça la neutralisation serait pire que le mal,
+puisque sur ces images userconfig.service *remplace* getty@tty1, désactivé.
+Deux vérifications ont été ajoutées en fin de construction : que l'assistant
+est bien masqué, et que l'utilisateur de l'image existe toujours.
+
+### Retour terrain : le mur vidéo plantait en boucle (SIGILL) — retour à Bookworm
+
+Sur la première carte flashée avec la base Trixie, `pidecoder.service`
+redémarrait toutes les 30 secondes environ, avec un flot de
+`MESA: error: Export failed` juste avant chaque plantage (`SIGILL`).
+
+Diagnostic mené par élimination, chaque hypothèse vérifiée sur le Pi avant
+d'être écartée :
+
+- session/« seat » : `loginctl` montrait une session Wayland active et
+  correctement attribuée à `seat0` — pas un souci de gestion de siège ;
+- pilote noyau : `dmesg` ne montrait que l'initialisation normale du V3D au
+  démarrage, aucune erreur ni redémarrage du GPU au moment du plantage ;
+- durcissement systemd : `pidecoder.service` exclut déjà délibérément
+  `SystemCallFilter`/`MemoryDenyWriteExecute` (voir le commentaire dans
+  `pidecoder.service.in`), donc pas un filtre trop strict qui bloquerait le
+  rendu.
+
+Un relevé `WAYLAND_DEBUG=1` a montré que le protocole Wayland continuait de
+fonctionner (les `attach`/`commit` réussissaient) malgré des dizaines
+d'échecs d'export répétés, pendant plusieurs centaines de millisecondes,
+avant que le crash ne survienne — le profil d'un bug interne au pilote
+Mesa/V3D plutôt que d'un blocage immédiat côté configuration.
+
+Cause retenue : l'image de base utilisée pour la construction était
+**Trixie (Debian 13)**, publiée la veille du premier flashage — jamais
+testée sur ce pipeline de rendu. La machine de production déjà validée sur
+le terrain (`olympus-vss-mon1`, voir plus bas « RC3 field validation »)
+tourne sur **Bookworm (Debian 12)**, où ce même rendu SDL2/labwc/V3D est
+confirmé opérationnel. `build-image.sh` est repassé sur la dernière image
+Bookworm (« oldstable ») disponible plutôt que sur Trixie, en attendant que
+cette dernière ait fait ses preuves sur ce pipeline précis.
+
+### Retour terrain : le scan ONVIF ne trouvait plus aucune caméra depuis l'interface Web
+
+Signalé après le premier flashage réel : le bouton « Rechercher les caméras »
+renvoyait systématiquement « 0 équipement(s) ONVIF trouvé(s) », avec un
+diagnostic affichant « Interfaces : Aucune » et 0 sonde envoyée — comme si le
+Pi n'avait plus aucune interface réseau active, ce qui était faux (le reste
+de l'administration Web fonctionnait normalement).
+
+En lançant `onvif_client.discover()` directement en SSH (donc hors du
+service Web), la découverte fonctionnait parfaitement : 6 caméras trouvées
+en quelques secondes. La seule différence entre les deux appels est le
+service systemd qui les héberge.
+
+Cause : exactement le même défaut que celui déjà rencontré et corrigé pour
+l'overlay réseau du player natif (voir plus bas, « `RestrictAddressFamilies`
+du service bloquait `getifaddrs()` »), mais cette fois côté administration
+Web. `_ipv4_interfaces()` (dans `onvif_client.py`) énumère les interfaces en
+lançant `ip -j -4 addr show up`, qui interroge le noyau via une socket
+`AF_NETLINK` — et `pidecoder-config.service` n'autorisait que `AF_UNIX`,
+`AF_INET` et `AF_INET6`. La socket netlink échouait silencieusement
+(`EAFNOSUPPORT`), la commande sortait en erreur, `_ipv4_interfaces()`
+renvoyait une liste vide, et `discover()` s'arrêtait tout de suite sans
+émettre la moindre sonde — d'où le « Interfaces : Aucune » du diagnostic.
+
+Corrigé en ajoutant `AF_NETLINK` à `RestrictAddressFamilies` dans
+`systemd/pidecoder-config.service.in`, au même titre que pour
+`pidecoder.service`.
 
 ### Le certificat n'est plus généré pendant la construction de l'image
 

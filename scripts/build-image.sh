@@ -33,8 +33,22 @@ readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # doit pouvoir être refabriquée à l'identique, et la somme de contrôle vérifie
 # le téléchargement. Surchargeable avec --base-url/--base-sha256 pour suivre
 # une nouvelle version de Raspberry Pi OS.
-BASE_URL="https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-09-15/2026-09-15-raspios-trixie-arm64-lite.img.xz"
-BASE_SHA256="cdf4f3bfac35ae947b46e4e767f935453810549779ac3290e05a6754aee627e5"
+#
+# Bookworm (Debian 12, « oldstable ») plutôt que Trixie (Debian 13, devenue
+# la version courante mi-2025) : sur la toute première carte réellement
+# flashée avec une base Trixie, le mur vidéo plantait en boucle (SIGILL,
+# précédé d'un flot de « MESA: error: Export failed » côté Wayland/V3D lors
+# de l'export des buffers vers labwc). Le journal WAYLAND_DEBUG montrait le
+# protocole continuer à fonctionner (attach/commit réussissaient malgré les
+# erreurs répétées) avant le crash — le profil d'un bug du pilote Mesa/V3D
+# lui-même sur une combinaison noyau/Mesa trop récente pour être mûre, pas
+# d'un souci de configuration côté image. Bookworm est précisément la version
+# déjà validée sur le terrain pour ce même rendu SDL2/labwc/V3D (voir
+# PROJECT-STATE.md, « RC3 field validation ») sur la machine de production
+# (`olympus-vss-mon1`) : c'est donc la base la plus sûre tant que Trixie n'a
+# pas fait ses preuves sur ce pipeline précis.
+BASE_URL="https://downloads.raspberrypi.com/raspios_oldstable_lite_arm64/images/raspios_oldstable_lite_arm64-2026-09-15/2026-09-15-raspios-bookworm-arm64-lite.img.xz"
+BASE_SHA256="bcaefdf9c40dbed31dcaeb3b8494e498b4f1e3078c2604b0d9f5f595f8f6fd91"
 
 IMAGE_USER="pidecoder"
 IMAGE_USER_PASSWORD="pidecoder"
