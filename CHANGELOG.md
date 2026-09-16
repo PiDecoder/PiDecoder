@@ -59,6 +59,24 @@ qui a tapé les commandes.
   est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
   le même script, sans variante.
 
+### Bit exécutable des scripts, perdu au passage par Windows
+
+Premier déclenchement réel du workflow : échec en une seconde, code 1, sans
+message parlant. Cause : le dépôt est édité depuis Windows, qui n'a pas de bit
+exécutable, donc `build-image.sh` est arrivé dans Git en mode 100644 —
+`sudo ./scripts/build-image.sh` ne peut alors tout simplement pas s'exécuter
+sur le coureur Linux. `install.sh` et `validate-release.sh`, plus anciens,
+étaient bien en 100755, ce qui rendait le problème invisible jusqu'ici.
+
+Deux corrections, parce que l'une sans l'autre laisse un piège :
+`git update-index --chmod=+x` sur les scripts destinés à être lancés
+directement (`build-image.sh`, `manage-tls.sh`, `sync-dev.sh`,
+`image/firstboot.sh` — les deux du milieu étaient dans le même cas, et
+`docs/installation.md` documente pourtant `sudo ./scripts/manage-tls.sh`), et
+appel via `bash ./scripts/build-image.sh` dans le workflow, pour que la CI
+soit indifférente au mode du fichier même si un futur ajout depuis Windows
+repasse en 100644.
+
 ### Contrôle d'espace disque par emplacement
 
 Retour immédiat au premier essai : un Pi en service n'a pas forcément 10 Gio

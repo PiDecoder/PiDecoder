@@ -72,7 +72,7 @@ jobs:
 
       - name: Build the image
         run: |
-          sudo --preserve-env=HOME ./scripts/build-image.sh \
+          sudo --preserve-env=HOME bash ./scripts/build-image.sh \
             --cache-dir "$HOME/.cache/pidecoder-image" \
             --work-dir "$RUNNER_TEMP"
 
