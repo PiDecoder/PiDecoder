@@ -146,14 +146,30 @@ def check_update(repo_path: str | None, service_user: str | None) -> dict:
         }
 
     repo = Path(repo_path)
-    if not (repo / '.git').is_dir():
-        return {'supported': False, 'reason': 'not_a_git_repo'}
 
     def git(*args, timeout=5):
         cmd = ['git', '-C', str(repo), *args]
         if service_user:
             cmd = ['runuser', '-u', service_user, '--', *cmd]
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+    # On vérifie via `git` lui-même plutôt que la simple présence d'un
+    # dossier `.git` : un clone Git valide peut aussi avoir un `.git` sous
+    # forme de *fichier* (worktree, sous-module, `--separate-git-dir`), que
+    # `(repo / '.git').is_dir()` rejetterait à tort. `rev-parse
+    # --is-inside-work-tree` est la façon fiable de le savoir dans tous les
+    # cas, et confirme au passage que `git`/`runuser` fonctionnent bien
+    # depuis le bac à sable de ce service.
+    try:
+        toplevel = git('rev-parse', '--is-inside-work-tree', timeout=5)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {'supported': False, 'reason': 'not_a_git_repo', 'error': str(exc)}
+    if toplevel.returncode != 0 or toplevel.stdout.strip() != 'true':
+        return {
+            'supported': False,
+            'reason': 'not_a_git_repo',
+            'error': (toplevel.stderr or toplevel.stdout).strip() or None,
+        }
 
     fetch = git('fetch', '--quiet', timeout=25)
     if fetch.returncode != 0:
@@ -622,7 +638,7 @@ nmcli -w 15 con mod {conn} \\
     ipv4.dns {shlex.quote(new_dns)}
 nmcli -w 15 con up {conn} >/dev/null 2>&1 || true
 
-write_status '{{"kind":"ip","state":"applied","token":"{token}","connection":{json.dumps(connection_name)},"delay_seconds":{PENDING_DELAY_SECONDS},"applied_at":{time.time()}}}'
+write_status '{{"kind":"ip","state":"applied","token":"{token}","connection":{json.dumps(connection_name)},"old_value":{json.dumps(old)},"new_value":{json.dumps({"method": method, "address": address, "gateway": gateway, "dns": dns})},"delay_seconds":{PENDING_DELAY_SECONDS},"applied_at":{time.time()}}}'
 
 for i in $(seq 1 {PENDING_DELAY_SECONDS}); do
     sleep 1

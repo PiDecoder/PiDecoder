@@ -474,3 +474,5 @@ select{width:100%;padding:9px 10px;background:#0c1015;border:1px solid #353d49;b
   font-variant-numeric:tabular-nums
 }
 .tls-restart-box .muted{font-size:14px;line-height:1.55;margin-top:8px}
+.tls-restart-box a{color:var(--b);font-weight:700;text-decoration:none}
+.tls-restart-box a:hover{text-decoration:underline}

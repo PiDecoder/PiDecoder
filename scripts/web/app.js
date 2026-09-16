@@ -2235,7 +2235,10 @@ async function updateCheck(){
 
 function renderUpdateCheck(r){
   if(!r.supported){
-    updateStatus.textContent=r.reason==='not_a_git_repo'?t('update.not_a_repo'):t('update.no_repo_path');
+    updateStatus.textContent=
+      r.reason==='not_a_git_repo'
+        ?t('update.not_a_repo')+(r.error?' ('+r.error+')':'')
+        :t('update.no_repo_path');
     return;
   }
   if(r.available===null){
@@ -2312,7 +2315,6 @@ function renderUpdateStatus(s){
 // --------------------------------------------------------------------------
 
 let networkConnections=[];
-let networkPendingTimer=null;
 
 async function networkRefresh(){
   try{
@@ -2386,11 +2388,20 @@ async function networkLoadTimezones(current){
 }
 
 async function networkChangeHostname(){
+  const hostname=networkHostnameInput.value.trim();
   networkHostnameButton.disabled=true;
   try{
-    const r=await api('/api/network/hostname',{method:'POST',body:JSON.stringify({hostname:networkHostnameInput.value.trim()})});
-    toast(t('network.change_scheduled',{seconds:r.delay_seconds}));
-    networkRefresh();
+    const r=await api('/api/network/hostname',{method:'POST',body:JSON.stringify({hostname})});
+    // On affiche tout de suite le plein écran à partir de la réponse de la
+    // requête plutôt que d'attendre un prochain /api/network/status : le
+    // script détaché a un délai de grâce de 2s avant de faire basculer son
+    // fichier de statut de "pending" à "applied" (le temps que cette
+    // réponse HTTP parte), pendant lequel /api/network/status ne
+    // renverrait encore rien — inutile d'attendre pour prévenir l'utilisateur.
+    renderNetworkPending({
+      kind:'hostname',token:r.token,delay_seconds:r.delay_seconds,
+      started_at:Date.now()/1000,new_value:hostname,
+    });
   }catch(e){
     toast(e.message,true);
   }finally{
@@ -2411,8 +2422,11 @@ async function networkChangeIp(){
       dns:manual?networkDnsInput.value.split(',').map(x=>x.trim()).filter(Boolean):[],
     };
     const r=await api('/api/network/ip',{method:'POST',body:JSON.stringify(body)});
-    toast(t('network.change_scheduled',{seconds:r.delay_seconds}));
-    networkRefresh();
+    renderNetworkPending({
+      kind:'ip',token:r.token,delay_seconds:r.delay_seconds,
+      started_at:Date.now()/1000,
+      new_value:{method:body.method,address:body.address,gateway:body.gateway,dns:body.dns},
+    });
   }catch(e){
     networkIpStatus.textContent=e.message;
   }finally{
@@ -2420,39 +2434,116 @@ async function networkChangeIp(){
   }
 }
 
+// --------------------------------------------------------------------------
+// Changement réseau en attente : plein écran + compte à rebours + lien de
+// bascule vers la nouvelle adresse, sur le même modèle que le redémarrage
+// HTTPS (tlsRestartOverlay/tlsRestartCountdown) déjà utilisé ailleurs.
+// --------------------------------------------------------------------------
+
+let networkPendingToken=null;
+let networkPendingDeadline=0;
+let networkPendingSetAt=0;
+let networkPendingTickTimer=null;
+
+function stopNetworkPendingUI(){
+  clearInterval(networkPendingTickTimer);
+  networkPendingTickTimer=null;
+  networkPendingToken=null;
+  networkPendingOverlay.classList.add('hidden');
+}
+
 function renderNetworkPending(pending){
-  clearTimeout(networkPendingTimer);
   if(!pending){
-    networkPendingBanner.classList.add('hidden');
-    networkPendingBanner.innerHTML='';
+    // Ignore un "rien en attente" qui arriverait dans les toutes premières
+    // secondes suivant une soumission côté client : le script détaché n'a
+    // pas encore eu le temps de faire passer son fichier de statut de
+    // "pending" à "applied" (délai de grâce de 2s), et /api/network/status
+    // ne verrait donc rien pendant cette fenêtre — un changement d'onglet
+    // rapide ne doit pas faire disparaître le plein écran qu'on vient tout
+    // juste d'afficher.
+    if(networkPendingToken&&Date.now()-networkPendingSetAt<5000)return;
+    stopNetworkPendingUI();
     return;
   }
 
+  const isNewChange=pending.token!==networkPendingToken;
+  networkPendingToken=pending.token;
+  networkPendingSetAt=Date.now();
+  const anchor=pending.applied_at||pending.started_at||(Date.now()/1000);
+  networkPendingDeadline=(anchor+pending.delay_seconds)*1000;
+
+  if(!isNewChange)return; // déjà affiché, seul le tick local doit continuer
+
   const kindLabel=pending.kind==='hostname'?t('network.pending_kind_hostname'):t('network.pending_kind_ip');
-  const remaining=Math.max(0,Math.round(
-    pending.delay_seconds-((Date.now()/1000)-(pending.applied_at||pending.started_at||Date.now()/1000))
-  ));
+  networkPendingOverlayTitle.textContent=t('network.pending_title',{kind:kindLabel});
+  networkPendingOverlay.classList.remove('hidden');
+  renderNetworkPendingRedirectHint(pending);
 
-  networkPendingBanner.classList.remove('hidden');
-  networkPendingBanner.innerHTML=
-    `<strong>${esc(t('network.pending_title',{kind:kindLabel}))}</strong>`+
-    `<div class="muted" style="margin-top:6px">${esc(t('network.pending_hint',{seconds:remaining}))}</div>`+
-    `<div class="row" style="margin-top:10px">`+
-    `<button class="primary" onclick="networkConfirmPending('${esc(pending.token)}')">${esc(t('network.pending_confirm_button'))}</button>`+
-    `</div>`;
-
-  networkPendingTimer=setTimeout(()=>networkRefresh(),3000);
+  clearInterval(networkPendingTickTimer);
+  tickNetworkPendingCountdown();
+  networkPendingTickTimer=setInterval(tickNetworkPendingCountdown,1000);
 }
 
-async function networkConfirmPending(token){
+function buildSameOriginUrl(host){
+  return `${location.protocol}//${host}${location.port?':'+location.port:''}${location.pathname}`;
+}
+
+function renderNetworkPendingRedirectHint(pending){
+  let url=null,label='';
+  if(pending.kind==='ip'&&pending.new_value&&pending.new_value.method==='manual'&&pending.new_value.address){
+    const host=pending.new_value.address.split('/')[0];
+    url=buildSameOriginUrl(host);
+    label=t('network.pending_try_ip',{address:host});
+  }else if(pending.kind==='hostname'&&pending.new_value){
+    const host=pending.new_value+'.local';
+    url=buildSameOriginUrl(host);
+    label=t('network.pending_try_hostname',{hostname:host});
+  }
+  if(url){
+    networkPendingRedirectHint.innerHTML=`<a href="${esc(url)}">${esc(label)}</a>`;
+    networkPendingRedirectHint.classList.remove('hidden');
+  }else{
+    networkPendingRedirectHint.classList.add('hidden');
+    networkPendingRedirectHint.innerHTML='';
+  }
+}
+
+function tickNetworkPendingCountdown(){
+  const remaining=Math.max(0,Math.round((networkPendingDeadline-Date.now())/1000));
+  networkPendingCountdownValue.textContent=remaining;
+  networkPendingOverlayHint.textContent=t('network.pending_hint',{seconds:remaining});
+
+  if(remaining>0)return;
+
+  clearInterval(networkPendingTickTimer);
+  networkPendingTickTimer=null;
+
+  // Le compte à rebours local est indicatif ; on laisse quelques secondes
+  // de marge au script détaché (sa propre boucle d'1s côté serveur, plus
+  // la commande nmcli/hostnamectl de rétablissement) avant de considérer
+  // que c'est bien réglé et de rafraîchir l'affichage.
+  const resolvedToken=networkPendingToken;
+  setTimeout(()=>{
+    if(networkPendingToken!==resolvedToken)return; // déjà confirmé entre-temps
+    stopNetworkPendingUI();
+    toast(t('network.pending_auto_reverted'),true);
+    networkRefresh();
+  },3000);
+}
+
+async function networkConfirmPending(){
+  if(!networkPendingToken)return;
+  const token=networkPendingToken;
+  networkPendingConfirmButton.disabled=true;
   try{
     await api('/api/network/confirm',{method:'POST',body:JSON.stringify({token})});
     toast(t('network.pending_confirmed'));
-    networkPendingBanner.classList.add('hidden');
-    clearTimeout(networkPendingTimer);
+    stopNetworkPendingUI();
     networkRefresh();
   }catch(e){
     toast(e.message,true);
+  }finally{
+    networkPendingConfirmButton.disabled=false;
   }
 }
 

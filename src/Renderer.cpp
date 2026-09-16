@@ -140,7 +140,8 @@ void Renderer::render(
     const std::vector<
         std::unique_ptr<Player>
     >& players,
-    const LayoutConfig& layout
+    const LayoutConfig& layout,
+    const std::optional<std::string>& startup_info_text
 )
 {
     const int width =
@@ -191,6 +192,17 @@ void Renderer::render(
         }
     }
 
+    if (
+        startup_info_text.has_value() &&
+        !startup_info_text->empty()
+    ) {
+        draw_startup_info_overlay(
+            *startup_info_text,
+            width,
+            height
+        );
+    }
+
     window_.swap_buffers();
 }
 
@@ -207,7 +219,8 @@ void Renderer::render_focus(
     const bool preset_menu_open,
     const bool show_audio_indicator,
     const bool audio_muted,
-    const bool audio_available
+    const bool audio_available,
+    const std::optional<std::string>& startup_info_text
 )
 {
     const int width =
@@ -288,6 +301,17 @@ void Renderer::render_focus(
             active_ptz_command,
             presets,
             preset_menu_open
+        );
+    }
+
+    if (
+        startup_info_text.has_value() &&
+        !startup_info_text->empty()
+    ) {
+        draw_startup_info_overlay(
+            *startup_info_text,
+            width,
+            height
         );
     }
 
@@ -1750,6 +1774,109 @@ void Renderer::draw_audio_indicator(
             1.0F
         );
     }
+}
+
+void Renderer::draw_startup_info_overlay(
+    const std::string& text,
+    const int canvas_width,
+    const int canvas_height
+)
+{
+    /*
+     * Même gabarit de marge que audio_button (bas-droite), une bande
+     * fine plutôt qu'un bouton carré. La hauteur est calculée comme le
+     * reste de l'UI, à partir de la plus petite dimension de l'écran,
+     * pour rester lisible aussi bien en petite fenêtre qu'en 4K.
+     */
+    const int shortest =
+        std::min(
+            canvas_width,
+            canvas_height
+        );
+
+    const int box_height =
+        std::clamp(
+            shortest / 22,
+            22,
+            34
+        );
+
+    const int margin =
+        std::clamp(
+            box_height / 2,
+            10,
+            16
+        );
+
+    /*
+     * Largeur nécessaire estimée à partir du même calcul de gabarit de
+     * police que draw_text (voir son implémentation) : c'est ce qui lui
+     * permet ensuite de ne pas tronquer le texte. Bornée à la largeur de
+     * l'écran moins les marges au cas où un nom d'hôte serait
+     * inhabituellement long — draw_text tronquera proprement si
+     * nécessaire, ce n'est qu'un garde-fou.
+     */
+    const int scale =
+        box_height >= 32
+            ? 2
+            : 1;
+
+    const int character_width =
+        (5 * scale) + scale;
+
+    const int text_padding =
+        std::max(
+            6,
+            box_height / 5
+        );
+
+    const int desired_width =
+        text_padding * 2 +
+        static_cast<int>(text.size()) *
+            character_width;
+
+    const int box_width =
+        std::clamp(
+            desired_width,
+            0,
+            std::max(
+                0,
+                canvas_width - margin * 2
+            )
+        );
+
+    const Rect box{
+        canvas_width - margin - box_width,
+        canvas_height - margin - box_height,
+        box_width,
+        box_height
+    };
+
+    /*
+     * fill_ui_rect() écrit directement dans le tampon couleur via
+     * glClear (voir son implémentation) : il n'y a pas de fondu réel,
+     * l'alpha passé n'a donc aucun effet visuel de transparence — un
+     * fond plein sombre, cohérent avec le reste de l'UI (draw_ptz_overlay,
+     * draw_audio_indicator), est utilisé ici plutôt qu'une valeur
+     * d'alpha qui suggérerait à tort une vraie translucidité.
+     */
+    fill_ui_rect(
+        box.x,
+        box.y,
+        box.width,
+        box.height,
+        canvas_height,
+        0.04F,
+        0.05F,
+        0.07F,
+        1.0F
+    );
+
+    draw_text(
+        text,
+        box,
+        canvas_height
+    );
 }
 
 bool Renderer::audio_button_hit_at(

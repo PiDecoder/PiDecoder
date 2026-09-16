@@ -28,7 +28,9 @@ public:
         const std::vector<
             std::unique_ptr<Player>
         >& players,
-        const LayoutConfig& layout
+        const LayoutConfig& layout,
+        const std::optional<std::string>&
+            startup_info_text = std::nullopt
     );
 
     void render_focus(
@@ -44,7 +46,9 @@ public:
         bool preset_menu_open,
         bool show_audio_indicator,
         bool audio_muted,
-        bool audio_available
+        bool audio_available,
+        const std::optional<std::string>&
+            startup_info_text = std::nullopt
     );
 
     [[nodiscard]] std::optional<PtzCommand>
@@ -146,6 +150,18 @@ private:
         const Rect& rectangle,
         int canvas_height,
         int right_reserve = 0
+    );
+
+    /*
+     * Petit bandeau semi-transparent en bas à droite de l'écran (mosaïque
+     * ou vue Focus indifféremment) montrant l'adresse IP/nom d'hôte/port
+     * Web du Pi — affiché quelques secondes au démarrage du player et
+     * rappelable au clavier (voir Application::show_startup_info_overlay).
+     */
+    void draw_startup_info_overlay(
+        const std::string& text,
+        int canvas_width,
+        int canvas_height
     );
 
     void draw_digit(

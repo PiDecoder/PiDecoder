@@ -37,6 +37,11 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 Environment=PIDECODER_USER=@SERVICE_USER@
 Environment=XDG_RUNTIME_DIR=/run/user/@SERVICE_UID@
 Environment=WAYLAND_DISPLAY=@WAYLAND_DISPLAY@
+# Uniquement pour l'overlay "IP/nom d'hôte/port Web" affiché au démarrage
+# du player (voir NetworkInfo.cpp) — ce binaire ne parle jamais lui-même
+# HTTP, il affiche juste ce port pour qu'on sache où joindre
+# pidecoder-config.service depuis un autre poste.
+Environment=PIDECODER_WEB_PORT=@WEB_PORT@
 Environment=PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
 Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
 ExecCondition=/usr/bin/python3 @TARGET@/scripts/check-camera-config.py @TARGET@/config/cameras.json

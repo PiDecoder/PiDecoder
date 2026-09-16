@@ -32,7 +32,16 @@
   systemd-timesyncd, hostnamed or actual Raspberry Pi hardware.** See
   "v1.3 — Software update and network configuration" below, in
   particular the field-testing caution at the end of that section, before
-  trying the IP/DHCP toggle on the production Pi.
+  trying the IP/DHCP toggle on the production Pi. First round of field
+  feedback from the user led to a follow-up: a `check_update` bug fix
+  (see "Follow-up after first field feedback" under that section), a
+  rework of the confirm/rollback countdown UX (full-screen overlay
+  instead of a polling banner), and a new small feature — the Pi's
+  IP/hostname/Web-port shown as an overlay on the player's own screen for
+  30s at startup (or on demand via a keyboard shortcut) — whose C++ half
+  has never been built in this environment (no SDL2/mpv dev headers
+  available here) and needs a first real `sudo ./scripts/install.sh` on
+  the Pi to confirm it even compiles.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -513,6 +522,45 @@ connection that doesn't depend on the address being changed) — the
 automatic rollback is designed to make this unnecessary, but it has not
 yet been proven against the real `nmcli`/NetworkManager stack, only
 against a shell script standing in for it.
+
+### Follow-up after first field feedback
+
+The user tried this on the real Pi and reported two issues, plus a new
+small feature request:
+
+- **`check_update` wrongly reported "not a Git repository"** on what was
+  in fact a valid clone. Root cause: it only checked for a `.git`
+  *directory* (`(repo / '.git').is_dir()`), which rejects perfectly valid
+  Git layouts where `.git` is a *file* instead (a linked worktree, a
+  submodule, `--separate-git-dir`). Fixed by checking with `git
+  rev-parse --is-inside-work-tree` instead, which is correct for every
+  Git layout and, as a side benefit, now surfaces `git`'s actual stderr
+  in the Web UI when something else is wrong (permissions, an
+  unreachable path...) instead of a generic "not a repo" message.
+  Verified against a real `git worktree`-based clone (`.git` as a file)
+  reproducing the failure and confirming the fix.
+- **Confirm/rollback UX reworked**: the countdown was an inline banner
+  refreshed by polling every few seconds, which looked "jerky" to the
+  user. Replaced with a full-screen overlay (same visual treatment as the
+  HTTPS restart overlay) with a countdown that ticks locally every
+  second instead of waiting on the next poll, plus a direct link to try
+  the new address (`http(s)://<new-ip>/...` for an IP change,
+  `http(s)://<hostname>.local/...` for a hostname change) so the user
+  doesn't have to retype it. This also uncovered that `start_ip_change`'s
+  "applied" status write was missing `old_value`/`new_value` (present
+  only in the initial "pending" write) — fixed, since the redirect link
+  needs the new address from that same status.
+- **Startup IP overlay on the player screen** — a new, separate small
+  feature requested at the same time (not a fix): see "v1.3 —
+  Software update and network configuration" is the Web UI half; the
+  player-side half is `src/NetworkInfo.cpp` plus the
+  `Renderer::draw_startup_info_overlay`/`Application::show_startup_info_overlay`
+  changes, documented in the Changelog entry for this round. Same
+  never-built-here caveat applies to that part specifically (SDL2/mpv
+  dev headers are not installable in this sandbox — apt's network access
+  is blocked here), whereas the two fixes above are Python/JS only and
+  were exercised against a real running `config-web.py` the same way as
+  the rest of this feature.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

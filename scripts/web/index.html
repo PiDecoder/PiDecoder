@@ -81,7 +81,6 @@
 <div class="panel">
   <h2 data-i18n="network.title">Réseau</h2>
   <div class="muted" data-i18n="network.hint">Nom d'hôte, adresse IP, NTP et fuseau horaire du Raspberry Pi. Par sécurité, un changement de nom d'hôte ou d'adresse IP est automatiquement annulé s'il n'est pas confirmé dans les 45 secondes qui suivent — pour ne jamais perdre l'accès au Pi à distance à cause d'une erreur de frappe.</div>
-  <div id="networkPendingBanner" class="backupbox hidden"></div>
   <div id="networkStatus" class="muted" style="margin-top:14px;min-height:20px"></div>
 </div>
 <div class="panel">
@@ -139,5 +138,6 @@
   <div><kbd>Échap</kbd><span data-i18n="shortcuts.close_panels">Fermer les fenêtres</span></div>
 </div><div id="notificationHistory" class="notification-history"><div class="notification-history-header"><strong data-i18n="notifications.recent">Notifications récentes</strong><button class="secondary" type="button" data-i18n="notifications.clear" onclick="clearNotificationHistory()">Effacer</button></div><div id="notificationList"></div></div>
 <div id="tlsRestartOverlay" class="tls-restart-overlay hidden"><div class="tls-restart-box"><div class="tls-restart-icon">🔒</div><h2 data-i18n="sec.tls_restart_overlay_title">HTTPS en cours de changement</h2><div id="tlsRestartCountdownValue" class="tls-restart-countdown">30</div><div class="muted" data-i18n="sec.tls_restart_overlay_hint">Le service redémarre — la page va se recharger automatiquement. Si la connexion semble acceptée sans rien afficher ensuite, vide les cookies de ce site dans ton navigateur.</div></div></div>
+<div id="networkPendingOverlay" class="tls-restart-overlay hidden"><div class="tls-restart-box"><div class="tls-restart-icon">📡</div><h2 id="networkPendingOverlayTitle">Changement réseau en cours</h2><div id="networkPendingCountdownValue" class="tls-restart-countdown">45</div><div id="networkPendingOverlayHint" class="muted"></div><div class="row" style="margin-top:16px;justify-content:center"><button id="networkPendingConfirmButton" class="primary" data-i18n="network.pending_confirm_button" onclick="networkConfirmPending()">✔ Confirmer ce changement</button></div><div id="networkPendingRedirectHint" class="muted hidden" style="margin-top:10px"></div></div></div>
 <script src="i18n.js"></script>
 <script src="app.js"></script></body></html>

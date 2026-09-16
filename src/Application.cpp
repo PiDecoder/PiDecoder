@@ -1,4 +1,5 @@
 #include "pidecoder/Application.hpp"
+#include "pidecoder/NetworkInfo.hpp"
 #include "pidecoder/Version.hpp"
 
 #include <algorithm>
@@ -34,7 +35,8 @@ Application::Application(
     LayoutConfig layout
 )
     : cameras_(std::move(cameras)),
-      layout_(std::move(layout))
+      layout_(std::move(layout)),
+      startup_info_text_(startup_network_info_text())
 {
     if (cameras_.empty()) {
         throw std::invalid_argument(
@@ -71,6 +73,7 @@ int Application::run()
         }
 
         initialize_players();
+        show_startup_info_overlay();
 
         std::cout
             << "PiDecoder v"
@@ -290,6 +293,15 @@ void Application::process_sdl_event(
             SDLK_m
         ) {
             toggle_focus_audio();
+            return;
+        }
+
+        if (
+            event.key.keysym.sym ==
+            SDLK_i
+        ) {
+            show_startup_info_overlay();
+            redraw_requested_ = true;
             return;
         }
     }
@@ -1391,6 +1403,36 @@ bool Application::audio_indicator_visible() const noexcept
     );
 }
 
+void Application::show_startup_info_overlay() noexcept
+{
+    /*
+     * Rien à afficher si aucune adresse IPv4 n'a pu être déterminée
+     * (voir NetworkInfo.hpp) — inutile de faire clignoter un encart
+     * vide, y compris quand la touche I est pressée à la main.
+     */
+    if (startup_info_text_.empty()) {
+        return;
+    }
+
+    startup_info_until_ =
+        std::chrono::steady_clock::now() +
+        startup_info_duration_;
+}
+
+std::optional<std::string>
+Application::startup_info_overlay_text() const
+{
+    if (
+        startup_info_text_.empty() ||
+        std::chrono::steady_clock::now() >=
+            startup_info_until_
+    ) {
+        return std::nullopt;
+    }
+
+    return startup_info_text_;
+}
+
 void Application::render()
 {
     /*
@@ -1430,14 +1472,16 @@ void Application::render()
             ptz_preset_menu_open_,
             audio_indicator_visible(),
             focus_player_->muted(),
-            focus_player_->has_audio_track()
+            focus_player_->has_audio_track(),
+            startup_info_overlay_text()
         );
         return;
     }
 
     renderer_->render(
         players_,
-        layout_
+        layout_,
+        startup_info_overlay_text()
     );
 }
 

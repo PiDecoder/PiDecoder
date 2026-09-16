@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace pidecoder {
@@ -98,6 +99,11 @@ private:
     void show_audio_indicator() noexcept;
     [[nodiscard]] bool audio_indicator_visible() const noexcept;
 
+    void show_startup_info_overlay() noexcept;
+
+    [[nodiscard]] std::optional<std::string>
+    startup_info_overlay_text() const;
+
     [[nodiscard]] std::optional<std::size_t>
     camera_index_at(
         int mouse_x,
@@ -156,6 +162,18 @@ private:
     std::chrono::steady_clock::time_point
         audio_indicator_until_{};
 
+    /*
+     * Adresse IP/nom d'hôte/port Web calculés une seule fois au
+     * démarrage (ne peut pas changer en cours d'exécution sans
+     * redémarrage du service, voir NetworkInfo.hpp) — vide si aucune
+     * interface réseau active n'a été trouvée, auquel cas l'overlay ne
+     * s'affiche jamais plutôt que d'afficher une chaîne vide.
+     */
+    std::string startup_info_text_;
+
+    std::chrono::steady_clock::time_point
+        startup_info_until_{};
+
     bool inspection_animation_active_{false};
     bool inspection_dragging_{false};
 
@@ -181,6 +199,9 @@ private:
 
     static constexpr std::chrono::seconds
         ptz_overlay_timeout_{5};
+
+    static constexpr std::chrono::seconds
+        startup_info_duration_{30};
 };
 
 } // namespace pidecoder

@@ -90,6 +90,8 @@ PiDecoder focuses on one job: displaying IP cameras reliably without the weight 
 | Digital zoom and pan | Mosaic stays silent by design, whatever the setting | Optical zoom and forced Stop | Full screen at startup toggle | Keyboard shortcuts panel |
 | On-screen digital zoom percentage | Per-camera flag also protects mosaic latency for cameras without audio | Native preset selector | Grid-too-small guardrails | Configuration export and import |
 | Native Raspberry Pi display (SDL2/OpenGL, no browser needed) | | PTZ overlay auto-hide | | Rate-limited authentication with lockout |
+| On-screen IP/hostname/Web-port overlay, 30s at startup or on demand with the **I** key | | | | One-click software update check and install |
+| | | | | Hostname, IP (DHCP/static), NTP and timezone configuration, with automatic rollback |
 | | | ONVIF/PTZ metadata preserved on camera save | | systemd sandboxing per service, credential redaction in logs |
 | | | | | Link to the [GitHub repository](https://github.com/PiDecoder/PiDecoder) in the header |
 

@@ -36,6 +36,7 @@ add_executable(
     src/Grid.cpp
     src/Layout.cpp
     src/RedactUrl.cpp
+    src/NetworkInfo.cpp
 )
 
 target_include_directories(

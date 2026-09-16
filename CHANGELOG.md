@@ -2,6 +2,66 @@
 
 ## 1.3 (nouveau — testé en bac à sable, jamais sur le Pi réel)
 
+### Affichage de l'IP sur l'écran du player au démarrage
+
+Demande explicite de l'utilisateur : pouvoir retrouver l'adresse du Pi sur
+le réseau directement depuis l'écran du mur vidéo, sans clavier/écran de
+diagnostic ni accès SSH préalable — utile en particulier après un
+changement d'IP/DHCP fait depuis la page Web (voir ci-dessus).
+
+- petit bandeau discret en bas à droite de l'écran (mosaïque ou vue
+  Focus), affichant l'adresse IPv4 locale, le nom d'hôte et le port de
+  l'interface Web d'administration (ex. `IP 192.168.1.50  HOTE
+  PIDECODER-PI  WEB :8080`) ;
+- affiché automatiquement 30 secondes au lancement du player, et
+  rappelable à tout moment avec la touche **I** ;
+- nouveau fichier `src/NetworkInfo.cpp` : détection de l'adresse IPv4
+  locale via `getifaddrs()` (première interface active, hors boucle
+  locale et hors plage link-local 169.254.0.0/16) et du nom d'hôte via
+  `gethostname()` — aucune nouvelle dépendance, uniquement des appels
+  POSIX standard ;
+- le port de l'admin Web est communiqué au binaire vidéo via une nouvelle
+  variable d'environnement `PIDECODER_WEB_PORT`, injectée par
+  `systemd/pidecoder.service.in` (le binaire vidéo et l'admin Web sont
+  deux processus séparés, voir docs/PROJECT-STATE.md) ;
+- rendu par la police bitmap déjà utilisée pour les overlays PTZ/son
+  (`Renderer::draw_text`, majuscules uniquement) — le nom d'hôte est donc
+  affiché en majuscules ;
+- **non testé sur le matériel réel** : validé uniquement par relecture
+  soigneuse et par une compilation+exécution isolée de
+  `NetworkInfo.cpp` (le seul fichier de ce lot sans dépendance
+  SDL2/mpv) — l'environnement de développement ne peut pas installer les
+  bibliothèques de développement SDL2/mpv (accès réseau apt bloqué), donc
+  le reste (intégration dans `Renderer`/`Application`, rendu à l'écran,
+  raccourci clavier) n'a pas pu être compilé ici, comme pour les
+  précédentes fonctionnalités touchant à l'affichage. À vérifier en
+  premier lieu sur le Pi : que `sudo ./scripts/install.sh` compile bien
+  sans erreur.
+
+### Corrections après premier retour terrain
+
+- **« Update unavailable: this folder is not a Git repository »** alors que
+  le dépôt est bien un clone Git valide : `check_update()` ne testait que
+  la présence d'un dossier `.git` (`(repo / '.git').is_dir()`), qui ne
+  couvre pas tous les clones Git valides (worktree, sous-module,
+  `--separate-git-dir`, où `.git` est un *fichier* pointant ailleurs).
+  Remplacé par un test via `git rev-parse --is-inside-work-tree`, fiable
+  dans tous les cas, et qui remonte désormais un message d'erreur détaillé
+  côté page Web si le problème est ailleurs (permissions, chemin
+  introuvable...) plutôt qu'un « pas un dépôt Git » générique ;
+- **expérience du compte à rebours réseau retravaillée** : remplacée par
+  un plein écran (même cadre visuel que le redémarrage HTTPS) avec un
+  compte à rebours qui défile localement seconde par seconde au lieu de
+  se rafraîchir tous les quelques secondes depuis le serveur — l'ancien
+  rendu donnait une impression saccadée ;
+- **lien direct vers la nouvelle adresse** : quand un changement d'IP fixe
+  est en cours, le plein écran propose désormais un lien cliquable vers
+  la nouvelle adresse (et, pour un changement de nom d'hôte, vers
+  `<nom>.local`), pour éviter de la retaper à la main ;
+- le fichier de statut d'un changement d'IP en cours n'incluait pas
+  l'ancienne/nouvelle valeur une fois appliqué (seulement au moment de la
+  demande initiale) — corrigé, nécessaire pour afficher ce lien.
+
 ### Mise à jour en un clic et configuration réseau depuis la page Web
 
 Demande explicite de l'utilisateur : un bouton de vérification/installation
