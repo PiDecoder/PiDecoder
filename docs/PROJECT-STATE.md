@@ -63,8 +63,14 @@
   appearing at all (its text was computed exactly once, in the
   constructor, and stayed frozen empty forever if the network wasn't
   ready at that exact instant — now recomputed on every call) and added
-  the MAC address to it — see "Follow-up after fifth field feedback"
-  under that section.
+  the MAC address to it — its root cause turned out to be a systemd
+  sandbox setting (`RestrictAddressFamilies` missing `AF_NETLINK`)
+  blocking the netlink socket `getifaddrs()` needs, confirmed fixed on
+  the Pi; the overlay was then redesigned as a small bordered two-line
+  card, and a follow-up round fixed that card rendering too small on
+  the real screen (the line-height range was too low to ever reach the
+  bitmap font's "large" size) — see "Follow-up after fifth field
+  feedback" under that section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -784,6 +790,22 @@ the same arithmetic in Python across several common resolutions
 on-screen, never zero or negative size. The actual on-screen rendering
 still couldn't be verified in this sandbox (still no SDL2/mpv here); to
 confirm visually on the Pi.
+
+**Field feedback: card too small — fixed.** After testing on the Pi, the
+two-line card was readable but noticeably small. Root cause: `draw_text()`
+switches to its "large" bitmap font (`scale = 2`) only when the rectangle
+passed to it is at least 32px tall, but the card's line height had been
+clamped to a 20–30px range — always below that threshold — so the card was
+stuck on the small font (`scale = 1`) regardless of screen size, unlike
+the original single-line overlay, which could clear 32px (and so use the
+large font) on 720p+ screens. Fixed by raising the line-height clamp to
+34–46px (still derived from the screen's shortest dimension, so it stays
+proportional), which always clears the 32px threshold and therefore always
+gets the large font; border, divider and margins were scaled up to match.
+Re-verified with the same Python geometry check across 640×480, 1280×720,
+1920×1080 and 3840×2160 with the user's real text — always fully on-screen,
+large font (`scale = 2`) reached in every case. Real on-screen rendering
+still to be reconfirmed on the Pi.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

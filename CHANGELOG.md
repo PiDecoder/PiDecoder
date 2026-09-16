@@ -155,6 +155,31 @@ taille nulle ni négative. Le rendu à l'écran lui-même n'a pas pu être
 vérifié dans cet environnement (toujours pas de SDL2/mpv disponibles
 ici) : à confirmer visuellement sur le Pi.
 
+### Retour terrain : cadre trop petit — police agrandie
+
+Après vérification sur le Pi, le nouveau cadre à deux lignes était
+lisible mais nettement trop petit. Cause : le seuil qui fait passer la
+police bitmap en « gros caractères » (`scale = 2`) dans `draw_text()`
+est `hauteur de ligne >= 32px` ; la hauteur de ligne calculée pour le
+cadre était bornée entre 20 et 30px, donc ce seuil n'était jamais
+atteint et le cadre restait toujours en petits caractères — contrairement
+à l'ancien encart à une seule ligne, qui pouvait dépasser ce seuil sur
+les écrans 720p et plus.
+
+- hauteur de ligne : bornée désormais entre 34 et 46px (au lieu de
+  20–30) — toujours calculée à partir de la plus petite dimension de
+  l'écran, donc toujours proportionnée, mais avec un plancher qui
+  garantit d'atteindre `scale = 2` (gros caractères) sur tous les
+  écrans réalistes ;
+- bordure, séparateur et marges ajustés en proportion (légèrement plus
+  épais/plus larges) pour rester cohérents avec le cadre agrandi.
+
+**Testé** : géométrie recalculée par le même script Python que pour la
+version précédente, sur les mêmes résolutions (640×480, 1280×720,
+1920×1080, 3840×2160) avec le texte réel de l'utilisateur — cadre
+toujours entièrement à l'écran, `scale = 2` atteint dans tous les cas
+(gros caractères garantis). Rendu visuel réel à reconfirmer sur le Pi.
+
 ### Corrections après premier retour terrain
 
 - **« Update unavailable: this folder is not a Git repository »** alors que

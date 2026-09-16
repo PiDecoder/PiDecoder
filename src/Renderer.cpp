@@ -1818,28 +1818,28 @@ void Renderer::draw_startup_info_overlay(
 
     const int line_height =
         std::clamp(
-            shortest / 26,
-            20,
-            30
+            shortest / 18,
+            34,
+            46
         );
 
     const int border =
         std::max(
-            2,
-            line_height / 12
+            3,
+            line_height / 10
         );
 
     const int gap =
         std::max(
-            4,
+            5,
             line_height / 6
         );
 
     const int margin =
         std::clamp(
             line_height / 2,
-            10,
-            16
+            12,
+            18
         );
 
     /*
@@ -1850,13 +1850,16 @@ void Renderer::draw_startup_info_overlay(
      * draw_text tronquera proprement si nécessaire, ce n'est qu'un
      * garde-fou.
      *
-     * Même seuil que draw_text (rectangle.height >= 32) — et pas celui
-     * qu'utilisait l'ancien encart à une seule ligne (>= 32 contre
-     * l'ancien box_height, potentiellement plus grand) : line_height
-     * est borné à 30 ci-dessus, donc scale vaut toujours 1 ici en
-     * pratique, mais recopier le même seuil que draw_text (plutôt qu'un
-     * seuil arbitraire différent) garantit que le budget de largeur
-     * calculé ici correspond exactement à ce que draw_text va vraiment
+     * Même seuil que draw_text (rectangle.height >= 32). Avec le
+     * gabarit ci-dessus (line_height borné entre 34 et 46), ce seuil
+     * est toujours atteint : scale vaut donc systématiquement 2, c'est-
+     * à-dire la police en gros caractères, comme l'ancien encart à une
+     * seule ligne l'utilisait déjà sur les écrans 720p et plus (retour
+     * "un peu trop petit" du 16/09 : la première version à deux lignes
+     * restait bloquée à scale=1 faute de line_height suffisant).
+     * Recopier le même seuil que draw_text (plutôt qu'un seuil
+     * arbitraire différent) garantit que le budget de largeur calculé
+     * ici correspond exactement à ce que draw_text va vraiment
      * dessiner, sans sur- ni sous-dimensionner la boîte.
      */
     const int scale =
