@@ -72,6 +72,23 @@ rendu — seul le moment du calcul du texte a changé) n'a toujours pas pu
 en premier sur le Pi via `sudo ./scripts/install.sh`, en particulier que
 l'overlay apparaît bien cette fois-ci au démarrage et via la touche I.
 
+### Toujours rien à l'écran malgré le correctif ci-dessus — ajout d'un diagnostic
+
+Retour terrain (confirmé après recompilation propre, et alors que les
+autres éléments à l'écran — zoom, PTZ, bouton son en vue Focus — s'affichent
+normalement) : l'overlay IP/MAC reste invisible, aussi bien au démarrage
+qu'avec la touche I. Comme le reste de l'affichage fonctionne (même
+`fill_ui_rect`/`draw_text` que les overlays qui marchent), la piste la
+plus probable est que `startup_network_info_text()` renvoie une chaîne
+vide sur ce Pi précis — c'est-à-dire que `NetworkInfo.cpp` ne trouve
+aucune interface réseau correspondant à ses critères (active, hors
+boucle locale, hors plage lien-local) sur ce matériel, pour une raison
+qui reste à identifier sans accès direct au Pi depuis cet environnement.
+Ajout d'une trace de diagnostic (`Application::show_startup_info_overlay()`
+affiche désormais le texte calculé, ou `[]` s'il est vide, dans le journal
+du service — visible via `journalctl -u pidecoder`, aucun outil
+supplémentaire nécessaire) pour trancher sans deviner à l'aveugle.
+
 ### Corrections après premier retour terrain
 
 - **« Update unavailable: this folder is not a Git repository »** alors que

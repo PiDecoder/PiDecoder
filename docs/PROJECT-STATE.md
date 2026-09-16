@@ -703,6 +703,22 @@ long-standing limitation). First thing to check on the Pi after `sudo
 ./scripts/install.sh`: that the overlay now actually appears, both at
 startup and via I, and that it includes the MAC address.
 
+**Confirmed not fixed by the above**: after a clean rebuild (`sudo
+./scripts/install.sh` completed without error), the overlay still never
+appeared — neither at startup nor via I — while every other on-screen
+element (zoom indicator, PTZ overlay, audio button in Focus view, all
+using the same `fill_ui_rect`/`draw_text` primitives) displays normally.
+That rules out a general rendering-pipeline problem and points at
+`startup_network_info_text()` itself returning an empty string on this
+specific Pi's real network setup — i.e. `NetworkInfo.cpp`'s
+interface-selection heuristic (active, non-loopback, non-link-local)
+isn't matching anything there, for a reason not yet identified (no direct
+shell access to that Pi from this environment). Added a diagnostic
+instead of guessing further: `show_startup_info_overlay()` now logs the
+computed text (or `[]` if empty) to stdout, which lands in the systemd
+journal (`journalctl -u pidecoder`) since the unit already has
+`StandardOutput=journal` — the next round depends on what that shows.
+
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 
 Per the roadmap, v1.1 adds audio playback. Scope decided with the user
