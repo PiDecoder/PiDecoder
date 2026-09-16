@@ -532,11 +532,35 @@ EOF
     if git -C "$SOURCE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         SOURCE_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
         SOURCE_REMOTE="$(git -C "$SOURCE_ROOT" remote get-url origin 2>/dev/null || true)"
+        # Branche suivie pour la mise à jour en un clic. La construction part
+        # souvent d'un tag (« git checkout v1.3.0 » sur la machine de build,
+        # ou le checkout d'un tag par GitHub Actions) : dans les deux cas,
+        # SOURCE_ROOT est alors lui-même en HEAD détachée, et un tag ne
+        # correspond de toute façon à aucune branche à suivre — un tag ne
+        # bouge jamais, donc le suivre rendrait la mise à jour éternellement
+        # « à jour ». On suit donc explicitement la branche de développement
+        # principale plutôt que la référence utilisée pour la construction.
+        readonly TRACKED_BRANCH="main"
         git clone --no-hardlinks --quiet "$SOURCE_ROOT" "$MNT$REPO_IN_IMAGE" \
             || fail "Clone du dépôt dans l'image impossible"
-        git -C "$MNT$REPO_IN_IMAGE" checkout --quiet "$SOURCE_COMMIT"
+        # -B (et non simplement checkout) : SOURCE_COMMIT laisserait le
+        # dépôt en HEAD détachée, sans branche du tout. `git rev-parse
+        # @{upstream}` échoue alors avec « no upstream », précisément le
+        # « Aucune branche distante suivie » constaté sur le terrain dans
+        # l'onglet Mise à jour. Retrouvé sur la première carte réellement
+        # flashée avec cette image.
+        git -C "$MNT$REPO_IN_IMAGE" checkout --quiet -B "$TRACKED_BRANCH" "$SOURCE_COMMIT"
         if [[ -n "$SOURCE_REMOTE" ]]; then
             git -C "$MNT$REPO_IN_IMAGE" remote set-url origin "$SOURCE_REMOTE"
+            # `branch --set-upstream-to` refuserait ici : ce clone n'a encore
+            # jamais parlé à origin, donc refs/remotes/origin/$TRACKED_BRANCH
+            # n'existe pas localement, et git validerait (en échouant) que la
+            # référence demandée existe déjà. Écrire directement les deux
+            # clés de config évite cette validation ; le premier `git fetch`
+            # fait sur l'appareil (déclenché par l'onglet Mise à jour) peuple
+            # ensuite cette référence distante normalement.
+            git -C "$MNT$REPO_IN_IMAGE" config "branch.$TRACKED_BRANCH.remote" origin
+            git -C "$MNT$REPO_IN_IMAGE" config "branch.$TRACKED_BRANCH.merge" "refs/heads/$TRACKED_BRANCH"
         else
             warn "Le dépôt source n'a pas de distant « origin » : la mise à jour en un clic sera inopérante sur cette image"
         fi
@@ -580,6 +604,63 @@ EOF
     chmod 0755 "$MNT/opt/pidecoder/scripts/image/firstboot.sh"
     cp "$SCRIPT_DIR/image/pidecoder-firstboot.service" "$MNT/etc/systemd/system/pidecoder-firstboot.service"
     in_chroot systemctl enable pidecoder-firstboot.service >/dev/null
+
+    # --- Caméra de démonstration : pidecoder.service ne démarre pas tant --
+    # --- qu'aucune caméra active n'est configurée (voir --------------------
+    # --- check-camera-config.py), donc sans elle, l'écran resterait noir --
+    # --- au premier démarrage — pas d'overlay réseau, donc aucun moyen de -
+    # --- connaître l'adresse IP de l'appareil sans brancher un clavier. ---
+    # Constaté sur le terrain après le passage sur Bookworm : le mur vidéo
+    # ne plante plus, mais tant qu'aucune vraie caméra n'est ajoutée, il ne
+    # démarre jamais du tout. Une image statique locale (donc sans aucune
+    # dépendance réseau ni service tiers) suffit à satisfaire la condition
+    # de démarrage ; l'adresse IP réelle est déjà affichée par-dessus par
+    # l'overlay natif (NetworkInfo.cpp), qui ne dépend pas du contenu de la
+    # caméra elle-même. Remplacée automatiquement dès qu'une vraie caméra
+    # est ajoutée depuis l'interface Web (ce n'est qu'une entrée JSON comme
+    # une autre, pas un mode spécial).
+    log "Génération de la caméra de démonstration (premier démarrage sans caméra réelle)"
+    in_chroot mkdir -p /opt/pidecoder/share/demo
+    python3 - "$MNT/opt/pidecoder/share/demo/demo.bmp" <<'PY'
+import struct
+import sys
+
+path = sys.argv[1]
+width, height = 640, 360
+row_size = (width * 3 + 3) & ~3
+pixel_data_size = row_size * height
+file_size = 14 + 40 + pixel_data_size
+
+with open(path, "wb") as f:
+    f.write(b"BM")
+    f.write(struct.pack("<IHHI", file_size, 0, 0, 14 + 40))
+    f.write(struct.pack(
+        "<IiiHHIIiiII",
+        40, width, height, 1, 24, 0, pixel_data_size, 2835, 2835, 0, 0,
+    ))
+    # Bleu nuit uni (BGR) : neutre, pas de dépendance à une police ou une
+    # bibliothèque de dessin pour un simple espace réservé.
+    row = bytes((40, 30, 20)) * width
+    padding = b"\x00" * (row_size - width * 3)
+    for _ in range(height):
+        f.write(row)
+        f.write(padding)
+PY
+    chmod 0644 "$MNT/opt/pidecoder/share/demo/demo.bmp"
+
+    cat > "$MNT/opt/pidecoder/config/cameras.json" <<'JSON'
+{
+  "cameras": [
+    {
+      "name": "Caméra de démonstration (à remplacer)",
+      "enabled": true,
+      "grid_url": "/opt/pidecoder/share/demo/demo.bmp"
+    }
+  ]
+}
+JSON
+    in_chroot chown "$IMAGE_USER:$IMAGE_USER" /opt/pidecoder/config/cameras.json
+    chmod 0600 "$MNT/opt/pidecoder/config/cameras.json"
 
     # --- Retrait de tout ce qui doit rester unique à chaque appareil --------
     log "Retrait de l'identité de la machine de construction"

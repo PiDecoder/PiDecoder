@@ -83,6 +83,52 @@ puisque sur ces images userconfig.service *remplace* getty@tty1, désactivé.
 Deux vérifications ont été ajoutées en fin de construction : que l'assistant
 est bien masqué, et que l'utilisateur de l'image existe toujours.
 
+### Retour terrain : écran noir au premier démarrage tant qu'aucune caméra n'est configurée
+
+Le passage sur Bookworm a corrigé le plantage du mur vidéo, mais un souci
+distinct est apparu : `pidecoder.service` refuse de démarrer tant qu'aucune
+caméra active n'est configurée (`check-camera-config.py`, voulu pour ne pas
+afficher un mur vide). Sur une image flashée fraîche, ça veut dire qu'au
+tout premier démarrage l'écran reste noir — et donc que l'overlay natif qui
+affiche l'adresse IP de l'appareil ne s'affiche jamais non plus, alors que
+c'est précisément l'information dont on a besoin pour aller le configurer
+depuis un autre poste (l'image ne propose pas de clavier/écran de secours).
+
+Corrigé en ajoutant une **caméra de démonstration** au `cameras.json` par
+défaut de l'image (uniquement l'image — l'installation manuelle garde une
+configuration vide, ce qui reste le bon choix quand on installe depuis un
+terminal). Elle pointe vers une image fixe générée à la construction
+(`/opt/pidecoder/share/demo/demo.bmp`, un aplat de couleur sans aucune
+dépendance réseau ni service tiers), juste assez pour que la condition de
+démarrage soit satisfaite. L'overlay réseau (nom d'hôte, IP, ports Web) est
+géré indépendamment du contenu de la caméra : il s'affiche donc normalement
+dès que le service démarre. Cette caméra de démonstration disparaît d'elle
+-même dès qu'une vraie caméra est ajoutée depuis l'interface Web — ce n'est
+qu'une entrée JSON ordinaire, pas un mode spécial à désactiver.
+
+### Retour terrain : l'onglet Mise à jour annonçait « Aucune branche distante suivie »
+
+Signalé après le passage sur Bookworm : l'onglet Système affichait « No
+tracked remote branch — unable to check for updates » alors que le dépôt
+Git de l'image a bien un distant `origin` configuré.
+
+Cause : `build-image.sh` clone le dépôt source puis fait
+`git checkout <commit exact>` pour figer la version construite — ce qui
+laisse le dépôt en **HEAD détachée**, sans branche du tout. Or
+`check_update()` (`system_admin.py`) détecte les mises à jour via
+`git rev-parse @{upstream}`, qui exige une branche avec un suivi configuré :
+sans branche, pas de suivi possible, d'où le message.
+
+Corrigé en faisant pointer une vraie branche (`main`, la branche de
+développement principale — pas la référence utilisée pour la construction,
+qui est souvent un tag figé et ne bougera donc plus jamais) sur ce commit
+au moment du clone dans l'image, et en configurant son suivi de
+`origin/main` directement dans la configuration Git (sans dépendre d'un
+`git fetch` préalable, impossible à ce stade puisque ce clone n'a encore
+jamais parlé au vrai `origin`). Le premier `git fetch` fait sur l'appareil,
+déclenché par l'onglet Mise à jour lui-même, complète alors normalement
+cette référence.
+
 ### Retour terrain : le mur vidéo plantait en boucle (SIGILL) — retour à Bookworm
 
 Sur la première carte flashée avec la base Trixie, `pidecoder.service`
