@@ -64,7 +64,18 @@ Environment=LD_LIBRARY_PATH=/usr/local/lib/aarch64-linux-gnu:/usr/local/lib
 ExecCondition=/usr/bin/python3 @TARGET@/scripts/check-camera-config.py @TARGET@/config/cameras.json
 ExecStartPre=/usr/bin/test -S /run/user/@SERVICE_UID@/@WAYLAND_DISPLAY@
 ExecStart=@TARGET@/bin/pidecoder @TARGET@/config/cameras.json
-Restart=on-failure
+# always, et non on-failure : ce service est un mur d'images qui doit rester
+# affiché en permanence, pas juste après un plantage. Sous labwc, un
+# raccourci clavier du compositeur (par ex. Alt+F4, lié par défaut) peut
+# envoyer une demande de fermeture normale au client — le processus se
+# termine alors proprement (code 0), qu'on ne veut pas laisser filer sans
+# redémarrage juste parce que ce n'est pas un « échec » au sens systemd.
+# Constaté sur le terrain : fermer la fenêtre laissait l'écran vide pour de
+# bon, sans qu'aucune erreur n'apparaisse nulle part. Le garde-fou contre un
+# vrai plantage en boucle reste actif : c'est le comportement par défaut de
+# systemd (StartLimitIntervalSec/StartLimitBurst), pas Restart=, qui l'assure
+# — volontairement laissé à sa valeur par défaut plutôt que désactivé ici.
+Restart=always
 RestartSec=3
 TimeoutStopSec=10
 KillSignal=SIGTERM

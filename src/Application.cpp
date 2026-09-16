@@ -68,6 +68,55 @@ int Application::run()
         if (
             layout_.fullscreen_on_start
         ) {
+            /*
+             * Laisse le compositeur Wayland terminer la configuration
+             * initiale de la surface avant de basculer en plein écran.
+             * Constaté sur le terrain : sans ce délai, la fenêtre se
+             * retrouve minuscule dans le coin supérieur gauche au
+             * démarrage — SDL_SetWindowFullscreen() appelé juste après
+             * SDL_CreateWindow() peut s'exécuter avant que le compositeur
+             * n'ait communiqué la taille réelle de la sortie, cette
+             * négociation nécessitant un aller-retour du protocole Wayland
+             * (donc de la boucle d'événements, qui n'a pas encore tourné
+             * à cet instant). Un simple rebasculement manuel (touche F
+             * deux fois) suffisait à corriger la géométrie a posteriori,
+             * ce qui confirme qu'il ne manque qu'un peu de délai, pas une
+             * vraie fenêtre trop petite. On attend donc ici la première
+             * confirmation d'affichage de la fenêtre (ou, à défaut, un
+             * plafond de 500 ms pour ne jamais bloquer indéfiniment)
+             * avant le seul et unique appel à toggle_fullscreen().
+             */
+            const auto fullscreen_deadline =
+                std::chrono::steady_clock::now() +
+                std::chrono::milliseconds(500);
+
+            SDL_Event settle_event{};
+
+            while (
+                std::chrono::steady_clock::now() <
+                fullscreen_deadline
+            ) {
+                const bool got_event =
+                    SDL_WaitEventTimeout(
+                        &settle_event,
+                        50
+                    ) != 0;
+
+                if (
+                    got_event &&
+                    settle_event.type ==
+                        SDL_WINDOWEVENT &&
+                    (
+                        settle_event.window.event ==
+                            SDL_WINDOWEVENT_SHOWN ||
+                        settle_event.window.event ==
+                            SDL_WINDOWEVENT_EXPOSED
+                    )
+                ) {
+                    break;
+                }
+            }
+
             window_->toggle_fullscreen();
         }
 

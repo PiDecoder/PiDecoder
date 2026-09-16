@@ -83,6 +83,44 @@ puisque sur ces images userconfig.service *remplace* getty@tty1, désactivé.
 Deux vérifications ont été ajoutées en fin de construction : que l'assistant
 est bien masqué, et que l'utilisateur de l'image existe toujours.
 
+### Retour terrain : fermer la fenêtre laissait l'écran vide pour de bon
+
+Une fermeture de la fenêtre (raccourci du compositeur, par ex. Alt+F4 lié
+par défaut sous labwc) fait quitter le processus proprement (code 0). Or
+`pidecoder.service` avait `Restart=on-failure` : une sortie propre n'étant
+pas un « échec » au sens systemd, le service ne redémarrait pas — écran
+vide, sans la moindre erreur dans les journaux pour expliquer pourquoi.
+
+Corrigé en passant `pidecoder.service` en `Restart=always` : ce service est
+un mur d'images qui doit rester affiché en permanence, peu importe la
+raison de son arrêt. Le garde-fou contre un vrai plantage en boucle (voir
+plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
+défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
+`Restart=`, qui l'assure, et il n'a pas été touché.
+
+### Retour terrain : fenêtre minuscule dans le coin au démarrage, corrigée par F puis F
+
+Au premier lancement, la fenêtre s'affichait en tout petit dans le coin
+supérieur haut gauche au lieu de tout l'écran, malgré le plein écran activé
+en configuration — un rebasculement manuel (touche F deux fois) suffisait
+à corriger la géométrie.
+
+Cause : `SDL_SetWindowFullscreen()` était appelé juste après
+`SDL_CreateWindow()`, sans qu'aucun événement SDL n'ait encore été traité.
+Sous Wayland, la taille réelle de la sortie n'est communiquée au client
+qu'après un aller-retour du protocole (configuration de la surface), qui ne
+se produit qu'en pompant les événements — ce qui n'avait pas encore eu lieu
+à cet instant précis. Le rebasculement manuel fonctionnait simplement parce
+que le temps de l'appuyer, cet aller-retour avait eu le temps de se faire.
+
+Corrigé dans `Application::run()` : on attend maintenant la confirmation
+d'affichage de la fenêtre (événement SDL `SHOWN`/`EXPOSED`, avec un plafond
+de 500 ms pour ne jamais bloquer indéfiniment si cet événement n'arrivait
+pas) avant le seul et unique appel à `toggle_fullscreen()` au démarrage.
+
+**Ces deux correctifs touchent le C++** (`Application.cpp` et
+`pidecoder.service.in`) : recompilation nécessaire (`sudo ./scripts/install.sh`).
+
 ### Retour terrain : le curseur de souris ne disparaissait plus
 
 Le curseur restait affiché en permanence au milieu de la mosaïque, même
