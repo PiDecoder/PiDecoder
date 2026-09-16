@@ -116,6 +116,24 @@ programmé sur l'échéance réelle a remplacé la boucle d'affichage seconde
 par seconde ; rien n'a changé côté sécurité, seul l'affichage a été
 simplifié.
 
+### Corrections après quatrième retour terrain : le popup réapparaissait juste après avoir cliqué Confirmer
+
+Cause trouvée : une course entre la confirmation et le script détaché qui
+gère le rétablissement automatique. Cliquer sur « Confirmer » touchait
+uniquement un fichier sentinelle ; c'est la boucle du script détaché,
+côté serveur, qui remarque ce fichier et fait passer le statut d'
+« applied » à « confirmed » — mais cette boucle ne vérifie qu'une fois par
+seconde. Le navigateur, lui, rafraîchit `/api/network/status` tout de
+suite après la confirmation : pendant cette fenêtre pouvant aller jusqu'à
+une seconde, le statut était donc encore « applied », et le popup qu'on
+venait juste de fermer réapparaissait aussitôt. `confirm_change()` met
+désormais à jour le fichier de statut immédiatement (en plus du fichier
+sentinelle, toujours nécessaire pour que le script détaché s'arrête sans
+tout annuler), ce qui supprime complètement la fenêtre de course. Vérifié
+de bout en bout avec un vrai changement d'IP simulé (délai raccourci pour
+le test uniquement, jamais en production) : confirmation immédiatement
+prise en compte, pas de retour du popup.
+
 ### Mise à jour en un clic et configuration réseau depuis la page Web
 
 Demande explicite de l'utilisateur : un bouton de vérification/installation

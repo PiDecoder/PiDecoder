@@ -54,7 +54,12 @@
   that visibly counted down was misleading) in favor of a static popup
   with just a "Confirm" button; the 120s auto-revert safety net is
   unchanged, only the UI display was simplified — see "Follow-up after
-  third field feedback" under that section.
+  third field feedback" under that section. A fourth round fixed a race
+  where the popup could reappear right after clicking Confirm
+  (`confirm_change()` now updates the status file immediately instead of
+  waiting up to a second for the detached script's own poll loop to
+  notice) — see "Follow-up after fourth field feedback" under that
+  section.
 
 ## v1.2 — HTTPS (step 1/2 confirmed working on the Pi; step 2 abandoned)
 
@@ -631,6 +636,30 @@ deadline (`renderNetworkPending`/`scheduleNetworkPendingRevertCheck` in
 `index.html`. Verified via `node --check` syntax validation and i18n key
 parity (294 keys, FR/EN) — same testing-limit caveat as above applies to
 the actual on-Pi timing/UX.
+
+### Follow-up after fourth field feedback: popup reappearing right after clicking Confirm
+
+The user reported the popup was still there even after clicking to
+confirm and following the redirect link. Root cause: a race between
+confirmation and the detached script's own auto-revert loop. Clicking
+"Confirm" only touched a sentinel file (`confirm_change()` in
+`system_admin.py`); it's the detached script's `for i in $(seq 1
+{PENDING_DELAY_SECONDS}); do sleep 1; ...; done` loop, on the server side,
+that notices that file and flips the status from `"applied"` to
+`"confirmed"` — but that loop only checks once per second. The browser,
+meanwhile, calls `/api/network/status` again immediately after the
+confirm POST returns (`networkConfirmPending()` in `app.js`) — during
+that up-to-one-second window the status was still `"applied"`, so
+`pending_change()` still returned it, and the popup that had just been
+dismissed reappeared right away. Fixed by having `confirm_change()` write
+`"confirmed"` to the status file immediately, itself, rather than only
+touching the sentinel and waiting for the detached script's next poll
+tick (the sentinel file is still touched too, since the detached script
+still needs it to know not to revert). This closes the race regardless of
+timing. Verified end-to-end with a simulated IP change (delay shortened
+for the test only, never in shipped code): status reads `None` from
+`pending_change()` immediately after `confirm_change()` returns, no
+window where the popup could reappear.
 
 ## v1.1 — audio support (validated on hardware, merged to `main`)
 

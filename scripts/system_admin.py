@@ -548,10 +548,35 @@ def pending_change(root: Path) -> dict | None:
 
 
 def confirm_change(root: Path, token: str) -> bool:
+    """Confirme un changement réseau/hostname en attente.
+
+    Deux écritures : le fichier sentinelle `.confirmed` (pour que la
+    boucle du script détaché — `start_hostname_change`/`start_ip_change`
+    — s'arrête et n'annule pas le changement), et le fichier de statut
+    lui-même, mis à jour tout de suite ici plutôt que d'attendre que
+    cette boucle s'en aperçoive à sa prochaine seconde de sondage.
+
+    Sans cette seconde écriture immédiate, il y a une course : le
+    navigateur rafraîchit `/api/network/status` dès que cette requête
+    répond (voir `networkConfirmPending()` côté app.js), mais le script
+    détaché peut mettre jusqu'à une seconde à remarquer le fichier
+    sentinelle et à faire passer le statut d'« applied » à « confirmed » —
+    pendant cette fenêtre, `/api/network/status` renvoie donc toujours le
+    changement comme en attente, et le popup de confirmation qu'on vient
+    de fermer réapparaît aussitôt. Confirmé sur le terrain (l'utilisateur
+    voyait le popup revenir juste après avoir cliqué Confirmer).
+    """
     files = _pending_files(root, token)
     if not files['status'].is_file():
         return False
     files['confirm'].touch()
+    try:
+        data = json.loads(files['status'].read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        data = {'kind': None, 'token': token}
+    data['state'] = 'confirmed'
+    data['confirmed_at'] = time.time()
+    _write_status(files['status'], data)
     return True
 
 
