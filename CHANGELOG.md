@@ -144,6 +144,41 @@ plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
 défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
 `Restart=`, qui l'assure, et il n'a pas été touché.
 
+### Retour terrain (suite) : plus de barre de titre, mais le contenu restait toujours confiné dans un coin
+
+Nouvelles photos, cette fois du correctif précédent (masquage forcé des
+décorations) : au démarrage, effectivement plus de barre de titre — la
+fenêtre couvre bien tout l'écran, noir partout. Mais la mosaïque des
+caméras, elle, restait confinée dans un rectangle dans le coin supérieur
+gauche, bien plus petit que l'écran, le reste restant noir (le fond du
+bureau labwc, visible derrière une fenêtre qui n'a en réalité jamais
+changé de taille). Après une pression sur F (retour en fenêtré, barre de
+titre visible), puis une seconde (retour en plein écran), la mosaïque
+restait confinée à peu près à la même taille — cohérent avec une fenêtre
+dont la taille réelle ne suit tout simplement jamais la demande de plein
+écran, quel que soit l'état interne (`fullscreen_`) ou les décorations.
+
+Donc : `SDL_SetWindowFullscreen(..., SDL_WINDOW_FULLSCREEN_DESKTOP)`
+renvoie un succès sous labwc, masque bien la décoration une fois forcée à
+la main (correctif précédent), mais ne redimensionne jamais réellement la
+fenêtre à la taille de l'écran. Le code de rendu (`Renderer::render()`)
+interroge pourtant correctement la taille de la fenêtre à chaque image
+(pas de mise en cache fautive trouvée de ce côté) — le problème est bien
+que cette taille elle-même ne change jamais.
+
+Corrigé en cessant de faire confiance à cette négociation pour la taille :
+`Window::toggle_fullscreen()` interroge maintenant directement le mode
+d'affichage courant de l'écran (`SDL_GetCurrentDisplayMode`) et impose
+explicitement la position (0,0) et la taille de la fenêtre à celles de
+l'écran, en plus de l'appel à `SDL_SetWindowFullscreen()` existant (laissé
+en place au cas où il apporte malgré tout un bénéfice, ex. suspension de
+l'économiseur d'écran). Échec de cette requête ignoré volontairement (pas
+bloquant) : la géométrie retomberait alors sur celle négociée par
+`SDL_SetWindowFullscreen()` seul, comme avant ce correctif.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles au moment de l'écriture — retour terrain nécessaire.
+
 ### Retour terrain (suite) : le double rebasculement ne suffisait pas non plus — la barre de titre restait visible
 
 Capture d'écran à l'appui : après le correctif précédent (rebasculement

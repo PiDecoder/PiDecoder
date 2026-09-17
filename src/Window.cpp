@@ -136,6 +136,53 @@ void Window::toggle_fullscreen()
         window_,
         fullscreen_ ? SDL_FALSE : SDL_TRUE
     );
+
+    if (fullscreen_) {
+        /*
+         * Retour terrain (photos à l'appui) : même sans barre de titre
+         * (correctif ci-dessus), le contenu rendu restait confiné à la
+         * taille de fenêtre d'origine (1280x720), dans un coin — le reste
+         * de l'écran étant simplement le fond du bureau labwc derrière une
+         * fenêtre en réalité jamais redimensionnée. SDL_SetWindowFullscreen
+         * ci-dessus a beau renvoyer un succès, il ne semble donc pas
+         * redimensionner réellement la fenêtre sous ce compositeur — malgré
+         * ce que documente SDL pour SDL_WINDOW_FULLSCREEN_DESKTOP. Plutôt
+         * que de continuer à faire confiance à cette négociation, on impose
+         * ici explicitement la taille et la position de la fenêtre à
+         * celles du mode d'affichage courant. Erreurs ignorées
+         * volontairement (SDL_GetWindowDisplayIndex/SDL_GetCurrentDisplayMode
+         * peuvent échouer sur un système sans écran détecté correctement) :
+         * la géométrie reste alors celle négociée par
+         * SDL_SetWindowFullscreen ci-dessus plutôt que de faire planter
+         * l'application pour ce seul confort visuel.
+         */
+        const int display_index =
+            SDL_GetWindowDisplayIndex(
+                window_
+            );
+
+        SDL_DisplayMode mode{};
+
+        if (
+            display_index >= 0 &&
+            SDL_GetCurrentDisplayMode(
+                display_index,
+                &mode
+            ) == 0
+        ) {
+            SDL_SetWindowPosition(
+                window_,
+                0,
+                0
+            );
+
+            SDL_SetWindowSize(
+                window_,
+                mode.w,
+                mode.h
+            );
+        }
+    }
 }
 
 void Window::make_current()
