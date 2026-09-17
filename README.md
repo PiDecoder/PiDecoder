@@ -57,11 +57,14 @@
 > changed, including when an older browser tab submits a camera without that metadata.
 >
 > The upgrade path, configuration preservation, automatic startup and an 8+ hour continuous run
-> were validated during the release-candidate phase. A fresh installation on a blank Debian 13
-> system, Web configuration restore and a forced-failure installer rollback were also
-> successfully validated.
+> were validated during the release-candidate phase. Web configuration restore and a
+> forced-failure installer rollback were also successfully validated, alongside a fresh-install
+> smoke test of `install.sh` itself on a blank **x86_64** virtual machine — that VM test only
+> exercises the installer's packaging/backup/rollback logic, never the video engine, GPU or
+> Wayland, so its use of a Debian 13 VM does not contradict the Debian 12 (Bookworm) requirement
+> for the actual Raspberry Pi target stated above: the two are unrelated tests of unrelated code
+> paths.
 >
-> The blank-system installation test was performed on an x86_64 virtual machine.
 > Raspberry Pi 5 AArch64 remains the official validated hardware target.
 >
 > The Web administration interface is bilingual (French/English), with a toggle on the login
@@ -363,7 +366,7 @@ Other Linux platforms may work, but they are not yet part of the validated v1.2 
 | Automatic startup after reboot | Passed |
 | Wayland-triggered video startup | Passed |
 | Continuous 8+ hour run | Passed |
-| Fresh installation on blank Debian 13 x86_64 | Passed |
+| Fresh installation on blank Debian 13 x86_64 (generic VM smoke test of `install.sh` only — no GPU/Wayland/video engine, unrelated to the Raspberry Pi Debian 12 requirement above) | Passed |
 | Web configuration export and restore | Passed |
 | Forced-failure installer rollback | Passed |
 | Native PTZ directions, optical zoom and Stop | Passed on Axis Q6074 |
