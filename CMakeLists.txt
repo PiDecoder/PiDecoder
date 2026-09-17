@@ -18,6 +18,25 @@ find_package(nlohmann_json 3.2.0 REQUIRED)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
 
+# Renseignés par install.sh (mêmes valeurs que build-info.json, voir ce
+# script) pour que le titre de la fenêtre du moteur natif affiche le même
+# identifiant de build que la page Web administrateur — sans ça, deux
+# affichages de "version" dans la même application qui ne se recoupent
+# jamais (retour terrain : voir CHANGELOG.md). Vides par défaut : une
+# compilation manuelle sans passer par install.sh (développement local,
+# ni Git ni cette valeur transmise) affiche simplement le numéro de
+# version seul, comme avant.
+set(PIDECODER_BUILD_COMMIT "" CACHE STRING "Hash Git court du commit installé (renseigné par install.sh)")
+set(PIDECODER_BUILD_STAMP "" CACHE STRING "Horodatage de l'installation, format AAMMJJHHMM (renseigné par install.sh)")
+
+if(PIDECODER_BUILD_COMMIT AND PIDECODER_BUILD_STAMP)
+    set(PIDECODER_BUILD_METADATA "+${PIDECODER_BUILD_COMMIT}.${PIDECODER_BUILD_STAMP}")
+elseif(PIDECODER_BUILD_COMMIT)
+    set(PIDECODER_BUILD_METADATA "+${PIDECODER_BUILD_COMMIT}")
+else()
+    set(PIDECODER_BUILD_METADATA "")
+endif()
+
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/pidecoder/Version.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/pidecoder/Version.hpp

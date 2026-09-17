@@ -51,7 +51,8 @@ int Application::run()
 
         const std::string window_title =
             std::string{"PiDecoder v"} +
-            PIDECODER_VERSION_STRING;
+            PIDECODER_VERSION_STRING +
+            PIDECODER_BUILD_METADATA;
 
         window_ =
             std::make_unique<Window>(
@@ -161,6 +162,7 @@ int Application::run()
         std::cout
             << "PiDecoder v"
             << PIDECODER_VERSION_STRING
+            << PIDECODER_BUILD_METADATA
             << " lancé avec "
             << players_.size()
             << " caméra(s)."

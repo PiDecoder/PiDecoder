@@ -1,2 +1,5 @@
 #pragma once
 #define PIDECODER_VERSION_STRING "@PROJECT_VERSION@"
+// Suffixe "+commit.horodatage" (métadonnées de build, au sens semver) —
+// vide sur une compilation manuelle sans install.sh, voir CMakeLists.txt.
+#define PIDECODER_BUILD_METADATA "@PIDECODER_BUILD_METADATA@"

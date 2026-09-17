@@ -44,6 +44,7 @@ int main(
         std::cerr
             << "PiDecoder v"
             << PIDECODER_VERSION_STRING
+            << PIDECODER_BUILD_METADATA
             << "\nErreur : "
             << exception.what()
             << "\n";

@@ -608,6 +608,14 @@ fi
 # verify-source.sh) mais pourrait manquer sur une archive dézippée sans
 # historique Git ; dans ce cas le champ reste vide plutôt que de faire
 # échouer l'installation pour un simple confort de diagnostic.
+#
+# Ces deux mêmes valeurs sont aussi passées à CMake plus bas
+# (PIDECODER_BUILD_COMMIT/PIDECODER_BUILD_STAMP) pour que le titre de la
+# fenêtre du moteur natif affiche le même identifiant que la page Web —
+# une seule mesure (celle prise ici, une fois), pas deux calculs
+# séparés qui pourraient légèrement diverger (quelques secondes d'écart
+# entre la compilation Python et C++, sans conséquence ici, mais autant
+# n'avoir qu'une seule source de vérité).
 BUILD_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --short=7 HEAD 2>/dev/null || true)"
 BUILD_STAMP="$(date +%y%m%d%H%M)"
 cat > "$STAGED_ROOT/build-info.json" <<JSON
@@ -626,7 +634,9 @@ export LD_LIBRARY_PATH="/usr/local/lib/aarch64-linux-gnu:/usr/local/lib:${LD_LIB
 
 cmake -S "$TARGET" -B "$TARGET/build" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="$TARGET"
+    -DCMAKE_INSTALL_PREFIX="$TARGET" \
+    -DPIDECODER_BUILD_COMMIT="$BUILD_COMMIT" \
+    -DPIDECODER_BUILD_STAMP="$BUILD_STAMP"
 cmake --build "$TARGET/build" -j"$(nproc)"
 cmake --install "$TARGET/build" --prefix "$TARGET"
 
@@ -803,6 +813,16 @@ HOST_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$HOST_ADDRESS" ]] || HOST_ADDRESS="ADRESSE_DU_RASPBERRY_PI"
 
 printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
+# Rappel immédiat dans le terminal de ce qui vient d'être installé — sans
+# ça, "PiDecoder 1.2.0 est installé" (INSTALLER_VERSION, une constante) est
+# identique après CHAQUE installation, qu'il y ait eu du nouveau code ou
+# pas, ce qui a déjà causé une confusion sur le terrain ("suis-je bien sur
+# la bonne version ?", voir CHANGELOG.md). $BUILD_COMMIT/$BUILD_STAMP sont
+# les mêmes valeurs que celles écrites dans build-info.json juste plus
+# haut, donc affichées ici sans nouvel appel Git.
+if [[ -n "$BUILD_COMMIT" ]]; then
+    printf 'Build installé      : %s (commit %s)\n' "$BUILD_STAMP" "$BUILD_COMMIT"
+fi
 if [[ "$NO_HTTPS" -eq 1 ]]; then
     printf 'Administration Web : http://%s:%s (HTTPS désactivé, --no-https)\n' "$HOST_ADDRESS" "$WEB_PORT"
 else

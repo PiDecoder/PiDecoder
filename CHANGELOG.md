@@ -144,6 +144,40 @@ plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
 défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
 `Restart=`, qui l'assure, et il n'a pas été touché.
 
+### Retour terrain (suite) : le double rebasculement ne suffisait pas non plus — la barre de titre restait visible
+
+Capture d'écran à l'appui : après le correctif précédent (rebasculement
+désactivation/réactivation programmatique), la fenêtre affichait
+« PiDecoder v1.2.0 » dans une vraie barre de titre, en haut d'une fenêtre
+proche de la taille de l'écran mais clairement **encore décorée** — donc
+pas réellement en plein écran côté compositeur, quelle que soit sa taille.
+`SDL_SetWindowFullscreen(..., SDL_WINDOW_FULLSCREEN_DESKTOP)` avait
+pourtant renvoyé un succès (sinon l'exception associée aurait fait planter
+l'application au démarrage, ce qui n'était pas le cas).
+
+Conclusion : sous labwc, un retour de succès de `SDL_SetWindowFullscreen()`
+ne garantit pas que les décorations soient masquées — contrairement à ce
+que documente SDL pour `SDL_WINDOW_FULLSCREEN_DESKTOP`. Corrigé en forçant
+explicitement `SDL_SetWindowBordered()` en plus, dans `Window::
+toggle_fullscreen()` : ne plus compter uniquement sur la négociation
+automatique du compositeur pour cet aspect précis.
+
+Et pendant qu'on y est : le numéro de version affiché dans cette même
+barre de titre (« PiDecoder v1.2.0 ») ne changeait jamais d'une
+installation à l'autre — sans lien avec les métadonnées de build ajoutées
+plus haut pour la page Web, puisque c'est une constante C++ compilée
+(`PIDECODER_VERSION_STRING`, définie par CMake à partir de `PROJECT_VERSION`
+dans `CMakeLists.txt`), totalement indépendante de `build-info.json`
+(Python). D'où la confusion : deux affichages de « version » dans la même
+application, jamais reliés entre eux. `install.sh` transmet maintenant les
+mêmes commit/horodatage à CMake (`PIDECODER_BUILD_COMMIT`/
+`PIDECODER_BUILD_STAMP`), qui les ajoute au même format `+commit.horodatage`
+au titre de la fenêtre — une seule mesure prise par `install.sh`, partagée
+par les deux affichages plutôt que deux calculs séparés.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles au moment de l'écriture — retour terrain nécessaire.
+
 ### Retour terrain (suite) : le délai SHOWN/EXPOSED ne suffisait pas non plus sur matériel réel
 
 Le correctif précédent (attendre l'événement SDL `SHOWN`/`EXPOSED` avant le

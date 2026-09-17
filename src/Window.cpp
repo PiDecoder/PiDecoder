@@ -121,6 +121,21 @@ void Window::toggle_fullscreen()
             SDL_GetError()
         );
     }
+
+    /*
+     * SDL_WINDOW_FULLSCREEN_DESKTOP est censé masquer les décorations
+     * (barre de titre) tout seul — constaté sur le terrain sous labwc :
+     * la barre de titre restait affichée malgré un retour de succès de
+     * SDL_SetWindowFullscreen() ci-dessus (voir CHANGELOG.md, capture
+     * d'écran montrant "PiDecoder v1.2.0" en haut d'une fenêtre pourtant
+     * censée être plein écran). On force donc explicitement l'état des
+     * bordures en plus, plutôt que de compter uniquement sur la
+     * négociation automatique du compositeur.
+     */
+    SDL_SetWindowBordered(
+        window_,
+        fullscreen_ ? SDL_FALSE : SDL_TRUE
+    );
 }
 
 void Window::make_current()
