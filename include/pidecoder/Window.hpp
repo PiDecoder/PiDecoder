@@ -35,6 +35,15 @@ private:
     SDL_GLContext gl_context_{nullptr};
 
     bool fullscreen_{false};
+
+    /*
+     * Taille demandée à la construction (fenêtré) — utilisée par
+     * toggle_fullscreen() pour restaurer une taille sensée en sortant du
+     * plein écran simulé (voir ce fichier, .cpp) plutôt que de laisser la
+     * fenêtre à la taille de l'écran une fois "démaximisée".
+     */
+    int windowed_width_{0};
+    int windowed_height_{0};
 };
 
 } // namespace pidecoder

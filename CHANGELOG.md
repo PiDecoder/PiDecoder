@@ -144,6 +144,40 @@ plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
 défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
 `Restart=`, qui l'assure, et il n'a pas été touché.
 
+### Retour terrain (suite) : forcer la taille après coup ne suffisait toujours pas — changement d'approche
+
+Nouvelles photos, cette fois du correctif précédent (imposer explicitement
+la taille et la position de la fenêtre via `SDL_SetWindowSize`/
+`SDL_SetWindowPosition` après l'appel à `SDL_SetWindowFullscreen`) :
+identique à avant, contenu toujours confiné dans un coin. Donc même un
+`SDL_SetWindowSize()` explicite, appelé juste après, n'a aucun effet.
+
+Hypothèse retenue cette fois (aucun accès au matériel réel pour la
+vérifier directement, mais cohérente avec le comportement observé) : sous
+Wayland, une fois la surface passée dans l'état « fullscreen » du protocole
+xdg-shell (ce que fait `SDL_SetWindowFullscreen`), c'est le compositeur
+seul qui contrôle sa taille — une demande de redimensionnement du client
+pendant que cet état est actif est un no-op, quel que soit le moment où
+elle est faite. Les trois tentatives précédentes (délai, double
+rebasculement, resize forcé après coup) partageaient toutes le même point
+commun : elles continuaient à demander cet état réel à SDL/au compositeur.
+
+Changement d'approche cette fois : `Window::toggle_fullscreen()` ne demande
+plus l'état « fullscreen » réel du tout. Il simule le plein écran lui-même
+— fenêtre sans bordure, positionnée en (0,0), redimensionnée à la
+résolution de l'écran (lue via `SDL_GetCurrentDisplayMode`) — visuellement
+indiscernable pour un mur d'images toujours affiché, sans dépendre de cette
+négociation. Une sortie du plein écran restaure la taille fenêtrée d'origine
+plutôt que de laisser la fenêtre à la taille de l'écran.
+
+Chaque bascule journalise maintenant sa géométrie avant/après
+(`journalctl -u pidecoder.service`) : si cette quatrième tentative ne
+suffit toujours pas, on aura enfin les tailles réelles vues par SDL plutôt
+que de continuer à deviner à distance sans matériel pour vérifier.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles au moment de l'écriture — retour terrain nécessaire.
+
 ### Retour terrain (suite) : plus de barre de titre, mais le contenu restait toujours confiné dans un coin
 
 Nouvelles photos, cette fois du correctif précédent (masquage forcé des

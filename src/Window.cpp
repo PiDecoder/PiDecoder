@@ -1,5 +1,6 @@
 #include "pidecoder/Window.hpp"
 
+#include <iostream>
 #include <stdexcept>
 #include <utility>
 
@@ -10,6 +11,8 @@ Window::Window(
     const int width,
     const int height
 )
+    : windowed_width_(width),
+      windowed_height_(height)
 {
     SDL_GL_SetAttribute(
         SDL_GL_DOUBLEBUFFER,
@@ -106,56 +109,29 @@ void Window::toggle_fullscreen()
 {
     fullscreen_ = !fullscreen_;
 
-    if (
-        SDL_SetWindowFullscreen(
-            window_,
-            fullscreen_
-                ? SDL_WINDOW_FULLSCREEN_DESKTOP
-                : 0
-        ) != 0
-    ) {
-        fullscreen_ = !fullscreen_;
-
-        throw std::runtime_error(
-            std::string{"SDL_SetWindowFullscreen: "} +
-            SDL_GetError()
-        );
-    }
-
     /*
-     * SDL_WINDOW_FULLSCREEN_DESKTOP est censé masquer les décorations
-     * (barre de titre) tout seul — constaté sur le terrain sous labwc :
-     * la barre de titre restait affichée malgré un retour de succès de
-     * SDL_SetWindowFullscreen() ci-dessus (voir CHANGELOG.md, capture
-     * d'écran montrant "PiDecoder v1.2.0" en haut d'une fenêtre pourtant
-     * censée être plein écran). On force donc explicitement l'état des
-     * bordures en plus, plutôt que de compter uniquement sur la
-     * négociation automatique du compositeur.
+     * Historique (voir CHANGELOG.md) : trois tentatives précédentes en
+     * s'appuyant sur SDL_SetWindowFullscreen(..., SDL_WINDOW_FULLSCREEN_DESKTOP)
+     * — délai avant l'appel, double rebasculement, puis forcer la taille en
+     * plus — sont toutes restées sans effet sur le terrain (photos à
+     * l'appui : la fenêtre ne fait jamais réellement la taille de
+     * l'écran). Hypothèse la plus probable pour expliquer que même un
+     * SDL_SetWindowSize() explicite après coup n'ait rien changé : sous
+     * Wayland, une fois la surface dans l'état "fullscreen" du protocole
+     * xdg-shell, c'est le compositeur seul qui en contrôle la taille — une
+     * demande de resize du client est alors un no-op tant que cet état
+     * reste actif. On arrête donc de demander cet état réel : on simule le
+     * plein écran nous-mêmes (fenêtre sans bordure, positionnée en (0,0),
+     * redimensionnée à la résolution de l'écran) — visuellement
+     * indiscernable pour un mur d'images toujours affiché, sans dépendre
+     * de cette négociation avec le compositeur.
+     *
+     * Chaque bascule journalise sa géométrie avant/après (voir plus bas) :
+     * si ce correctif ne suffit toujours pas, `journalctl -u
+     * pidecoder.service` donnera directement les tailles réelles vues par
+     * SDL plutôt que de continuer à deviner à distance.
      */
-    SDL_SetWindowBordered(
-        window_,
-        fullscreen_ ? SDL_FALSE : SDL_TRUE
-    );
-
     if (fullscreen_) {
-        /*
-         * Retour terrain (photos à l'appui) : même sans barre de titre
-         * (correctif ci-dessus), le contenu rendu restait confiné à la
-         * taille de fenêtre d'origine (1280x720), dans un coin — le reste
-         * de l'écran étant simplement le fond du bureau labwc derrière une
-         * fenêtre en réalité jamais redimensionnée. SDL_SetWindowFullscreen
-         * ci-dessus a beau renvoyer un succès, il ne semble donc pas
-         * redimensionner réellement la fenêtre sous ce compositeur — malgré
-         * ce que documente SDL pour SDL_WINDOW_FULLSCREEN_DESKTOP. Plutôt
-         * que de continuer à faire confiance à cette négociation, on impose
-         * ici explicitement la taille et la position de la fenêtre à
-         * celles du mode d'affichage courant. Erreurs ignorées
-         * volontairement (SDL_GetWindowDisplayIndex/SDL_GetCurrentDisplayMode
-         * peuvent échouer sur un système sans écran détecté correctement) :
-         * la géométrie reste alors celle négociée par
-         * SDL_SetWindowFullscreen ci-dessus plutôt que de faire planter
-         * l'application pour ce seul confort visuel.
-         */
         const int display_index =
             SDL_GetWindowDisplayIndex(
                 window_
@@ -163,13 +139,26 @@ void Window::toggle_fullscreen()
 
         SDL_DisplayMode mode{};
 
-        if (
+        const bool have_mode =
             display_index >= 0 &&
             SDL_GetCurrentDisplayMode(
                 display_index,
                 &mode
-            ) == 0
-        ) {
+            ) == 0;
+
+        std::cerr
+            << "[Window] passage en plein ecran simule : display_index="
+            << display_index
+            << " mode="
+            << (have_mode ? std::to_string(mode.w) + "x" + std::to_string(mode.h) : "inconnu")
+            << std::endl;
+
+        SDL_SetWindowBordered(
+            window_,
+            SDL_FALSE
+        );
+
+        if (have_mode) {
             SDL_SetWindowPosition(
                 window_,
                 0,
@@ -181,8 +170,55 @@ void Window::toggle_fullscreen()
                 mode.w,
                 mode.h
             );
+        } else {
+            /*
+             * Repli si la résolution de l'écran n'a pas pu être lue
+             * (rare) : au moins retenter la négociation SDL standard
+             * plutôt que de laisser la fenêtre à sa taille fenêtrée.
+             */
+            SDL_SetWindowFullscreen(
+                window_,
+                SDL_WINDOW_FULLSCREEN_DESKTOP
+            );
         }
+    } else {
+        SDL_SetWindowFullscreen(
+            window_,
+            0
+        );
+
+        SDL_SetWindowBordered(
+            window_,
+            SDL_TRUE
+        );
+
+        SDL_SetWindowPosition(
+            window_,
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED
+        );
+
+        SDL_SetWindowSize(
+            window_,
+            windowed_width_,
+            windowed_height_
+        );
     }
+
+    int actual_width = 0;
+    int actual_height = 0;
+
+    SDL_GetWindowSize(
+        window_,
+        &actual_width,
+        &actual_height
+    );
+
+    std::cerr
+        << "[Window] apres toggle_fullscreen (fullscreen=" << fullscreen_
+        << ") : taille fenetre=" << actual_width << "x" << actual_height
+        << " taille dessin=" << drawable_width() << "x" << drawable_height()
+        << std::endl;
 }
 
 void Window::make_current()
