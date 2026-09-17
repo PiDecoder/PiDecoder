@@ -1263,7 +1263,10 @@ class H(BaseHTTPRequestHandler):
         if p=='/api/update/status':
             return self.j(sysadmin.update_status(self.server.root))
         if p=='/api/ssh/status':
-            return self.j(sysadmin.ssh_status())
+            return self.j({
+                **sysadmin.ssh_status(),
+                **sysadmin.ssh_password_status(self.server.root),
+            })
         if p=='/api/network/status':
             nmcli_ok=sysadmin.nmcli_available()
             return self.j({
@@ -1713,6 +1716,43 @@ class H(BaseHTTPRequestHandler):
                 if result.returncode!=0:
                     raise ValueError(i18n_t('ssh.disable_failed',self.lang(),error=(result.stderr or result.stdout or '').strip()))
                 return self.j({'ok':True})
+            if p=='/api/ssh/change-password':
+                # Même mécanisme d'autorisation que /api/change-password
+                # (redemander le mot de passe Web actuel) : le mot de passe
+                # SSH étant, par construction, celui que l'utilisateur ne
+                # connaît peut-être pas encore par cœur (valeur par défaut
+                # de l'image), on ne peut pas lui redemander LUI en
+                # confirmation — le mot de passe Web joue ce rôle à sa place.
+                d=self.body();a=self.authdoc()
+                current=str(d.get('current_password',''))
+                new_password=str(d.get('new_password',''))
+                confirmation=str(d.get('confirm_password',''))
+                lang=self.lang()
+
+                if not verify(current,a):
+                    raise ValueError(i18n_t('password.current_incorrect',lang))
+
+                if not new_password or not confirmation:
+                    raise ValueError(i18n_t('password.must_be_typed_twice',lang))
+
+                if len(new_password)<8:
+                    raise ValueError(i18n_t('password.too_short',lang))
+
+                if new_password!=confirmation:
+                    raise ValueError(i18n_t('password.mismatch',lang))
+
+                if any(ch in new_password for ch in ('\n','\r','\x00')):
+                    raise ValueError(i18n_t('ssh.password_invalid_chars',lang))
+
+                username=sysadmin.get_service_user()
+                if not username:
+                    raise ValueError(i18n_t('ssh.no_service_user',lang))
+
+                result=sysadmin.set_ssh_password(self.server.root,username,new_password)
+                if result.returncode!=0:
+                    raise ValueError(i18n_t('ssh.password_change_failed',lang,error=(result.stderr or result.stdout or '').strip()))
+
+                return self.j({'ok':True,'message':i18n_t('ssh.password_changed',lang)})
             if p=='/api/network/hostname':
                 d=self.body()
                 try:

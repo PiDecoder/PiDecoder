@@ -2,6 +2,72 @@
 
 ## 1.3 (nouveau — image SD, en cours de validation sur matériel réel)
 
+### Onglet Sécurité regroupé, et changement du mot de passe SSH depuis l'interface Web (demande explicite)
+
+Deux demandes distinctes, traitées ensemble parce qu'elles touchent le
+même onglet.
+
+**Regroupement de l'onglet Sécurité** : les 3 panneaux « Certificat
+HTTPS », « Accès HTTP » et « Ports de l'administration Web » — qui
+parlaient en réalité tous du même sujet (comment on atteint l'interface
+d'administration) — sont maintenant réunis dans un seul panneau « Accès à
+l'interface Web », avec des sous-titres à l'intérieur plutôt que 3 cartes
+séparées répétant chacune un `<h2>`. Le mot de passe administrateur et
+l'accès SSH restent des panneaux à part : ce sont des sujets réellement
+différents (authentification / accès à distance en ligne de commande).
+
+**Changer le mot de passe SSH depuis l'interface Web** : le compte Linux
+utilisé pour SSH (et pour la session graphique) a un identifiant et un mot
+de passe par défaut connus (`pidecoder`/`pidecoder`, voir
+`build-image.sh`), identiques sur toute image flashée sans personnalisation
+de `--user-password`. Jusqu'ici, le changer nécessitait de se connecter en
+SSH et de taper `passwd` — pas franchement accessible tant qu'on n'a pas
+encore accès à un shell, et facile à oublier de faire. Le panneau « Accès
+SSH » propose maintenant un petit formulaire (mot de passe administrateur
+Web actuel + nouveau mot de passe SSH deux fois, même présentation que le
+changement de mot de passe Web) qui appelle `chpasswd` sur le compte Linux
+concerné, hors du bac à sable de `pidecoder-config.service` — même
+mécanisme que l'activation/désactivation de SSH. Le mot de passe transite
+uniquement par l'entrée standard de `chpasswd`, jamais par une ligne de
+commande ni par les arguments d'un process (donc invisible à un `ps` local
+pendant l'opération), exactement comme `install.sh --web-password-stdin`
+pour le mot de passe Web initial.
+
+Un petit repère est ajouté pour ne pas oublier : un fichier d'état
+(`config/ssh-security.json`) retient si ce formulaire a déjà été utilisé
+au moins une fois, et un bandeau d'avertissement apparaît dans le panneau
+SSH tant que ce n'est pas le cas — pas une certitude absolue (un
+changement fait à la main avec `passwd` en SSH n'est pas détecté), juste
+un rappel pour le cas le plus probable : quelqu'un active SSH sans être
+passé par ce nouveau formulaire.
+
+**Ce qui n'est volontairement pas fait** : changer le *nom d'utilisateur*
+Linux depuis l'interface Web. Contrairement au mot de passe, renommer un
+compte Linux touche son dossier personnel, la propriété de fichiers dans
+`/opt/pidecoder`, et surtout le `User=` du service vidéo
+(`pidecoder.service`) — sur un système qui tourne, avec une session
+graphique active sur ce même compte (autologin tty1). Le risque de casser
+quelque chose (ou de se retrouver bloqué hors de la session graphique) est
+réel, pour un gain limité : le nom d'utilisateur n'est pas un secret comme
+l'est un mot de passe. Le seul moyen resté disponible pour choisir un autre
+nom est celui qui existe déjà : `--user`/`--user-password` sur
+`build-image.sh`, au moment de fabriquer l'image — un choix fait une fois,
+pas un réglage à changer après coup sur un système déjà installé.
+
+Une clé SSH plutôt qu'un mot de passe serait la meilleure protection à
+terme, mais volontairement pas traitée ici (demande explicite de l'utili-
+sateur de ne pas s'y attarder maintenant) — SSH reste de toute façon pensé
+comme un accès d'appoint, à activer au besoin puis désactiver une fois le
+dépannage terminé (bouton déjà existant, voir plus bas).
+
+**Changement Python/JS/HTML uniquement** : aucun changement C++, donc
+`sudo bash scripts/sync-dev.sh` suffit (pas besoin de
+`scripts/install.sh`). Non testé en conditions réelles sur le Pi au moment
+de l'écriture (le bac à sable de développement ne peut pas lancer
+`systemd-run`/`chpasswd`) — retour terrain nécessaire, en particulier pour
+confirmer que `chpasswd` fonctionne bien via `systemd-run --pipe` avec le
+mot de passe transmis sur l'entrée standard.
+
 ### Retour terrain : le correctif plein écran fonctionne sur Lite, mais la barre des tâches restait visible sur Desktop
 
 **Confirmé sur le terrain** : sur l'image Lite, la fenêtre créée directement

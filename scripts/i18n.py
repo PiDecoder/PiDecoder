@@ -185,6 +185,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         'fr': 'Échec de la désactivation de SSH : {error}',
         'en': 'Failed to disable SSH: {error}',
     },
+    'ssh.password_invalid_chars': {
+        'fr': 'Le mot de passe ne peut pas contenir de retour à la ligne.',
+        'en': 'The password cannot contain a line break.',
+    },
+    'ssh.no_service_user': {
+        'fr': 'Impossible de déterminer le compte Linux à modifier (installation incomplète ?).',
+        'en': 'Could not determine which Linux account to change (incomplete installation?).',
+    },
+    'ssh.password_change_failed': {
+        'fr': 'Échec du changement de mot de passe SSH : {error}',
+        'en': 'Failed to change the SSH password: {error}',
+    },
+    'ssh.password_changed': {
+        'fr': 'Mot de passe SSH changé.',
+        'en': 'SSH password changed.',
+    },
     'network.invalid_hostname': {
         'fr': 'Nom d\'hôte invalide (lettres, chiffres et tirets, 63 caractères maximum)',
         'en': 'Invalid hostname (letters, digits and hyphens, 63 characters max)',

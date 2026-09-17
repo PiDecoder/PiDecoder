@@ -1218,6 +1218,101 @@ async function changePwd(){
   }
 }
 
+/*
+ * Même schéma que validatePasswordChange()/changePwd() ci-dessus (mot de
+ * passe administrateur Web), pour le mot de passe SSH — voir
+ * config-web.py, /api/ssh/change-password : le mot de passe « actuel »
+ * redemandé ici est le mot de passe Web (sert de confirmation d'identité),
+ * pas le mot de passe SSH lui-même, puisque c'est précisément celui-là
+ * qu'on cherche à changer et que l'utilisateur ne connaît peut-être pas
+ * encore par cœur (valeur par défaut de l'image).
+ */
+function validateSshPasswordChange(){
+  const current=sshCurrentWebPassword.value;
+  const first=sshNewPassword.value;
+  const second=sshConfirmPassword.value;
+
+  sshNewPassword.classList.remove('password-valid','password-invalid');
+  sshConfirmPassword.classList.remove('password-valid','password-invalid');
+  sshPasswordStatus.className='muted';
+  sshPasswordStatus.textContent='';
+  sshPasswordButton.disabled=true;
+
+  if(!current && !first && !second){
+    return false;
+  }
+
+  if(!current){
+    sshPasswordStatus.className='password-status-error';
+    sshPasswordStatus.textContent=t('password.current_required');
+    return false;
+  }
+
+  if(!first || !second){
+    sshPasswordStatus.className='password-status-error';
+    sshPasswordStatus.textContent=t('password.twice_required');
+    return false;
+  }
+
+  if(first.length<8){
+    sshNewPassword.classList.add('password-invalid');
+    sshConfirmPassword.classList.add('password-invalid');
+    sshPasswordStatus.className='password-status-error';
+    sshPasswordStatus.textContent=t('password.min_length');
+    return false;
+  }
+
+  if(first!==second){
+    sshNewPassword.classList.add('password-invalid');
+    sshConfirmPassword.classList.add('password-invalid');
+    sshPasswordStatus.className='password-status-error';
+    sshPasswordStatus.textContent=t('password.mismatch_client');
+    return false;
+  }
+
+  sshNewPassword.classList.add('password-valid');
+  sshConfirmPassword.classList.add('password-valid');
+  sshPasswordStatus.className='password-status-ok';
+  sshPasswordStatus.textContent=t('password.match_ok');
+  sshPasswordButton.disabled=false;
+  return true;
+}
+
+async function sshChangePassword(){
+  if(!validateSshPasswordChange()){
+    return;
+  }
+
+  const button=sshPasswordButton;
+  button.disabled=true;
+  button.innerHTML=`<span class="spinner"></span>${esc(t('password.changing'))}`;
+
+  try{
+    await api('/api/ssh/change-password',{
+      method:'POST',
+      body:JSON.stringify({
+        current_password:sshCurrentWebPassword.value,
+        new_password:sshNewPassword.value,
+        confirm_password:sshConfirmPassword.value
+      })
+    });
+
+    sshCurrentWebPassword.value='';
+    sshNewPassword.value='';
+    sshConfirmPassword.value='';
+    validateSshPasswordChange();
+    toast(t('ssh.password_changed_toast'));
+    sshRefreshStatus();
+
+  }catch(error){
+    toast(error.message,true);
+
+  }finally{
+    button.textContent=t('ssh.password_apply_button');
+    validateSshPasswordChange();
+  }
+}
+
 function renderTlsStatus(r){
   const active=!!r.https_active;
   tlsToggleButton.textContent=active?t('sec.tls_disable_button'):t('sec.tls_enable_button');
@@ -1354,6 +1449,12 @@ async function sshRefreshStatus(){
 }
 
 function renderSshStatus(r){
+  // Avertissement indépendant du support/de l'état de SSH lui-même : le
+  // mot de passe du compte Linux compte aussi pour la session graphique
+  // locale, donc reste pertinent à signaler même si SSH n'est pas
+  // disponible sur ce système (voir ssh_password_status() côté serveur).
+  sshPasswordWarning.classList.toggle('hidden',!!r.password_changed);
+
   if(!r.supported){
     sshToggleButton.disabled=true;
     sshStatus.textContent=t('ssh.unsupported');
@@ -2412,6 +2513,10 @@ async function copyDiagnostics(){
 oldp.addEventListener('input',validatePasswordChange);
 newp.addEventListener('input',validatePasswordChange);
 confirmp.addEventListener('input',validatePasswordChange);
+
+sshCurrentWebPassword.addEventListener('input',validateSshPasswordChange);
+sshNewPassword.addEventListener('input',validateSshPasswordChange);
+sshConfirmPassword.addEventListener('input',validateSshPasswordChange);
 
 cols.addEventListener('input',mosaicSettingsChanged);
 rows.addEventListener('input',mosaicSettingsChanged);

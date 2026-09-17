@@ -374,6 +374,69 @@ def set_ssh_enabled(enabled: bool) -> subprocess.CompletedProcess:
     return run_sync_unsandboxed(f'systemctl {action} --now ssh', timeout=15)
 
 
+def _ssh_security_path(root: Path) -> Path:
+    return root / 'config' / 'ssh-security.json'
+
+
+def ssh_password_status(root: Path) -> dict:
+    """Indique si le mot de passe SSH a déjà été changé au moins une fois
+    depuis cette interface (voir set_ssh_password() ci-dessous).
+
+    Ce n'est volontairement pas une vérité absolue : un changement fait à
+    la main en SSH avec `passwd` n'est pas détecté, donc `password_changed`
+    peut rester à `False` même si le mot de passe n'est plus celui par
+    défaut. Le but est simplement d'avertir dans le cas le plus courant —
+    quelqu'un active SSH sans jamais être passé par ce panneau — pas de
+    garantir un état réel qu'on ne peut pas observer depuis ce service.
+    """
+    try:
+        data = json.loads(_ssh_security_path(root).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {'password_changed': False, 'changed_at': None}
+    return {
+        'password_changed': bool(data.get('password_changed', False)),
+        'changed_at': data.get('changed_at'),
+    }
+
+
+def set_ssh_password(root: Path, username: str, new_password: str) -> subprocess.CompletedProcess:
+    """Change le mot de passe Linux de `username` — le même compte que la
+    session graphique (voir get_service_user()), utilisé aussi pour se
+    connecter en SSH — via `chpasswd`, hors du bac à sable de
+    pidecoder-config.service (même principe que set_ssh_enabled()
+    ci-dessus : `chpasswd` a besoin d'écrire /etc/shadow, hors de
+    ReadWritePaths).
+
+    Le mot de passe ne transite jamais par la ligne de commande ni par les
+    arguments d'aucun process (donc invisible à un `ps` local pendant
+    l'opération) : il est transmis par l'entrée standard de la commande
+    `chpasswd` elle-même, au format `utilisateur:motdepasse` qu'elle
+    attend — exactement le même principe que `--web-password-stdin` sur
+    install.sh pour le mot de passe Web initial. `username` est un nom de
+    compte Linux déjà validé par ailleurs (lu depuis l'unité systemd
+    installée), donc pas besoin de l'échapper pour le shell ici : il ne
+    passe d'ailleurs pas non plus par une ligne de commande, mais par ce
+    même flux stdin, juste avant le `:` séparateur.
+    """
+    payload = f'{username}:{new_password}\n'
+
+    result = subprocess.run(
+        ['systemd-run', '--wait', '--pipe', '--collect', '--quiet',
+         'bash', '-c', 'chpasswd'],
+        input=payload, capture_output=True, text=True, timeout=15,
+    )
+
+    if result.returncode == 0:
+        status_path = _ssh_security_path(root)
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_status(status_path, {
+            'password_changed': True,
+            'changed_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        })
+
+    return result
+
+
 # --------------------------------------------------------------------------
 # Réseau : lecture d'état
 # --------------------------------------------------------------------------
