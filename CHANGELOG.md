@@ -144,6 +144,50 @@ plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
 défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
 `Restart=`, qui l'assure, et il n'a pas été touché.
 
+### Retour terrain (suite) : même le F,F manuel ne corrige plus rien — on arrête de redimensionner après coup
+
+Journal `journalctl -u pidecoder.service` obtenu avec la simulation de plein
+écran de l'entrée précédente : SDL rapporte exactement la bonne taille après
+chaque bascule (`taille fenetre=2560x1440 taille dessin=2560x1440`, pile la
+résolution de l'écran), et pourtant les photos montrent toujours le contenu
+confiné dans un petit rectangle en haut à gauche, à peu près à la taille
+d'origine (1280x720). Puis confirmation décisive : la manipulation manuelle
+touche F deux fois, qui corrigeait fiablement l'affichage lors des tout
+premiers essais sur le terrain, ne corrige plus rien non plus désormais —
+même résultat, même chiffres dans le journal. Le point de départ de l'image
+reste toujours le pixel (0,0), quel que soit le moment ou le nombre de fois
+où on redimensionne.
+
+Ça écarte l'hypothèse d'un problème de délai/timing au démarrage (rien ne
+distinguait plus le F,F manuel, fait bien après le démarrage, de la bascule
+automatique) : sur cette installation (labwc minimal, sans configuration,
+propre à l'image Lite — la version Bureau ne montre pas ce problème),
+**aucun redimensionnement demandé après la création de la fenêtre ne prend
+jamais réellement effet sur l'affichage réel**, ni via un vrai
+`SDL_SetWindowFullscreen()`, ni via un `SDL_SetWindowSize()` manuel, peu
+importe quand il est appelé. SDL se contente de mémoriser la nouvelle
+taille sans que la vraie surface affichée ne change — vraisemblablement une
+limite de cette combinaison précise SDL2/Mesa V3D/labwc pour redimensionner
+une surface EGL après sa création.
+
+Nouvelle approche, plus radicale : on arrête complètement d'essayer de
+redimensionner la fenêtre après coup. La résolution de l'écran est
+maintenant lue (`SDL_GetCurrentDisplayMode`) **avant même de créer la
+fenêtre**, et celle-ci est créée directement sans bordure, positionnée en
+(0,0), à cette taille — plus aucun appel à `toggle_fullscreen()` au
+démarrage. Le correctif précédent (plein écran simulé au sein de
+`toggle_fullscreen()`) reste disponible pour un usage interactif (touche F,
+utile en développement) mais son redimensionnement après coup n'est,
+d'après ce qui vient d'être constaté, pas fiable sur ce type d'installation
+— seule la création directe à la bonne taille l'est.
+
+Journalisation complétée en conséquence : la création de la fenêtre logue
+maintenant elle aussi sa taille demandée et obtenue, pour comparer
+facilement avec les bascules ultérieures si besoin.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles au moment de l'écriture — retour terrain nécessaire.
+
 ### Retour terrain (suite) : forcer la taille après coup ne suffisait toujours pas — changement d'approche
 
 Nouvelles photos, cette fois du correctif précédent (imposer explicitement

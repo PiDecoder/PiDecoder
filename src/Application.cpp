@@ -54,106 +54,58 @@ int Application::run()
             PIDECODER_VERSION_STRING +
             PIDECODER_BUILD_METADATA;
 
+        /*
+         * Retour terrain (voir CHANGELOG.md) : sur cette installation,
+         * aucun redimensionnement demandé après la création de la
+         * fenêtre — ni SDL_SetWindowFullscreen(), ni un
+         * SDL_SetWindowSize() manuel, à aucun moment, y compris bien
+         * après le démarrage (confirmé même via un rebasculement manuel
+         * touche F deux fois une fois l'appli déjà lancée) — ne change
+         * quoi que ce soit à l'affichage réel : SDL rapporte la nouvelle
+         * taille comme acquise, mais le rendu reste confiné à la taille
+         * d'origine. La seule approche qui évite complètement ce
+         * problème est de ne jamais redimensionner : on lit donc la
+         * résolution de l'écran ICI, avant de créer quoi que ce soit, et
+         * la fenêtre est créée directement à cette taille.
+         */
+        int startup_width = 1280;
+        int startup_height = 720;
+        bool start_fullscreen = false;
+
+        if (layout_.fullscreen_on_start) {
+            SDL_DisplayMode mode{};
+
+            if (
+                SDL_GetCurrentDisplayMode(
+                    0,
+                    &mode
+                ) == 0
+            ) {
+                startup_width = mode.w;
+                startup_height = mode.h;
+                start_fullscreen = true;
+            } else {
+                std::cerr
+                    << "[Application] Impossible de lire la résolution de "
+                       "l'écran ("
+                    << SDL_GetError()
+                    << "), démarrage en fenêtré 1280x720."
+                    << std::endl;
+            }
+        }
+
         window_ =
             std::make_unique<Window>(
                 window_title,
-                1280,
-                720
+                startup_width,
+                startup_height,
+                start_fullscreen
             );
 
         renderer_ =
             std::make_unique<Renderer>(
                 *window_
             );
-
-        if (
-            layout_.fullscreen_on_start
-        ) {
-            /*
-             * Laisse le compositeur Wayland terminer la configuration
-             * initiale de la surface avant de basculer en plein écran.
-             * Constaté sur le terrain : sans ce délai, la fenêtre se
-             * retrouve minuscule dans le coin supérieur gauche au
-             * démarrage — SDL_SetWindowFullscreen() appelé juste après
-             * SDL_CreateWindow() peut s'exécuter avant que le compositeur
-             * n'ait communiqué la taille réelle de la sortie, cette
-             * négociation nécessitant un aller-retour du protocole Wayland
-             * (donc de la boucle d'événements, qui n'a pas encore tourné
-             * à cet instant). Un simple rebasculement manuel (touche F
-             * deux fois) suffisait à corriger la géométrie a posteriori,
-             * ce qui confirme qu'il ne manque qu'un peu de délai, pas une
-             * vraie fenêtre trop petite. On attend donc ici la première
-             * confirmation d'affichage de la fenêtre (ou, à défaut, un
-             * plafond de 500 ms pour ne jamais bloquer indéfiniment)
-             * avant le seul et unique appel à toggle_fullscreen().
-             */
-            const auto fullscreen_deadline =
-                std::chrono::steady_clock::now() +
-                std::chrono::milliseconds(500);
-
-            SDL_Event settle_event{};
-
-            while (
-                std::chrono::steady_clock::now() <
-                fullscreen_deadline
-            ) {
-                const bool got_event =
-                    SDL_WaitEventTimeout(
-                        &settle_event,
-                        50
-                    ) != 0;
-
-                if (
-                    got_event &&
-                    settle_event.type ==
-                        SDL_WINDOWEVENT &&
-                    (
-                        settle_event.window.event ==
-                            SDL_WINDOWEVENT_SHOWN ||
-                        settle_event.window.event ==
-                            SDL_WINDOWEVENT_EXPOSED
-                    )
-                ) {
-                    break;
-                }
-            }
-
-            window_->toggle_fullscreen();
-
-            /*
-             * Retour terrain (confirmé sur matériel réel) : même après
-             * avoir attendu SHOWN/EXPOSED ci-dessus, ce premier appel à
-             * toggle_fullscreen() ne suffit toujours pas — la fenêtre
-             * reste minuscule dans le coin. Seule une manipulation
-             * manuelle (touche F deux fois, donc désactiver puis
-             * réactiver le plein écran) corrige la géométrie de façon
-             * fiable. Plutôt que de chercher une explication complète du
-             * pourquoi côté négociation Wayland (l'hypothèse la plus
-             * probable : ce tout premier appel arrive avant la fin de la
-             * toute première négociation de configuration de la surface,
-             * même une fois SHOWN/EXPOSED reçus, et SDL_SetWindowFullscreen
-             * réussit "à vide" sans redimensionner réellement la sortie),
-             * on reproduit ici exactement la manipulation manuelle qui
-             * fonctionne de façon confirmée : un cycle supplémentaire
-             * désactivation puis réactivation, avec un bref pompage
-             * d'événements entre chaque étape pour laisser le compositeur
-             * traiter chaque transition. Résultat net : toujours en plein
-             * écran (trois appels : activation, désactivation,
-             * réactivation), mais avec la même correction de géométrie que
-             * l'utilisateur obtenait manuellement.
-             */
-            const auto settle_briefly = [] {
-                for (int tick = 0; tick < 4; ++tick) {
-                    SDL_PumpEvents();
-                    SDL_Delay(25);
-                }
-            };
-
-            settle_briefly();
-            window_->toggle_fullscreen();
-            settle_briefly();
-            window_->toggle_fullscreen();
-        }
 
         initialize_players();
         show_startup_info_overlay();

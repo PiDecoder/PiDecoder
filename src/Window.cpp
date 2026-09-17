@@ -9,26 +9,55 @@ namespace pidecoder {
 Window::Window(
     std::string title,
     const int width,
-    const int height
+    const int height,
+    const bool start_fullscreen
 )
-    : windowed_width_(width),
-      windowed_height_(height)
+    : fullscreen_(start_fullscreen),
+      /*
+       * Taille de secours pour un retour en fenêtré (touche F) : la
+       * taille demandée ici n'est la "taille fenêtrée" que si on démarre
+       * effectivement en fenêtré. Si on démarre directement en plein
+       * écran simulé, (width, height) est la résolution de l'écran, pas
+       * une taille de fenêtre raisonnable — on garde 1280x720 comme repli
+       * dans ce cas.
+       */
+      windowed_width_(start_fullscreen ? 1280 : width),
+      windowed_height_(start_fullscreen ? 720 : height)
 {
     SDL_GL_SetAttribute(
         SDL_GL_DOUBLEBUFFER,
         1
     );
 
+    Uint32 window_flags =
+        SDL_WINDOW_OPENGL |
+        SDL_WINDOW_ALLOW_HIGHDPI |
+        SDL_WINDOW_SHOWN;
+
+    int pos_x = SDL_WINDOWPOS_CENTERED;
+    int pos_y = SDL_WINDOWPOS_CENTERED;
+
+    if (start_fullscreen) {
+        /*
+         * Voir Window.hpp : on crée directement la fenêtre sans bordure
+         * à la taille finale plutôt que de la redimensionner après
+         * coup, ce second redimensionnement s'étant révélé sans effet
+         * réel sur cette installation (voir CHANGELOG.md).
+         */
+        window_flags |= SDL_WINDOW_BORDERLESS;
+        pos_x = 0;
+        pos_y = 0;
+    } else {
+        window_flags |= SDL_WINDOW_RESIZABLE;
+    }
+
     window_ = SDL_CreateWindow(
         title.c_str(),
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
+        pos_x,
+        pos_y,
         width,
         height,
-        SDL_WINDOW_OPENGL |
-            SDL_WINDOW_RESIZABLE |
-            SDL_WINDOW_ALLOW_HIGHDPI |
-            SDL_WINDOW_SHOWN
+        window_flags
     );
 
     if (window_ == nullptr) {
@@ -55,6 +84,22 @@ Window::Window(
     make_current();
 
     SDL_GL_SetSwapInterval(0);
+
+    int actual_width = 0;
+    int actual_height = 0;
+
+    SDL_GetWindowSize(
+        window_,
+        &actual_width,
+        &actual_height
+    );
+
+    std::cerr
+        << "[Window] fenetre creee (start_fullscreen=" << start_fullscreen
+        << ") : demandee=" << width << "x" << height
+        << " taille fenetre=" << actual_width << "x" << actual_height
+        << " taille dessin=" << drawable_width() << "x" << drawable_height()
+        << std::endl;
 }
 
 Window::~Window()
