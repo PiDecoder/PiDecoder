@@ -36,7 +36,7 @@ def _build_metadata() -> str:
     return ''
 
 
-VERSION='1.2.0'+_build_metadata(); ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+VERSION='1.3.0'+_build_metadata(); ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 # Le serveur HTTPS, quand il tourne (voir main()) — pas forcément celui qui a
 # reçu la requête en cours : HTTP et HTTPS écoutent maintenant sur deux ports
 # distincts en parallèle (voir "Server" et main()), donc self.server dans un

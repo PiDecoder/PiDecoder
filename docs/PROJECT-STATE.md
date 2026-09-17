@@ -2,17 +2,39 @@
 
 ## Active version
 
-- Stable version: **v1.2.0** — HTTPS for the Web administration
-  interface (HTTP and HTTPS on two independent, editable ports, each
-  individually enabled/disabled, certificate managed from the Web UI or
-  SSH), a one-click software update from the Web UI, a full network
+- Stable version: **v1.3.0** — a ready-to-flash SD card image (Raspberry
+  Pi OS Lite base, no more "install Raspberry Pi OS, then install
+  PiDecoder" step — see "v1.3 — SD card image" below), the fullscreen
+  startup fix (window created directly at its final borderless size, no
+  post-creation resize), an SSH access toggle with an in-app SSH password
+  change, and a consolidated Security tab. Merged from
+  `feature/v1.3-sd-image` into `main` and tagged, per explicit user
+  decision (2026-09-17: "on fusion et tag, le changeet de pwd fonctionne
+  bien").
+  - **Confirmed working on the Pi**: the fullscreen-at-startup fix (photos
+    + `journalctl` showing correct final geometry), and the SSH
+    password-change feature (`chpasswd` via `systemd-run`).
+  - **Not yet done**: the SD card image itself has never actually been
+    built or flashed (building it requires an arm64 chroot, which this
+    sandbox cannot do — see "v1.3 — SD card image" below); the user chose
+    to tag this version anyway, with that step still outstanding.
+  - **Not field-confirmed, but low-risk**: the Security tab consolidation
+    and the green/red IP-field validation homogeneity (Réseau tab +
+    per-camera IP fields), and the dynamic SSH username display in the
+    SSH panel — validated locally (syntax, tag balance, duplicate-id
+    checks, `validate-release.sh`), pure front-end plus a simple new
+    backend route.
+  - Everything below this line up to "v1.1 — audio support" documents how
+    v1.2.0 was built, across many rounds of field feedback on the real
+    Raspberry Pi.
+- Previous version: v1.2.0 — HTTPS for the Web administration interface
+  (HTTP and HTTPS on two independent, editable ports, each individually
+  enabled/disabled, certificate managed from the Web UI or SSH), a
+  one-click software update from the Web UI, a full network
   configuration panel (hostname, DHCP/static IP, NTP, timezone) with an
   automatic confirm-or-revert safety net, and an on-screen
   IP/hostname/MAC/port overlay on the player's own screen at startup or
-  on the **I** key. Everything below this line up to "v1.1 — audio
-  support" documents how this version was built, across many rounds of
-  field feedback on the real Raspberry Pi. To be merged from
-  `feature/v1.2-https` into `main` and tagged.
+  on the **I** key. Merged to `main`, tagged, deployed.
   - **Confirmed working on the Pi**: the startup overlay (sizing and
     display bug both fixed), HTTP/HTTPS on two independent ports with
     on/off toggles, hostname/IP change with its confirm/auto-revert
@@ -34,12 +56,6 @@
   "v1.1 — audio support" below), field-tested and validated on the
   Raspberry Pi with an Axis camera. Merged to `main`, tagged, deployed.
 - v1.0.0 (merged to `main`, tagged, deployed)
-- **In progress (v1.3)**: a ready-to-flash SD card image, so a new unit no
-  longer needs "install Raspberry Pi OS, then install PiDecoder" — see
-  "v1.3 — SD card image" below. Implemented and exercised in the sandbox as
-  far as it can be here, but **the image has never actually been built**
-  (building it requires an arm64 chroot, which this sandbox cannot do), so
-  nothing has been flashed or booted yet.
 - **Scope decision (2026-09-17): Raspberry Pi OS Lite is now the only
   supported base going forward**, confirmed by the user. Context: the
   fullscreen-at-startup bug (window never actually filled the screen, see

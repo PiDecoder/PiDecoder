@@ -253,7 +253,7 @@ The installer preserves runtime configuration and creates a timestamped backup u
 
 ## Do I have to install Raspberry Pi OS first?
 
-No, not since v1.2.0. A ready-to-flash image is published with each release: write `PiDecoder-<version>-arm64.img.xz` to an SD card with Raspberry Pi Imager and boot it. The card contains Raspberry Pi OS Lite, a minimal Wayland session and PiDecoder, already installed and enabled.
+No, not since v1.3.0. A ready-to-flash image is published with each release: write `PiDecoder-<version>-arm64.img.xz` to an SD card with Raspberry Pi Imager and boot it. The card contains Raspberry Pi OS Lite, a minimal Wayland session and PiDecoder, already installed and enabled.
 
 Installing on an existing Raspberry Pi OS with `scripts/install.sh` still works exactly as before, and is the right choice when the Pi already runs something else. See [Installation](installation.md).
 

@@ -25,7 +25,7 @@
 # son répertoire de travail : tout se passe dans l'image montée.
 set -Eeuo pipefail
 
-readonly BUILDER_VERSION="1.2.0"
+readonly BUILDER_VERSION="1.3.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 

@@ -10,7 +10,7 @@
   <a href="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml">
     <img src="https://github.com/PiDecoder/PiDecoder/actions/workflows/validate.yml/badge.svg" alt="Validation">
   </a>
-  <img src="https://img.shields.io/badge/release-v1.2.0-7A1F5C" alt="Release v1.2.0">
+  <img src="https://img.shields.io/badge/release-v1.3.0-7A1F5C" alt="Release v1.3.0">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
   <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
@@ -28,12 +28,13 @@
 ---
 
 > [!NOTE]
-> **PiDecoder v1.2.0** is the current stable release. It adds HTTPS for the Web
-> administration interface (HTTP and HTTPS on two independent, editable ports),
-> a one-click software update and a full network configuration panel (hostname,
-> DHCP/static IP, NTP, timezone) with automatic rollback on a lockout-prone change,
-> and an on-screen IP/hostname/MAC/port overlay at startup — on top of the native
-> audio support introduced in v1.0.0 and v1.1.0.
+> **PiDecoder v1.3.0** is the current stable release. It adds a ready-to-flash SD
+> card image (`PiDecoder-<version>-arm64.img.xz`, written with Raspberry Pi Imager —
+> no separate "install Raspberry Pi OS, then install PiDecoder" step needed), an
+> SSH access toggle with an in-app SSH password change (the Linux account also
+> used for the graphical session), and a consolidated Security tab — on top of
+> the HTTPS/network administration introduced in v1.2.0 and the native audio
+> support introduced in v1.0.0 and v1.1.0.
 > It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
 > Native PTZ movement, optical zoom, Stop and preset selection are available and have been
 > field-tested with an Axis Q6074.
@@ -361,7 +362,7 @@ Administrator credentials are configured separately and are not included in the 
 | v1.0.0 | Released | First stable public release, native PTZ and bilingual FR/EN Web UI |
 | v1.1.0 | Released | Native audio support in the focus view, validated on Axis |
 | v1.2.0 | Released | HTTPS on independent, editable HTTP/HTTPS ports; one-click software update; network configuration (hostname, IP, NTP, timezone) with automatic rollback; startup IP/MAC/port overlay |
-| v1.3 | Planned | REST API |
+| v1.3.0 | Released | Ready-to-flash SD card image; fixed fullscreen startup on the native video engine; SSH access toggle and in-app SSH password change; consolidated Security tab |
 | v2.0 | Long-term | Multi-Raspberry cluster |
 
 Roadmap items are planned goals and may change as the project evolves. No version is currently in active development; the next item will be picked from the list above.

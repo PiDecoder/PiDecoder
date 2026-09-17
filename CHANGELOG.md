@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3 (nouveau — image SD, en cours de validation sur matériel réel)
+## 1.3.0 — Image SD prête à flasher, correctif plein écran, accès SSH configurable (2026-09-17)
 
 ### Rappel des identifiants SSH par défaut dans le panneau SSH (demande explicite)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly INSTALLER_VERSION="1.2.0"
+readonly INSTALLER_VERSION="1.3.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly UNIT_DIR="/etc/systemd/system"
@@ -814,7 +814,7 @@ HOST_ADDRESS="$(hostname -I 2>/dev/null | awk '{print $1}')"
 
 printf '\nPiDecoder %s est installé.\n' "$INSTALLER_VERSION"
 # Rappel immédiat dans le terminal de ce qui vient d'être installé — sans
-# ça, "PiDecoder 1.2.0 est installé" (INSTALLER_VERSION, une constante) est
+# ça, "PiDecoder 1.3.0 est installé" (INSTALLER_VERSION, une constante) est
 # identique après CHAQUE installation, qu'il y ait eu du nouveau code ou
 # pas, ce qui a déjà causé une confusion sur le terrain ("suis-je bien sur
 # la bonne version ?", voir CHANGELOG.md). $BUILD_COMMIT/$BUILD_STAMP sont

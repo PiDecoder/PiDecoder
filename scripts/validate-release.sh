@@ -40,7 +40,7 @@ bash -n \
 
 echo "[4/8] Vérification de la version CMake"
 grep -Eq \
-    '^[[:space:]]*VERSION[[:space:]]+1\.2\.0([[:space:]]|$)' \
+    '^[[:space:]]*VERSION[[:space:]]+1\.3\.0([[:space:]]|$)' \
     "$ROOT/CMakeLists.txt"
 
 echo "[5/8] Vérification des fichiers essentiels"
@@ -118,4 +118,4 @@ if find "$ROOT" -type f -name '*.pyc' -print -quit | grep -q .; then
 fi
 
 echo "[8/8] Validation terminée"
-echo "PiDecoder v1.2.0 : paquet cohérent."
+echo "PiDecoder v1.3.0 : paquet cohérent."
