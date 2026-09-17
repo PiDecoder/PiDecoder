@@ -43,8 +43,20 @@ Window::Window(
          * à la taille finale plutôt que de la redimensionner après
          * coup, ce second redimensionnement s'étant révélé sans effet
          * réel sur cette installation (voir CHANGELOG.md).
+         *
+         * Retour terrain (Raspberry Pi OS Desktop) : une fois cette
+         * fenêtre sans bordure correctement à la taille de l'écran, la
+         * barre des tâches du bureau restait quand même visible
+         * par-dessus — son gestionnaire de fenêtres la garde
+         * habituellement au-dessus des fenêtres normales. SDL_WINDOW_
+         * ALWAYS_ON_TOP demande explicitement l'inverse : que cette
+         * fenêtre reste, elle, au-dessus de tout, y compris la barre des
+         * tâches. Sans effet sur l'image Lite (pas de barre des tâches
+         * là-bas), donc aucun risque de régression de ce côté.
          */
-        window_flags |= SDL_WINDOW_BORDERLESS;
+        window_flags |=
+            SDL_WINDOW_BORDERLESS |
+            SDL_WINDOW_ALWAYS_ON_TOP;
         pos_x = 0;
         pos_y = 0;
     } else {
@@ -64,6 +76,19 @@ Window::Window(
         throw std::runtime_error(
             std::string{"SDL_CreateWindow: "} +
             SDL_GetError()
+        );
+    }
+
+    if (start_fullscreen) {
+        /*
+         * Filet de sécurité en plus du flag ALWAYS_ON_TOP ci-dessus :
+         * demande explicitement au gestionnaire de fenêtres de faire
+         * passer cette fenêtre au premier plan, au cas où la barre des
+         * tâches (ou tout autre panneau) reprendrait la main juste après
+         * la création.
+         */
+        SDL_RaiseWindow(
+            window_
         );
     }
 

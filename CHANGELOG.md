@@ -2,6 +2,28 @@
 
 ## 1.3 (nouveau — image SD, en cours de validation sur matériel réel)
 
+### Retour terrain : le correctif plein écran fonctionne sur Lite, mais la barre des tâches restait visible sur Desktop
+
+**Confirmé sur le terrain** : sur l'image Lite, la fenêtre créée directement
+à la taille de l'écran (voir plus bas) remplit enfin tout l'écran comme
+prévu. Sur une installation Raspberry Pi OS Desktop, en revanche, la barre
+des tâches du bureau restait visible par-dessus le mur d'images une fois en
+« plein écran » — le gestionnaire de fenêtres du bureau la garde
+habituellement au-dessus des fenêtres ordinaires, sans-bordure ou pas.
+
+Corrigé en ajoutant `SDL_WINDOW_ALWAYS_ON_TOP` aux drapeaux de création de
+la fenêtre (uniquement pour le démarrage en plein écran), qui demande
+explicitement l'inverse : que ce soit PiDecoder qui reste au-dessus de tout
+le reste, barre des tâches incluse. Un appel à `SDL_RaiseWindow()` juste
+après la création vient renforcer la demande, au cas où un panneau
+reprendrait la main juste après. Sans effet attendu sur l'image Lite (il
+n'y a pas de barre des tâches là-bas), donc sans risque de régression sur
+ce qui vient d'être confirmé fonctionnel.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles sur Desktop au moment de l'écriture — retour terrain
+nécessaire (la partie Lite, elle, est déjà confirmée par ailleurs).
+
 ### Image .img flashable directement sur carte SD (demande explicite)
 
 Jusqu'ici, installer PiDecoder demandait deux étapes : installer Raspberry Pi
@@ -185,8 +207,17 @@ Journalisation complétée en conséquence : la création de la fenêtre logue
 maintenant elle aussi sa taille demandée et obtenue, pour comparer
 facilement avec les bascules ultérieures si besoin.
 
-**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
-conditions réelles au moment de l'écriture — retour terrain nécessaire.
+**Confirmé sur le terrain** sur l'image Lite (matériel réel) : l'écran est
+enfin correctement rempli au démarrage. Conséquence acceptée : le mode
+fenêtré (touche F) n'est donc plus utilisable de façon fiable sur ce type
+d'installation, mais ce n'est pas un besoin pour un mur d'images qui tourne
+en permanence en plein écran. **Pas encore revérifié sur une installation
+Raspberry Pi OS Desktop** avec ce code précis (cette technique — fenêtre
+sans bordure, positionnée et dimensionnée dès la création — est un procédé
+standard qui ne dépend d'aucune négociation compositeur, donc il n'y a pas
+de raison particulière qu'elle se comporte moins bien que l'ancienne
+méthode côté Bureau, mais ça reste à confirmer sur le terrain si un Pi
+tourne encore sous Desktop).
 
 ### Retour terrain (suite) : forcer la taille après coup ne suffisait toujours pas — changement d'approche
 
