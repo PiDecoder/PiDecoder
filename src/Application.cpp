@@ -118,6 +118,40 @@ int Application::run()
             }
 
             window_->toggle_fullscreen();
+
+            /*
+             * Retour terrain (confirmé sur matériel réel) : même après
+             * avoir attendu SHOWN/EXPOSED ci-dessus, ce premier appel à
+             * toggle_fullscreen() ne suffit toujours pas — la fenêtre
+             * reste minuscule dans le coin. Seule une manipulation
+             * manuelle (touche F deux fois, donc désactiver puis
+             * réactiver le plein écran) corrige la géométrie de façon
+             * fiable. Plutôt que de chercher une explication complète du
+             * pourquoi côté négociation Wayland (l'hypothèse la plus
+             * probable : ce tout premier appel arrive avant la fin de la
+             * toute première négociation de configuration de la surface,
+             * même une fois SHOWN/EXPOSED reçus, et SDL_SetWindowFullscreen
+             * réussit "à vide" sans redimensionner réellement la sortie),
+             * on reproduit ici exactement la manipulation manuelle qui
+             * fonctionne de façon confirmée : un cycle supplémentaire
+             * désactivation puis réactivation, avec un bref pompage
+             * d'événements entre chaque étape pour laisser le compositeur
+             * traiter chaque transition. Résultat net : toujours en plein
+             * écran (trois appels : activation, désactivation,
+             * réactivation), mais avec la même correction de géométrie que
+             * l'utilisateur obtenait manuellement.
+             */
+            const auto settle_briefly = [] {
+                for (int tick = 0; tick < 4; ++tick) {
+                    SDL_PumpEvents();
+                    SDL_Delay(25);
+                }
+            };
+
+            settle_briefly();
+            window_->toggle_fullscreen();
+            settle_briefly();
+            window_->toggle_fullscreen();
         }
 
         initialize_players();

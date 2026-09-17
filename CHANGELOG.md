@@ -83,6 +83,12 @@ tourne réellement sur le Pi.
 Absent (retour à `VERSION` seul, sans `+`) sur une installation antérieure
 à ce correctif, tant qu'elle n'a pas été réinstallée au moins une fois.
 
+Le message final de `install.sh` (« PiDecoder 1.2.0 est installé ») affiche
+maintenant aussi ce commit/horodatage juste en dessous, directement dans le
+terminal — sans ça, ce message reste identique après chaque installation
+qu'il y ait eu du nouveau code ou pas (`INSTALLER_VERSION` est une simple
+constante), ce qui a créé la confusion initialement.
+
 ### Bouton « Activer SSH » dans la page Web (demande explicite)
 
 SSH est installé mais désactivé par défaut sur l'image (voir plus haut, clés
@@ -137,6 +143,27 @@ raison de son arrêt. Le garde-fou contre un vrai plantage en boucle (voir
 plus haut, le SIGILL sous Trixie) reste actif : c'est le comportement par
 défaut de systemd (`StartLimitIntervalSec`/`StartLimitBurst`), pas
 `Restart=`, qui l'assure, et il n'a pas été touché.
+
+### Retour terrain (suite) : le délai SHOWN/EXPOSED ne suffisait pas non plus sur matériel réel
+
+Le correctif précédent (attendre l'événement SDL `SHOWN`/`EXPOSED` avant le
+premier `toggle_fullscreen()`, voir plus bas) n'a pas résolu le problème une
+fois testé sur le Pi : la fenêtre restait minuscule malgré le délai, seule
+la manipulation manuelle (touche F deux fois) fonctionnait encore de façon
+fiable.
+
+Plutôt que de creuser plus loin l'explication théorique côté négociation
+Wayland (pas d'accès à du matériel réel pour ce projet, donc aucun moyen de
+tester une hypothèse de plus sans repasser par le terrain), `run()`
+reproduit maintenant directement cette manipulation manuelle qui, elle,
+est confirmée fonctionner : après le premier passage en plein écran, un
+cycle supplémentaire désactivation puis réactivation, avec un bref pompage
+d'événements entre chaque étape. Le résultat net reste le plein écran (trois
+appels : activation, désactivation, réactivation), mais avec la même
+correction de géométrie que l'utilisateur obtenait à la main.
+
+**Changement C++** : nécessite `sudo ./scripts/install.sh`. Non testé en
+conditions réelles au moment de l'écriture — retour terrain nécessaire.
 
 ### Retour terrain : fenêtre minuscule dans le coin au démarrage, corrigée par F puis F
 
