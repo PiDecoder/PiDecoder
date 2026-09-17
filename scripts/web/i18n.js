@@ -288,6 +288,11 @@
 
       'shortcuts.switch_tab':'Changer d’onglet',
       'shortcuts.close_panels':'Fermer les fenêtres',
+      'shortcuts.player_title':'Sur l’écran du mur vidéo',
+      'shortcuts.player_info':'Afficher IP / nom d’hôte / MAC / ports (30 s)',
+      'shortcuts.player_mute':'Couper / rétablir le son (vue Focus)',
+      'shortcuts.player_fullscreen':'Basculer plein écran',
+      'shortcuts.player_close_focus':'Quitter la vue Focus',
       'notifications.title':'Historique des notifications',
       'notifications.recent':'Notifications récentes',
       'notifications.clear':'Effacer',
@@ -651,6 +656,11 @@
 
       'shortcuts.switch_tab':'Switch tab',
       'shortcuts.close_panels':'Close panels',
+      'shortcuts.player_title':'On the video wall screen',
+      'shortcuts.player_info':'Show IP / hostname / MAC / ports (30 s)',
+      'shortcuts.player_mute':'Mute / unmute audio (Focus view)',
+      'shortcuts.player_fullscreen':'Toggle fullscreen',
+      'shortcuts.player_close_focus':'Leave the Focus view',
       'notifications.title':'Notification history',
       'notifications.recent':'Recent notifications',
       'notifications.clear':'Clear',

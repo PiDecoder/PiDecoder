@@ -16,7 +16,17 @@ the same `scripts/install.sh` inside the image, rather than on the running Pi.
 This guide covers both.
 
 > [!IMPORTANT]
-> PiDecoder is currently validated on a Raspberry Pi 5 running Debian 13, AArch64 and Wayland.
+> PiDecoder is currently validated on a Raspberry Pi 5 running Debian 12 (Bookworm), AArch64 and
+> Wayland — **not** Debian 13 (Trixie). Trixie's Mesa/V3D GPU driver crashes in a loop (`SIGILL`,
+> visible as `pidecoder.service` restarting roughly every 30 seconds with `MESA: error: Export
+> failed` in the journal just before each crash) with this project's SDL2/labwc rendering
+> pipeline. This was first found building the SD card image and fixed there by pinning
+> `build-image.sh` to a Bookworm base — but a **manual install is not protected by that pin**: if
+> you flash Raspberry Pi OS Lite yourself, make sure you pick a Bookworm image. Raspberry Pi
+> Imager's current default "Raspberry Pi OS Lite (64-bit)" entry may point to Trixie; use its
+> "Raspberry Pi OS (other)" list to pick the Bookworm image explicitly, or flash a Bookworm
+> `.img.xz` from the official archive with "Use custom". Check with `cat /etc/os-release` after
+> flashing — it should say `bookworm`, not `trixie` — before installing anything.
 > Upgrades of an existing installation have been tested on real hardware.
 > A completely fresh installation on a blank system and a forced rollback test have also been validated.
 
@@ -25,7 +35,7 @@ This guide covers both.
 | Component | Validated configuration |
 |---|---|
 | Hardware | Raspberry Pi 5 |
-| Operating system | Debian 13 |
+| Operating system | Debian 12 (Bookworm) — **not** Debian 13/Trixie, see note above |
 | Architecture | AArch64 |
 | Display server | Wayland |
 | Video engine | libmpv / FFmpeg |
@@ -92,6 +102,49 @@ PiDecoder requires:
 - a Raspberry Pi configured to start its graphical session automatically when used as a dedicated display.
 
 The installer adds the selected graphical user to the `video` and `render` groups when those groups exist. A session reconnect may be required after a first installation.
+
+### Setting up a Wayland session on Raspberry Pi OS Lite
+
+`install.sh` **assumes a Wayland session is already running** — it does not set one up. That is
+true out of the box on Raspberry Pi OS Desktop, and on a card flashed from PiDecoder's own
+ready-made SD image (its first-boot service does this for you). It is **not** true on a bare
+Raspberry Pi OS **Lite** install: Lite ships with no graphical environment at all, so
+`pidecoder.service` will fail its `ExecStartPre` check (`test -S
+/run/user/<uid>/wayland-0`) in a restart loop every few seconds until a compositor exists.
+
+If you are installing manually on Lite, set up the same minimal Wayland stack the SD image uses,
+before or after running `install.sh` (replace `YOUR_USER` with the graphical user's name):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+    labwc libgl1-mesa-dri libegl1 libgles2 \
+    dbus-user-session pipewire pipewire-pulse wireplumber \
+    network-manager avahi-daemon
+
+sudo usermod -aG video,render,audio,input,plugdev,netdev YOUR_USER
+
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin YOUR_USER --noclear %I $TERM
+EOF
+
+cat > ~/.bash_profile <<'EOF'
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ "${XDG_VTNR:-}" = "1" ]; then
+    exec labwc >"$HOME/.labwc.log" 2>&1
+fi
+EOF
+
+sudo systemctl daemon-reload
+sudo reboot
+```
+
+After the reboot, tty1 logs in automatically, starts `labwc`, and its Wayland socket triggers
+`pidecoder-wayland.path`, which starts `pidecoder.service`. Network Manager (`nmcli`), used by
+the Réseau tab, and Avahi (`.local` name resolution) are included above for parity with the SD
+image, even though `install.sh` does not strictly require them to start the video engine itself.
 
 ## 1. Clone the repository
 

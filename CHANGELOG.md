@@ -2,6 +2,45 @@
 
 ## 1.3.0 — Image SD prête à flasher, correctif plein écran, accès SSH configurable (2026-09-17)
 
+### Retour terrain (post-tag) : panneau « Raccourcis clavier » incomplet
+
+Signalé pendant la campagne de test : le panneau « Raccourcis clavier » de l'interface Web ne
+listait que les raccourcis de l'interface elle-même (Ctrl+S, Ctrl+Entrée, Alt+1-6, Échap) — les
+raccourcis du mur vidéo natif (`src/Application.cpp`), qui tournent sur l'écran du Pi et non
+dans le navigateur, n'étaient documentés nulle part dans l'interface. Un utilisateur qui ne les
+connaît pas déjà n'avait donc aucun moyen de les découvrir. Ajouté un second groupe au même
+panneau : **I** (afficher IP/nom d'hôte/MAC/ports, 30 s), **M** (couper/rétablir le son en vue
+Focus), **F** (basculer plein écran) et **Échap** (quitter la vue Focus) — les quatre touches
+gérées par `Application::process_event()`. Nouvelles clés `shortcuts.player_*` ajoutées
+FR/EN dans `scripts/web/i18n.js` (parité vérifiée : 345 clés de chaque côté).
+
+### Retour terrain (post-tag) : installation manuelle sur Lite vierge — deux trous de documentation confirmés
+
+Le premier test d'installation manuelle « à zéro » (Raspberry Pi OS Lite officiel, jamais
+touché par PiDecoder) a mis au jour deux problèmes que toutes les installations précédentes,
+faites sur un Pi déjà configuré ou via l'image SD, ne pouvaient pas révéler :
+
+1. **`install.sh` suppose une session Wayland déjà active, mais ne l'installe jamais** —
+   seul `build-image.sh` (fabricant de l'image SD) le fait, via son service de premier
+   démarrage. Sur un Lite vierge, `pidecoder.service` boucle en échec toutes les 3 secondes
+   (`ExecStartPre=test -S /run/user/<uid>/wayland-0` toujours faux, aucun compositeur ne crée
+   jamais ce socket). Documenté dans `docs/installation.md` (nouvelle section « Setting up a
+   Wayland session on Raspberry Pi OS Lite »), avec les commandes exactes (paquets `labwc` +
+   pile EGL/PipeWire/NetworkManager/Avahi, connexion automatique sur tty1, `.bash_profile`
+   lançant `labwc`) reprises telles quelles de `build-image.sh`. Pas encore automatisé dans
+   `install.sh` lui-même — à envisager si ce genre d'installation redevient fréquent.
+2. **Le bug SIGILL/Mesa déjà documenté plus haut (« retour à Bookworm ») a été reproduit en
+   conditions réelles sur une installation manuelle**, confirmant qu'il ne s'agit pas d'une
+   particularité de la construction de l'image SD : Raspberry Pi Imager propose aujourd'hui
+   **Trixie (Debian 13)** par défaut sous l'entrée « Raspberry Pi OS Lite (64-bit) », qui n'est
+   protégée par aucun épinglage côté installation manuelle (contrairement à `build-image.sh`,
+   épinglé sur Bookworm). Résultat identique : `pidecoder.service` redémarre en boucle toutes
+   les ~30 secondes avec `MESA: error: Export failed` avant chaque `SIGILL`. `README.md` et
+   `docs/installation.md` affirmaient encore, par erreur, une validation sur Debian 13 — corrigé
+   pour Debian 12 (Bookworm), avec un avertissement explicite sur le piège de l'entrée par
+   défaut de l'Imager et la vérification à faire (`cat /etc/os-release`) avant d'aller plus
+   loin.
+
 ### Rappel des identifiants SSH par défaut dans le panneau SSH (demande explicite)
 
 Complément à l'entrée précédente (changement du mot de passe SSH depuis

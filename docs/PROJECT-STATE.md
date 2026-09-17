@@ -18,6 +18,23 @@
     built or flashed (building it requires an arm64 chroot, which this
     sandbox cannot do — see "v1.3 — SD card image" below); the user chose
     to tag this version anyway, with that step still outstanding.
+  - **Field bugs found and fixed (2026-09-18), via a first-ever manual
+    "from zero" install test on a genuinely blank Raspberry Pi OS Lite**:
+    (1) `install.sh` assumes a Wayland session already exists and never
+    sets one up — only `build-image.sh`'s first-boot service does that —
+    so `pidecoder.service` loops on its `ExecStartPre` Wayland-socket
+    check on a bare Lite install; now documented in
+    `docs/installation.md` with the exact `labwc`/autologin setup
+    commands. (2) The Mesa/V3D `SIGILL` crash-loop bug already found and
+    fixed for the SD image (pinning `build-image.sh` to Bookworm) was
+    reproduced for real on this manual install, because Raspberry Pi
+    Imager's current default "Raspberry Pi OS Lite (64-bit)" entry points
+    to Debian 13 (Trixie) — nothing in the manual path was pinning that.
+    `README.md`/`docs/installation.md` wrongly claimed validation on
+    Debian 13; corrected to Debian 12 (Bookworm) with an explicit warning
+    about the Imager's default and a `cat /etc/os-release` check. Neither
+    fix has been re-verified end-to-end yet (the user's Pi needs to be
+    reflashed on Bookworm to continue the from-zero test).
   - **Not field-confirmed, but low-risk**: the Security tab consolidation
     and the green/red IP-field validation homogeneity (Réseau tab +
     per-camera IP fields), and the dynamic SSH username display in the

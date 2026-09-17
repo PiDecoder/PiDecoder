@@ -12,7 +12,7 @@
   </a>
   <img src="https://img.shields.io/badge/release-v1.3.0-7A1F5C" alt="Release v1.3.0">
   <img src="https://img.shields.io/badge/platform-Raspberry%20Pi%205-C51A4A" alt="Raspberry Pi 5">
-  <img src="https://img.shields.io/badge/OS-Debian%2013-A81D33" alt="Debian 13">
+  <img src="https://img.shields.io/badge/OS-Debian%2012%20(Bookworm)-A81D33" alt="Debian 12 (Bookworm)">
   <img src="https://img.shields.io/badge/license-GPLv3-2EA44F" alt="GPLv3">
 </p>
 
@@ -35,7 +35,11 @@
 > used for the graphical session), and a consolidated Security tab — on top of
 > the HTTPS/network administration introduced in v1.2.0 and the native audio
 > support introduced in v1.0.0 and v1.1.0.
-> It is validated on a Raspberry Pi 5 running Debian 13 and Wayland.
+> It is validated on a Raspberry Pi 5 running Debian 12 (Bookworm) and Wayland — **not** Debian 13
+> (Trixie): the Mesa/V3D GPU driver crashes in a loop (`SIGILL`, ~30 s restart cycle) with this
+> project's SDL2/labwc rendering pipeline on Trixie. Raspberry Pi Imager's current default
+> "Raspberry Pi OS Lite (64-bit)" entry may point to Trixie — pick the Bookworm image explicitly
+> (Imager's "Raspberry Pi OS (other)" list, or the official Bookworm archive) for a manual install.
 > Native PTZ movement, optical zoom, Stop and preset selection are available and have been
 > field-tested with an Axis Q6074.
 >
@@ -309,7 +313,7 @@ journalctl -u pidecoder.service -n 50 --no-pager
 | Component | Validated configuration |
 |---|---|
 | Hardware | Raspberry Pi 5 |
-| Operating system | Debian 13 |
+| Operating system | Debian 12 (Bookworm) — **not** Debian 13/Trixie, see note above |
 | Architecture | AArch64 |
 | Display server | Wayland |
 | Video engine | libmpv / FFmpeg |
