@@ -40,6 +40,21 @@
   far as it can be here, but **the image has never actually been built**
   (building it requires an arm64 chroot, which this sandbox cannot do), so
   nothing has been flashed or booted yet.
+- **Scope decision (2026-09-17): Raspberry Pi OS Lite is now the only
+  supported base going forward**, confirmed by the user. Context: the
+  fullscreen-at-startup bug (window never actually filled the screen, see
+  the long troubleshooting trail in CHANGELOG.md) was finally fixed by
+  creating the SDL window directly at its final size/position instead of
+  resizing it after creation — confirmed working on real Lite hardware.
+  The same fix left the desktop taskbar visible on top of the video wall
+  on a Raspberry Pi OS Desktop install; `SDL_WINDOW_ALWAYS_ON_TOP` +
+  `SDL_RaiseWindow()` were tried and had no effect (most likely because a
+  desktop panel is a Wayland `layer-shell` surface, which sits above
+  ordinary client windows by protocol design, not by a stacking hint a
+  client can override). Rather than keep chasing that from PiDecoder's own
+  code, the user decided Desktop is dropped as a target: every unit is
+  meant to run the Lite SD image. No further Desktop-specific fullscreen
+  work should be pursued unless the user explicitly asks again.
 
 ## v1.3 — SD card image (built but never yet produced for real)
 

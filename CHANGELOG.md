@@ -24,6 +24,24 @@ ce qui vient d'être confirmé fonctionnel.
 conditions réelles sur Desktop au moment de l'écriture — retour terrain
 nécessaire (la partie Lite, elle, est déjà confirmée par ailleurs).
 
+**Retour terrain (suite) — abandonné par décision explicite** :
+`SDL_WINDOW_ALWAYS_ON_TOP` + `SDL_RaiseWindow()` n'ont rien changé, la
+barre des tâches reste visible. Explication la plus probable : sous
+Wayland, un panneau/barre des tâches est en général une surface de type
+`layer-shell`, qui vit par construction du protocole dans une couche
+au-dessus des fenêtres ordinaires — ce n'est pas un ordre d'empilement
+qu'une fenêtre cliente comme PiDecoder peut renverser avec un simple
+drapeau, quel qu'il soit. Ce n'est donc pas un problème que PiDecoder
+peut corriger depuis son propre code.
+
+Décision explicite de l'utilisateur : PiDecoder ne cible plus que
+Raspberry Pi OS **Lite** (via l'image SD `build-image.sh`, en cours de
+devenir la seule base supportée) ; le mode Desktop est abandonné comme
+cible et ce problème de barre des tâches ne sera pas creusé davantage. Le
+correctif plein écran ci-dessus reste néanmoins sans danger sur Desktop
+(il ne fait qu'ajouter deux drapeaux sans effet observable dans les deux
+cas), donc rien à revenir en arrière.
+
 ### Image .img flashable directement sur carte SD (demande explicite)
 
 Jusqu'ici, installer PiDecoder demandait deux étapes : installer Raspberry Pi
