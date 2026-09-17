@@ -114,6 +114,9 @@
       'sec.confirm_password':'Confirmer le nouveau mot de passe',
       'sec.change_button':'Modifier le mot de passe',
 
+      'sec.webaccess_title':'Accès à l\'interface Web',
+      'sec.webaccess_hint':'Protocoles, ports et certificat de l\'interface d\'administration : HTTP, HTTPS et leurs numéros de port.',
+
       'sec.tls_title':'Certificat HTTPS',
       'sec.tls_hint':'Génère ou importe le certificat de l\'interface Web, et active ou désactive l\'accès HTTPS — sur son propre port, indépendamment de l\'accès HTTP ci-dessous.',
       'sec.tls_toggle_warning':'Ceci redémarre l\'interface Web (jusqu\'à environ 30 secondes) puis recharge la page automatiquement. Si la connexion semble acceptée sans rien afficher ensuite, vide les cookies de ce site dans ton navigateur.',
@@ -463,6 +466,9 @@
       'sec.new_password':'New password',
       'sec.confirm_password':'Confirm new password',
       'sec.change_button':'Change password',
+
+      'sec.webaccess_title':'Web interface access',
+      'sec.webaccess_hint':'Protocols, ports and certificate for the administration interface: HTTP, HTTPS and their port numbers.',
 
       'sec.tls_title':'HTTPS certificate',
       'sec.tls_hint':'Generate or import the Web interface\'s certificate, and turn HTTPS access on or off — on its own port, independently from the HTTP access below.',
