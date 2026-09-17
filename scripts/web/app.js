@@ -1455,6 +1455,18 @@ function renderSshStatus(r){
   // disponible sur ce système (voir ssh_password_status() côté serveur).
   sshPasswordWarning.classList.toggle('hidden',!!r.password_changed);
 
+  // Nom d'utilisateur lu dynamiquement (voir get_service_user() côté
+  // serveur) plutôt qu'écrit en dur : il peut différer entre une carte
+  // flashée avec l'image SD (pidecoder par défaut, sauf personnalisé) et
+  // une installation manuelle où la personne a choisi elle-même son
+  // compte à `install.sh --user`. Le mot de passe par défaut, lui, ne
+  // peut pas être lu ici (jamais conservé en clair) : le texte se
+  // contente d'expliquer où il vient selon le cas.
+  sshPasswordDefaultInfo.textContent=t(
+    'ssh.password_default_info',
+    {username:r.username||t('ssh.username_unknown')}
+  );
+
   if(!r.supported){
     sshToggleButton.disabled=true;
     sshStatus.textContent=t('ssh.unsupported');

@@ -1266,6 +1266,7 @@ class H(BaseHTTPRequestHandler):
             return self.j({
                 **sysadmin.ssh_status(),
                 **sysadmin.ssh_password_status(self.server.root),
+                'username':sysadmin.get_service_user(),
             })
         if p=='/api/network/status':
             nmcli_ok=sysadmin.nmcli_available()

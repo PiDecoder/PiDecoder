@@ -2,6 +2,23 @@
 
 ## 1.3 (nouveau — image SD, en cours de validation sur matériel réel)
 
+### Rappel des identifiants SSH par défaut dans le panneau SSH (demande explicite)
+
+Complément à l'entrée précédente (changement du mot de passe SSH depuis
+l'interface Web) : le panneau affiche maintenant aussi le nom
+d'utilisateur SSH de cette installation, et une explication sur l'origine
+du mot de passe par défaut. Le nom d'utilisateur est lu dynamiquement
+(`get_service_user()`, déjà utilisé par la mise à jour logicielle) plutôt
+qu'écrit en dur, car il peut légitimement différer entre deux
+installations : `pidecoder` par défaut sur une carte flashée avec l'image
+PiDecoder (sauf personnalisé avec `--user-password` au moment de fabriquer
+l'image), mais potentiellement autre chose sur une installation manuelle
+où la personne a choisi elle-même son compte à `install.sh --user`. Le mot
+de passe par défaut, lui, ne peut pas être affiché dynamiquement (jamais
+conservé en clair une fois appliqué) : le texte se contente d'expliquer
+d'où il vient selon le cas plutôt que d'annoncer une valeur qui serait
+fausse pour une partie des installations.
+
 ### Onglet Sécurité regroupé, et changement du mot de passe SSH depuis l'interface Web (demande explicite)
 
 Deux demandes distinctes, traitées ensemble parce qu'elles touchent le
