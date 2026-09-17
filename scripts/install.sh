@@ -595,6 +595,25 @@ if [[ ! -f "$STAGED_ROOT/config/layout.json" ]]; then
 JSON
 fi
 
+# Identifiant de build, affiché dans la page Web à côté du numéro de
+# version (voir config-web.py, VERSION) — sinon rien ne distingue deux
+# installations qui partagent le même INSTALLER_VERSION mais pas le même
+# code, ce qui rend impossible de confirmer après coup qu'une mise à jour a
+# bien été appliquée jusqu'au bout (retour terrain : voir CHANGELOG.md).
+# Écrit dans STAGED_ROOT (donc reconstruit à chaque installation, jamais
+# préservé d'une installation précédente comme le sont cameras.json/
+# layout.json) et volontairement hors de config/ pour la même raison.
+# Le hash court n'est disponible que si $SOURCE_ROOT est un clone Git — ce
+# qui est toujours le cas pour une installation normale (voir
+# verify-source.sh) mais pourrait manquer sur une archive dézippée sans
+# historique Git ; dans ce cas le champ reste vide plutôt que de faire
+# échouer l'installation pour un simple confort de diagnostic.
+BUILD_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --short=7 HEAD 2>/dev/null || true)"
+BUILD_STAMP="$(date +%y%m%d%H%M)"
+cat > "$STAGED_ROOT/build-info.json" <<JSON
+{"commit":"${BUILD_COMMIT}","installed_at":"${BUILD_STAMP}"}
+JSON
+
 CHANGED_SYSTEM=1
 systemctl stop pidecoder.service pidecoder-config.service pidecoder-wayland.path pidecoder-wayland.target pidecoder-ptz.service 2>/dev/null || true
 rm -rf "$TARGET"

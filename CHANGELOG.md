@@ -59,6 +59,30 @@ qui a tapé les commandes.
   est en x86_64 : le chroot arm64 y passe par qemu, c'est plus lent mais c'est
   le même script, sans variante.
 
+### Retour terrain : impossible de confirmer qu'une mise à jour a bien été appliquée
+
+Après un `git pull` + `sudo ./scripts/install.sh` manuel, aucun moyen fiable
+de vérifier que le nouveau code tournait vraiment : le numéro de version
+affiché dans la page Web (`VERSION` dans `config-web.py`) est une constante
+fixée à la main, jamais changée entre deux corrections — deux installations
+avec du code différent affichaient donc exactement le même numéro.
+
+Corrigé en ajoutant des métadonnées de build (au sens du standard semver,
+suffixe après un `+`) au numéro de version : `install.sh` écrit désormais
+un petit `build-info.json` (hash Git court du commit installé + horodatage
+de l'installation) à côté du reste de `/opt/pidecoder` à chaque
+installation — jamais conservé d'une installation à l'autre, contrairement
+à `cameras.json`/`layout.json`. `config-web.py` le lit au démarrage et
+l'ajoute à `VERSION`, qui apparaît déjà partout où la version était déjà
+affichée (écran de connexion, en-tête, rapport de diagnostic, export de
+configuration) — aucun nouvel endroit à ajouter. Résultat : par exemple
+`1.2.0+3ce724c.2609170924`, à comparer directement au `git log -1
+--format=%h` du dépôt source pour confirmer sans ambiguïté quel commit
+tourne réellement sur le Pi.
+
+Absent (retour à `VERSION` seul, sans `+`) sur une installation antérieure
+à ce correctif, tant qu'elle n'a pas été réinstallée au moins une fois.
+
 ### Bouton « Activer SSH » dans la page Web (demande explicite)
 
 SSH est installé mais désactivé par défaut sur l'image (voir plus haut, clés

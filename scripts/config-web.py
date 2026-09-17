@@ -11,7 +11,32 @@ from onvif_client import Credentials, PTZ_MOVES, continuous_move, credentials_fo
 from i18n import DEFAULT_LANG, SUPPORTED_LANGS, lang_from_cookie_header, t as i18n_t
 import system_admin as sysadmin
 
-VERSION='1.2.0'; ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
+def _build_metadata() -> str:
+    """Suffixe « +commit.horodatage » (métadonnées de build, au sens semver)
+    ajouté à VERSION, lu dans build-info.json écrit par install.sh à côté
+    du reste de l'installation (voir ce script). Distingue deux
+    installations qui partagent le même numéro de version mais pas le même
+    code — sans ça, impossible de confirmer après coup qu'une mise à jour a
+    bien été appliquée jusqu'au bout (retour terrain : voir CHANGELOG.md).
+    Vide (VERSION seul, sans « + ») sur une installation antérieure à
+    l'ajout de ce fichier, ou si build-info.json est absent/illisible pour
+    une autre raison — jamais bloquant.
+    """
+    path = Path(__file__).resolve().parent.parent / 'build-info.json'
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return ''
+    commit = str(data.get('commit') or '').strip()
+    installed_at = str(data.get('installed_at') or '').strip()
+    if commit and installed_at:
+        return f'+{commit}.{installed_at}'
+    if commit:
+        return f'+{commit}'
+    return ''
+
+
+VERSION='1.2.0'+_build_metadata(); ROOT=Path('/opt/pidecoder'); SESSIONS={}; LOCK=threading.Lock(); CPU_PREV=None
 # Le serveur HTTPS, quand il tourne (voir main()) — pas forcément celui qui a
 # reçu la requête en cours : HTTP et HTTPS écoutent maintenant sur deux ports
 # distincts en parallèle (voir "Server" et main()), donc self.server dans un
