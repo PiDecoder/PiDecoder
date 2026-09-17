@@ -47,9 +47,7 @@
 > certificate, the HTTP/HTTPS ports and either protocol's on/off state can all be changed
 > from the Security tab without SSH access. The hostname/IP/NTP/timezone panel and the
 > one-click update button have been field-tested and had several real bugs fixed as a
-> result — see [`CHANGELOG.md`](CHANGELOG.md) for the full trail. NTP and timezone changes
-> specifically have not had a dedicated field test, though they share the same proven
-> mechanism as the hostname/IP change.
+> result — see [`CHANGELOG.md`](CHANGELOG.md) for the full trail.
 >
 > Audio is opt-in per camera and validated with an Axis camera (RTSP stream with an enabled
 > microphone). The Aqara G410 intercom has a known residual audio issue that does not affect
@@ -187,14 +185,23 @@ The Web administration interface is bilingual (French/English) since v1.0.0, wit
 
 ## Quick start
 
+> [!IMPORTANT]
+> PiDecoder requires **Debian 12 (Bookworm)** — the ready-made SD card image below is also built
+> on Bookworm, not on a newer release. **Debian 13 (Trixie) is not supported**: its Mesa/V3D GPU
+> driver crashes in a loop with this project's SDL2/labwc rendering pipeline (visible as
+> `pidecoder.service` restarting roughly every 30 seconds). This matters mainly for a manual
+> install: Raspberry Pi Imager's current default "Raspberry Pi OS Lite (64-bit)" entry may point
+> to Trixie. Pick the Bookworm image explicitly (Imager's "Raspberry Pi OS (other)" list, or the
+> official Bookworm archive), and check with `cat /etc/os-release` before installing anything —
+> it should say `bookworm`, not `trixie`.
+
 ### The short way: flash the ready-made image
 
-Download `PiDecoder-<version>-arm64.img.xz` from the
-[Releases page](https://github.com/PiDecoder/PiDecoder/releases) and write it
-to an SD card with Raspberry Pi Imager ("Use custom" → the downloaded file).
-No Raspberry Pi OS installation, no build, no terminal: the card boots
-straight into the video wall, resizes itself to the card, and generates its own
-SSH host keys, TLS certificate and hostname on first boot.
+Download `PiDecoder-<version>-arm64.img.xz` (Raspberry Pi OS Lite, **Debian 12 / Bookworm**) from
+the [Releases page](https://github.com/PiDecoder/PiDecoder/releases) and write it to an SD card
+with Raspberry Pi Imager ("Use custom" → the downloaded file). No Raspberry Pi OS installation,
+no build, no terminal: the card boots straight into the video wall, resizes itself to the card,
+and generates its own SSH host keys, TLS certificate and hostname on first boot.
 
 The first login to the Web interface (`admin` / `pidecoder`) lands on a
 mandatory password change — the same default is in every copy of the image, so
@@ -205,6 +212,28 @@ details, including how to enable SSH.
 The image is built by `scripts/build-image.sh`, which you can also run
 yourself; the manual installation below is the alternative when the Pi is
 already set up.
+
+### The manual way: on an existing Raspberry Pi OS
+
+Skip this section if you used the ready-made image above.
+
+Raspberry Pi OS **Desktop** already has everything PiDecoder needs. Raspberry Pi OS **Lite**
+ships with no graphical environment at all — `install.sh` does not set one up for you, so install
+the same minimal Wayland stack the ready-made image uses before continuing:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+    labwc libgl1-mesa-dri libegl1 libgles2 \
+    dbus-user-session pipewire pipewire-pulse wireplumber \
+    network-manager avahi-daemon
+```
+
+Without this, the video wall service will loop, failing its startup check for a Wayland session
+that never appears. See
+[`docs/installation.md`](docs/installation.md#setting-up-a-wayland-session-on-raspberry-pi-os-lite)
+for the full setup (automatic console login, compositor autostart) and why each package is
+needed.
 
 ### 1. Clone PiDecoder
 
@@ -354,7 +383,7 @@ Other Linux platforms may work, but they are not yet part of the validated v1.2 
 | On-screen IP/hostname/MAC/port overlay at startup and on the **I** key | Passed on the Pi |
 | One-click software update from the Web UI, including a forced-failure rollback | Passed on the Pi |
 | Hostname/IP change with confirm-or-auto-revert safety net, including across a software update | Passed on the Pi |
-| NTP server and timezone configuration | Passed in a sandbox with fake system tools only, not yet field-tested |
+| NTP server and timezone configuration | Passed on the Pi |
 
 The Web configuration export contains cameras, ONVIF metadata and layout data.
 Administrator credentials are configured separately and are not included in the exported file.

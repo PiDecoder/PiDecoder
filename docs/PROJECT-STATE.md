@@ -56,15 +56,11 @@
     display bug both fixed), HTTP/HTTPS on two independent ports with
     on/off toggles, hostname/IP change with its confirm/auto-revert
     safety net (after four rounds of real-hardware bug fixes), a static
-    IP surviving a software update, and editing the HTTP/HTTPS port
-    numbers from the Sécurité tab.
-  - **Not field-tested**: NTP server and timezone configuration
-    specifically (exercised only against a fake-binary sandbox harness —
-    `nmcli`/`hostnamectl`/`timedatectl`/`systemd-run`/`runuser`/
-    `systemctl` stand-ins). These share the exact same privileged-change
-    mechanism already proven for hostname/IP, so the risk is considered
-    low, but it's worth a quick real check post-release since there's no
-    lockout risk on either setting.
+    IP surviving a software update, editing the HTTP/HTTPS port
+    numbers from the Sécurité tab, and — confirmed during the v1.3.0 test
+    campaign (2026-09-18) — NTP server and timezone configuration, which
+    had previously only been exercised against a fake-binary sandbox
+    harness.
   - Step 2 of the original HTTPS roadmap item (RTSPS between the Pi and
     the cameras) was abandoned by explicit user decision after checking
     Axis's own documentation (see "Step 2" below for why) — not worth
