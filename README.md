@@ -152,22 +152,28 @@ Some cameras limit the number or total frame rate of simultaneous streams. When 
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/images/cameras.png" alt="PiDecoder camera management"><br>
+      <img src="docs/images/screenshot-cameras.png" width="100%" alt="PiDecoder camera management"><br>
       <strong>Camera management</strong>
     </td>
     <td width="50%" align="center">
-      <img src="docs/images/onvif.png" alt="PiDecoder ONVIF discovery"><br>
+      <img src="docs/images/onvif.png" width="100%" alt="PiDecoder ONVIF discovery"><br>
       <strong>ONVIF discovery</strong>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/images/layout.png" alt="PiDecoder layout editor"><br>
+      <img src="docs/images/screenshot-disposition.png" width="100%" alt="PiDecoder mosaic layout editor"><br>
       <strong>Mosaic layout editor</strong>
     </td>
     <td width="50%" align="center">
-      <img src="docs/images/system.png" alt="PiDecoder system diagnostics"><br>
+      <img src="docs/images/screenshot-systeme.png" width="100%" alt="PiDecoder system diagnostics"><br>
       <strong>System diagnostics</strong>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" colspan="2">
+      <img src="docs/images/screenshot-reseau.png" width="60%" alt="PiDecoder network configuration"><br>
+      <strong>Network, NTP and timezone configuration</strong>
     </td>
   </tr>
 </table>
