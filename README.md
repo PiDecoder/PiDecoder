@@ -439,10 +439,10 @@ See [`LICENSE`](LICENSE) for the full license text.
 ---
 
 <p align="center">
-  <img src="docs/images/pico.png" width="150" alt="Pico, the PiDecoder mascot">
+  <img src="docs/images/pidecoder-icon.png" width="64" alt="PiDecoder icon">
 </p>
 
 <p align="center">
-  <strong>Pico is watching your cameras.</strong><br>
+  <strong>PiDecoder</strong><br>
   Built for Raspberry Pi, RTSP and ONVIF.
 </p>
