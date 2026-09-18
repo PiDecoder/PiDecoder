@@ -592,6 +592,15 @@ function renderMosaic(){
       empty.dataset.x=String(x);
       empty.dataset.y=String(y);
       empty.textContent=`${x+1},${y+1}`;
+      // Position explicite, comme pour .mosaic-tile plus bas : sans ça, ces
+      // cellules restent en placement automatique CSS Grid, qui ignore les
+      // cellules déjà prises par les tuiles caméra (placées explicitement)
+      // et les repousse en lignes implicites supplémentaires sous la
+      // mosaïque dès qu'au moins une caméra est placée — donnant une
+      // deuxième grille fantôme, désynchronisée de dataset.x/y, sous la
+      // vraie mosaïque (retour terrain, voir CHANGELOG.md).
+      empty.style.gridColumn=`${x+1} / span 1`;
+      empty.style.gridRow=`${y+1} / span 1`;
 
       empty.ondragover=event=>{
         event.preventDefault();
